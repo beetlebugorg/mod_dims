@@ -31,7 +31,9 @@ dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    ExceptionInfo *exception = AcquireExceptionInfo();
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, exception);
+    DestroyExceptionInfo(exception);
     if(!(flags & AllValues)) {
         *err = "Parsing crop geometry failed";
         return DIMS_FAILURE;
@@ -106,7 +108,9 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    ExceptionInfo *exception = AcquireExceptionInfo();
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, exception);
+    DestroyExceptionInfo(exception);
     if(!(flags & AllValues)) {
         *err = "Parsing crop geometry failed";
         return DIMS_FAILURE;
@@ -140,7 +144,9 @@ dims_legacy_crop_operation (dims_request_rec *d, char *args, char **err) {
     long width, height;
     int x, y;
 
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    ExceptionInfo *exception = AcquireExceptionInfo();
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, exception);
+    DestroyExceptionInfo(exception);
     if(!(flags & AllValues)) {
         *err = "Parsing crop geometry failed";
         return DIMS_FAILURE;
