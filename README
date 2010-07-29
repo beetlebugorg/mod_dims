@@ -3,7 +3,7 @@ Requirements
 ------------
 
 * Apache 2.2.x
-* Imagemagick 6.3.9+
+* Imagemagick 6.6+
 * libcurl 7.18.0+
 
 Installation

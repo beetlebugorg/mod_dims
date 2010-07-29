@@ -74,7 +74,6 @@ void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsign
         int xIndex, yIndex;
         int xResolution, yResolution;
         unsigned long segmentWidth, segmentHeight;
-        double aRed, aBlue, aGreen, bRed, bBlue, bGreen;
         double aHue, aSaturation, aValue, bHue, bSaturation, bValue;
         double diffAverage;
         ExceptionInfo exception;
@@ -225,8 +224,8 @@ void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsign
                 {
 
                     /* find crop */
-                    int searchX, searchY, boundX, boundY, boundWidth, boundHeight, boundXIndex, boundYIndex, boundXMin, boundYMin;
-                    double boundDiffMin;
+                    int searchX, searchY, boundWidth, boundHeight, boundXIndex, boundYIndex, boundXMin = 0, boundYMin = 0;
+                    double boundDiffMin = 0.0;
                     long cropX, cropY;
                     unsigned long cropWidth, cropHeight;
                     if(imageRatio < cropRatio) {

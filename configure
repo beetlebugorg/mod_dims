@@ -19876,7 +19876,7 @@ if test "${with_imagemagick+set}" = set; then
   withval=$with_imagemagick;
     imagemagick_dir=$with_imagemagick
     LDFLAGS+=" -L$imagemagick_dir/lib"
-    CFLAGS+=" -I$imagemagick_dir/include/ImageMagick"
+    CFLAGS+=" -I$imagemagick_dir"
 
 else
 
