@@ -1,13 +1,12 @@
-
-Requirements
-------------
+Dependencies
+============
 
 * Apache 2.2.x
 * Imagemagick 6.6+
 * libcurl 7.18.0+
 
 Installation
-------------
+============
 
 Add the following to the Apache configuration:
 
@@ -32,7 +31,7 @@ Add the following to the Apache configuration:
 This assumes mod_dims.so has been installed in $HTTP_ROOT/modules.
 
 Errors
-------
+======
 
 There are three classes of errors in mod_dims; 
 
@@ -70,37 +69,37 @@ Common libcurl Error Messages:
 These message are usually self explanatory so no explain is provided.  The 
 URL that failed will be logged along with this message.
 
-- Couldn't connect to server
-- Couldn't resolve DNS
-- Timeout was reached
+* Couldn't connect to server
+* Couldn't resolve DNS
+* Timeout was reached
 
 Common mod_dims Error Messages:
 --------------------------------
 
-- Requested URL has hostname that is not in the whitelist. (aaolcdn.com)
-- Application ID is not valid
-- Parsing thumbnail geometry failed
-- Parsing crop geometry failed
-- Failed to read image
+* Requested URL has hostname that is not in the whitelist. (aaolcdn.com)
+* Application ID is not valid
+* Parsing thumbnail geometry failed
+* Parsing crop geometry failed
+* Failed to read image
     This occurs if ImageMagick had trouble reading the image.
-- Unable to stat image file
+* Unable to stat image file
     This occurs when a local request is unable to find the image to resize.
 
 Common ImageMagick Error Messages:
 ---------------------------------
 
-- Memory allocation failed
+* Memory allocation failed
     This should rarely occur, if ever, but usually when it does it's the result
     of an ImageMagick timeout.
 
-- unrecognized image format
-- no decode delegate for this image format
-    This happens when ImageMagick doesn't no how to read a source image.
+* unrecognized image format
+* no decode delegate for this image format
+>    This happens when ImageMagick doesn't no how to read a source image.
 
-- zero-length blob not permitted
-    This may occur if there was a failure to download the source image.
+* zero-length blob not permitted
+>    This may occur if there was a failure to download the source image.
 
-- Unsupported marker type 0x03
+* Unsupported marker type 0x03
     This may occur if the image is corrupted.  The "0x03" may be different
     depending on the corruption.
 
