@@ -60,10 +60,14 @@ void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsign
 
 dims_operation_func 
     dims_strip_operation,
+    dims_normalize_operation,
     dims_resize_operation,
+    dims_liquid_resize_operation,
+    dims_adaptive_resize_operation,
     dims_crop_operation,
     dims_thumbnail_operation,
     dims_sharpen_operation,
+    dims_blur_operation,
     dims_quality_operation,
     dims_format_operation,
     dims_legacy_thumbnail_operation,

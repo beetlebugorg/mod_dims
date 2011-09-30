@@ -45,7 +45,7 @@ AC_CHECK_HEADER(curl/curl.h)
 AC_ARG_WITH(apache, [  --with-apache        Specify installation directory for Apache 2.2.x], [
     LDFLAGS+=" -L$with_apache/lib"
     CFLAGS+=" -I$with_apache/include"
-    AC_PATH_PROG([APXS], apxs, , $with_apache/bin)
+    AC_PATH_PROGS([APXS], apxs2 apxs, , $with_apache/bin)
     AC_CHECK_HEADER(apr.h,, [AC_MSG_ERROR(Apache Portable Runtime headers not found.)])
     AC_CHECK_HEADER(httpd.h,, [AC_MSG_ERROR(Apache headers not found.)])
 ],[

@@ -68,6 +68,44 @@ dims_strip_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
+dims_normalize_operation (dims_request_rec *d, char *args, char **err) {
+    MAGICK_CHECK(MagickNormalizeImage(d->wand), d);
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_adaptive_resize_operation (dims_request_rec *d, char *args, char **err) {
+    MagickStatusType flags;
+    RectangleInfo rec;
+
+    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    if(!(flags & AllValues)) {
+        *err = "Parsing thumbnail geometry failed";
+        return DIMS_FAILURE;
+    }
+
+    MAGICK_CHECK(MagickAdaptiveResizeImage(d->wand, rec.width, rec.height), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_liquid_resize_operation (dims_request_rec *d, char *args, char **err) {
+    MagickStatusType flags;
+    RectangleInfo rec;
+
+    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    if(!(flags & AllValues)) {
+        *err = "Parsing thumbnail geometry failed";
+        return DIMS_FAILURE;
+    }
+
+    MAGICK_CHECK(MagickLiquidRescaleImage(d->wand, rec.width, rec.height, 1.0, 0.0), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
 dims_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
@@ -78,7 +116,7 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
-    MAGICK_CHECK(MagickScaleImage(d->wand, rec.width, rec.height), d);
+    MAGICK_CHECK(MagickResizeImage(d->wand, rec.width, rec.height, SincFilter, 0.9), d);
 
     return DIMS_SUCCESS;
 }
@@ -158,6 +196,22 @@ dims_quality_operation (dims_request_rec *d, char *args, char **err) {
     }
     return DIMS_SUCCESS;
 }
+
+apr_status_t
+dims_blur_operation (dims_request_rec *d, char *args, char **err) {
+    MagickStatusType flags;
+    GeometryInfo geometry;
+
+    flags = ParseGeometry(args, &geometry);
+    if ((flags & SigmaValue) == 0) {
+        geometry.sigma=1.0;
+    }
+
+    MAGICK_CHECK(MagickBlurImage(d->wand, geometry.rho, geometry.sigma), d);
+
+    return DIMS_SUCCESS;
+}
+	
 
 /**
  * Legacy API support.
