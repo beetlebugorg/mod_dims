@@ -63,6 +63,7 @@ dims_operation_func
     dims_normalize_operation,
     dims_flip_operation,
     dims_flop_operation,
+    dims_mirroredfloor_operation,
     dims_resize_operation,
     dims_liquid_resize_operation,
     dims_adaptive_resize_operation,

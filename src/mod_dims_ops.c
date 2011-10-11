@@ -74,6 +74,21 @@ dims_normalize_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
+dims_mirroredfloor_operation (dims_request_rec *d, char *args, char **err) {
+	MagickWand *tmp = CloneMagickWand(d->wand);
+	if (!tmp) {
+		return DIMS_FAILURE;
+	}
+    MAGICK_CHECK(MagickFlipImage(tmp), d);
+	int width = MagickGetImageWidth(d->wand);
+	int height = MagickGetImageHeight(d->wand);
+	MAGICK_CHECK(MagickExtentImage(d->wand, width, height * 2, 0, 0), d);
+	MAGICK_CHECK(MagickCompositeImage(d->wand, tmp, OverCompositeOp, 0, height), d);
+	tmp = DestroyMagickWand(tmp);
+	return DIMS_SUCCESS;
+}
+
+apr_status_t
 dims_flip_operation (dims_request_rec *d, char *args, char **err) {
 	MAGICK_CHECK(MagickFlipImage(d->wand), d);
 	return DIMS_SUCCESS;
