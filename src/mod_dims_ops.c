@@ -74,6 +74,18 @@ dims_normalize_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
+dims_flip_operation (dims_request_rec *d, char *args, char **err) {
+	MAGICK_CHECK(MagickFlipImage(d->wand), d);
+	return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_flop_operation (dims_request_rec *d, char *args, char **err) {
+	MAGICK_CHECK(MagickFlopImage(d->wand), d);
+	return DIMS_SUCCESS;
+}
+
+apr_status_t
 dims_adaptive_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;

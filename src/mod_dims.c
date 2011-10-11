@@ -1456,6 +1456,8 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     ops = apr_hash_make(p);
     apr_hash_set(ops, "strip", APR_HASH_KEY_STRING, dims_strip_operation);
     apr_hash_set(ops, "normalize", APR_HASH_KEY_STRING, dims_normalize_operation);
+    apr_hash_set(ops, "flip", APR_HASH_KEY_STRING, dims_flip_operation);
+    apr_hash_set(ops, "flop", APR_HASH_KEY_STRING, dims_flop_operation);
     apr_hash_set(ops, "liquidresize", APR_HASH_KEY_STRING, dims_liquid_resize_operation);
     apr_hash_set(ops, "resize", APR_HASH_KEY_STRING, dims_resize_operation);
     apr_hash_set(ops, "adaptiveresize", APR_HASH_KEY_STRING, dims_adaptive_resize_operation);
