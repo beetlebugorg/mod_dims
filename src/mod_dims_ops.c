@@ -166,7 +166,7 @@ dims_sharpen_operation (dims_request_rec *d, char *args, char **err) {
 apr_status_t
 dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
-    RectangleInfo rec;
+    RectangleInfo rec, rec2;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
     flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
@@ -178,13 +178,13 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     MAGICK_CHECK(MagickThumbnailImage(d->wand, rec.width, rec.height), d);
 
     if(!(flags & PercentValue)) {
-        flags = ParseAbsoluteGeometry(args, &rec);
+        flags = ParseAbsoluteGeometry(args, &rec2);
         if(!(flags & AllValues)) {
             *err = "Parsing thumbnail (crop) geometry failed";
             return DIMS_FAILURE;
         }
 
-        MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
+        MAGICK_CHECK(MagickCropImage(d->wand, rec2.width, rec2.height, (int)((rec.width - rec2.width) / 2), (int)((rec.height - rec2.height) / 2)), d);
     }
     
     return DIMS_SUCCESS;
