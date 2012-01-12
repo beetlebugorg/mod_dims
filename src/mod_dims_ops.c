@@ -26,6 +26,19 @@
         } \
     } while(0)
 
+#define MAGICK_CHECK_FREE_ON_FAIL(func, rec, wand) \
+    do { \
+        apr_status_t code = func; \
+        if(rec->status == DIMS_IMAGEMAGICK_TIMEOUT) {\
+			wand = DestroyMagickWand(wand); \
+            return DIMS_IMAGEMAGICK_TIMEOUT; \
+        } else if(code == MagickFalse) {\
+			wand = DestroyMagickWand(wand); \
+            return DIMS_FAILURE; \
+        } \
+    } while(0)
+
+
 /*
 apr_status_t
 dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
@@ -79,11 +92,11 @@ dims_mirroredfloor_operation (dims_request_rec *d, char *args, char **err) {
 	if (!tmp) {
 		return DIMS_FAILURE;
 	}
-    MAGICK_CHECK(MagickFlipImage(tmp), d);
+    MAGICK_CHECK_FREE_ON_FAIL(MagickFlipImage(tmp), d, tmp);
 	int width = MagickGetImageWidth(d->wand);
 	int height = MagickGetImageHeight(d->wand);
-	MAGICK_CHECK(MagickExtentImage(d->wand, width, height * 2, 0, 0), d);
-	MAGICK_CHECK(MagickCompositeImage(d->wand, tmp, OverCompositeOp, 0, height), d);
+	MAGICK_CHECK_FREE_ON_FAIL(MagickExtentImage(d->wand, width, height * 2, 0, 0), d, tmp);
+	MAGICK_CHECK_FREE_ON_FAIL(MagickCompositeImage(d->wand, tmp, OverCompositeOp, 0, height), d, tmp);
 	tmp = DestroyMagickWand(tmp);
 	return DIMS_SUCCESS;
 }
