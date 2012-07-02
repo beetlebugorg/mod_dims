@@ -26,14 +26,14 @@
         } \
     } while(0)
 
+/*
 apr_status_t
 dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
+    ExceptionInfo ex_info;
 
-    ExceptionInfo *exception = AcquireExceptionInfo();
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, exception);
-    DestroyExceptionInfo(exception);
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
     if(!(flags & AllValues)) {
         *err = "Parsing crop geometry failed";
         return DIMS_FAILURE;
@@ -41,6 +41,28 @@ dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
 
     // MAGICK_CHECK(MagickResizeImage(d->wand, rec.width, rec.height, UndefinedFilter, 1), d);
     smartCrop(d->wand, 20, rec.width, rec.height);
+
+    return DIMS_SUCCESS;
+}
+*/
+
+apr_status_t
+dims_strip_operation (dims_request_rec *d, char *args, char **err) {
+
+    /* If args is passed from the user and 
+     *   a) it equals true, strip the image.
+     *   b) it equals false, don't strip the image.
+     *   c) it is neither true/false, strip based on config value.
+     * If args is NULL, strip based on config value.
+     */
+    if(args != NULL) {
+        if(strcmp(args, "true") == 0 || ( strcmp(args, "false") != 0 && d->config->strip_metadata )) {
+            MAGICK_CHECK(MagickStripImage(d->wand), d);
+        }
+    }
+    else if(d->config->strip_metadata) {
+        MAGICK_CHECK(MagickStripImage(d->wand), d);
+    }
 
     return DIMS_SUCCESS;
 }
@@ -107,10 +129,9 @@ apr_status_t
 dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
+    ExceptionInfo ex_info;
 
-    ExceptionInfo *exception = AcquireExceptionInfo();
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, exception);
-    DestroyExceptionInfo(exception);
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
     if(!(flags & AllValues)) {
         *err = "Parsing crop geometry failed";
         return DIMS_FAILURE;
@@ -130,7 +151,11 @@ dims_format_operation (dims_request_rec *d, char *args, char **err) {
 apr_status_t
 dims_quality_operation (dims_request_rec *d, char *args, char **err) {
     int quality = apr_strtoi64(args, NULL, 0);
-    MAGICK_CHECK(MagickSetCompressionQuality(d->wand, quality), d);
+    int existing_quality = MagickGetImageCompressionQuality(d->wand);
+
+    if(quality < existing_quality) {
+        MAGICK_CHECK(MagickSetImageCompressionQuality(d->wand, quality), d);
+    }
     return DIMS_SUCCESS;
 }
 
@@ -160,9 +185,9 @@ dims_extent_operation (dims_request_rec *d, char *args, char **err) {
     y = (h - rec.height) / 2;
     MAGICK_CHECK(MagickExtentImage(d->wand,rec.width, rec.height, x, y), d);
         
-    return DIMS_SUCCESS;
-    
+    return DIMS_SUCCESS;   
 } 
+
 
 /**
  * Legacy API support.
@@ -171,12 +196,12 @@ apr_status_t
 dims_legacy_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
+    ExceptionInfo ex_info;
     long width, height;
     int x, y;
 
-    ExceptionInfo *exception = AcquireExceptionInfo();
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, exception);
-    DestroyExceptionInfo(exception);
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
+
     if(!(flags & AllValues)) {
         *err = "Parsing crop geometry failed";
         return DIMS_FAILURE;
