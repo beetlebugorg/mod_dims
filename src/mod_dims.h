@@ -59,7 +59,6 @@ typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, char 
 void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsigned long cropHeight);
 
 dims_operation_func 
-    dims_strip_operation,
     dims_resize_operation,
     dims_crop_operation,
     dims_thumbnail_operation,
@@ -68,7 +67,8 @@ dims_operation_func
     dims_format_operation,
     dims_legacy_thumbnail_operation,
     dims_smart_crop_operation,
-    dims_legacy_crop_operation;
+    dims_legacy_crop_operation,
+    dims_extent_operation;
 
 struct dims_config_rec {
     int download_timeout;
@@ -80,7 +80,6 @@ struct dims_config_rec {
     char *no_image_url;
     long no_image_expire;
     long default_expire;
-    int strip_metadata;
 
     MagickSizeType area_size;
     MagickSizeType memory_size;
@@ -88,9 +87,6 @@ struct dims_config_rec {
     MagickSizeType disk_size;
 
     int curl_queue_size;
-    char *secret_key;
-    long max_expiry_period;
-    char *cache_dir;
 };
 
 struct dims_client_config_rec {
@@ -101,7 +97,6 @@ struct dims_client_config_rec {
     int trust_src;
     int min_src_cache_control;
     int max_src_cache_control;
-    char *secret_key;
 };
 
 struct dims_request_rec {
@@ -151,9 +146,6 @@ struct dims_request_rec {
     apr_time_t start_time;
     apr_time_t download_time;
     apr_time_t imagemagick_time;
-    
-    /* Use a whitelist, or use a secret key passed on the URI */
-    int use_secret_key;
 };
 
 #endif
