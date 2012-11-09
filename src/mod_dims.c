@@ -934,8 +934,8 @@ dims_process_image(dims_request_rec *d)
         char *profiles = MagickGetImageProfiles(d->wand, "icc", &number_profiles);
         if (number_profiles == 0) {
             MagickProfileImage(d->wand, "ICC", cmyk_icc, sizeof(cmyk_icc));
-            MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
         }
+        MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
     }
 
     /* Process operations. */
