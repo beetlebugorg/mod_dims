@@ -34,7 +34,7 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.2.5"
+#define MODULE_VERSION "3.3.0"
 
 #include "mod_dims.h"
 #include "util_md5.h"
@@ -1472,7 +1472,13 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "quality", APR_HASH_KEY_STRING, dims_quality_operation);
     apr_hash_set(ops, "sharpen", APR_HASH_KEY_STRING, dims_sharpen_operation);
     apr_hash_set(ops, "format", APR_HASH_KEY_STRING, dims_format_operation);
-    //apr_hash_set(ops, "smart-crop", APR_HASH_KEY_STRING, dims_smart_crop_operation);
+    apr_hash_set(ops, "brightness", APR_HASH_KEY_STRING, dims_brightness_operation);
+    apr_hash_set(ops, "flipflop", APR_HASH_KEY_STRING, dims_flipflop_operation);
+    apr_hash_set(ops, "sepia", APR_HASH_KEY_STRING, dims_sepia_operation);
+    apr_hash_set(ops, "grayscale", APR_HASH_KEY_STRING, dims_grayscale_operation);
+    apr_hash_set(ops, "autolevel", APR_HASH_KEY_STRING, dims_autolevel_operation);
+    apr_hash_set(ops, "rotate", APR_HASH_KEY_STRING, dims_rotate_operation);
+    apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
 
     /* Init APR's atomic functions */
     status = apr_atomic_init(p);
