@@ -6,7 +6,7 @@ License: APL
 Vendor: BeetleBugOrg at GitHub
 Packager: $Id:$
 Group: System Environment/Daemons
-Source0: %{name}-%{version}.tar.gz
+Source0: autorun.sh
 
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildArch: x86_64
