@@ -6,7 +6,7 @@ License: APL
 Vendor: BeetleBugOrg at GitHub
 Packager: $Id:$
 Group: System Environment/Daemons
-Source0: autorun.sh
+Source0: %{name}-%{version}.tar.gz
 
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildArch: x86_64
@@ -25,7 +25,12 @@ which is a fork of https://github.com/beetlebugorg/mod_dims.git
 
 To checkout the source, do: git clone https://github.com/Scout24-CoC-MPS/mod_dims.git
 
+%prep
+
+%setup
+
 %build
+./autorun.sh
 export LDFLAGS="$LDFLAGS -L/usr/lib64/httpd"
 export CFLAGS="$CFLAGS -I/usr/include/httpd -I/usr/include/ImageMagick"
 
@@ -34,14 +39,18 @@ make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
-make install DESTDIR=%{buildroot}
+mkdir -p %{buildroot}
+
+install -m 0775 src/.libs/libmod_dims.so -D %{buildroot}%{_libdir}/httpd/modules/mod_dims.so
+
+
 
 %clean
 %{__rm} -rf %{buildroot}
 
 %files
 %defattr(-,root,root,-)
-%doc
+%doc COPYING README.markdown
+%{_libdir}/httpd/modules/mod_dims.so
 
 %changelog
-
