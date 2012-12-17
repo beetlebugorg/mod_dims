@@ -1,3 +1,6 @@
+%global _enable_debug_package 0
+%global debug_package %{nil}
+%global __os_install_post /usr/lib/rpm/brp-compress %{nil}
 Summary: Apache Module mod_dims
 Name: mod_dims
 Version: 3.1.0
@@ -16,11 +19,6 @@ BuildRequires: httpd-devel
 
 
 Requires: curl, httpd, ImageMagick
-
-%global _enable_debug_package 0
-%global debug_package %{nil}
-%global __os_install_post /usr/lib/rpm/brp-compress %{nil}
-
 
 %description
 DIMS is a webservice that allows for dynamic image manipulation. It allows for easy image resizing and thumbnail generation directly in HTML pages, eliminating the need to pre-compute different image sizes and store their locations for use on a page.
