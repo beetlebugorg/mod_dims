@@ -25,14 +25,11 @@ which is a fork of https://github.com/beetlebugorg/mod_dims.git
 
 To checkout the source, do: git clone https://github.com/Scout24-CoC-MPS/mod_dims.git
 
-
-%prep
-/bin/sh ./autorun.sh || die "Could not prepare autoconf environment"
-
+%build
 export LDFLAGS="$LDFLAGS -L/usr/lib64/httpd"
 export CFLAGS="$CFLAGS -I/usr/include/httpd -I/usr/include/ImageMagick"
 
-%configure
+%configure 
 make %{?_smp_mflags}
 
 %install
