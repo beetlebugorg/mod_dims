@@ -44,7 +44,7 @@ make %{?_smp_mflags}
 rm -rf %{buildroot}
 mkdir -p %{buildroot}
 
-install -m 0775 src/.libs/libmod_dims.so -D %{buildroot}%{_libdir}/httpd/modules/mod_dims.so
+install -m 0644 src/.libs/libmod_dims.so -D %{buildroot}%{_libdir}/httpd/modules/mod_dims.so
 
 
 
