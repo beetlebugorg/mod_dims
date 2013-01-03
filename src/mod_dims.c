@@ -1097,6 +1097,12 @@ dims_handle_request(dims_request_rec *d)
         if(status != 0) {
             return dims_cleanup(d, "Unable to stat image file", DIMS_FILE_NOT_FOUND);
         }
+        
+        char *if_modified_since = apr_table_get(d->r->headers_in, "If-Modified-Since");
+        if (if_modified_since) {
+            apr_table_set(d->r->headers_out, "Old-IMS", if_modified_since);
+        }
+        
         d->download_time = (apr_time_now() - start_time) / 1000;
         d->original_image_size = finfo.size;
         d->modification_time = finfo.mtime;
