@@ -758,6 +758,8 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->notes, "DIMS_CLIENT", d->client_id);
         apr_table_set(d->r->subprocess_env, buf, d->client_id);
     }
+    
+    apr_table_set(d->r->headers_out, "Last-Modified", "Tue, 15 Nov 1994 12:45:26 GMT");
 
     ap_rwrite(blob, length, d->r);
     ap_rflush(d->r);
