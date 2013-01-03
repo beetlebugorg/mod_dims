@@ -155,6 +155,9 @@ struct dims_request_rec {
     
     /* Use a whitelist, or use a secret key passed on the URI */
     int use_secret_key;
+    
+    /* mtime of the image being processed */
+    apr_time_t modification_time;
 };
 
 #endif

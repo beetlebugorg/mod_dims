@@ -1089,12 +1089,13 @@ dims_handle_request(dims_request_rec *d)
 
         /* Read image from disk. */
         start_time = apr_time_now();
-        status = apr_stat(&finfo, d->filename, APR_FINFO_SIZE, d->pool);
+        status = apr_stat(&finfo, d->filename, APR_FINFO_SIZE | APR_FINFO_MTIME, d->pool);
         if(status != 0) {
             return dims_cleanup(d, "Unable to stat image file", DIMS_FILE_NOT_FOUND);
         }
         d->download_time = (apr_time_now() - start_time) / 1000;
         d->original_image_size = finfo.size;
+        d->modification_time = finfo.mtime;
 
         start_time = apr_time_now();
         MAGICK_CHECK(MagickReadImage(d->wand, d->filename), d);
