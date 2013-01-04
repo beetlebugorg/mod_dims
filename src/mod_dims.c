@@ -1107,6 +1107,7 @@ dims_handle_request(dims_request_rec *d)
             char buffer[APR_RFC822_DATE_LEN];
             apr_rfc822_date(buffer, if_modified_since_date);
             apr_table_set(d->r->headers_out, "Found-Modified-Since-Date", buffer);
+            apr_table_set(d->r->headers_out, "Found-Modified-Since-String", if_modified_since);
             
             if (if_modified_since_date && if_modified_since_date >= d->modification_time - 1000) {
                 apr_table_set(d->r->headers_out, "Found-Modified-Since", "Older");
