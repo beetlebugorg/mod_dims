@@ -43,6 +43,7 @@
 #include <curl/curl.h>
 #include <curl/types.h>
 #include <curl/easy.h>
+#include "apr_date.h"
 
 module dims_module; 
 
