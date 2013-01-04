@@ -841,11 +841,13 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
         } 
         DestroyMagickWand(d->wand);
     }
-    if ( status != DIMS_SUCCESS ) {
+    
+    if ( status == DIMS_NOT_MODIFIED) {
+        return HTTP_NOT_MODIFIED;        
+    } else if ( status != DIMS_SUCCESS ) {
         return HTTP_NOT_FOUND;
-    }
-    else {
-     return DECLINED;   
+    } else {
+        return DECLINED;   
     }
      
 }
@@ -1100,7 +1102,10 @@ dims_handle_request(dims_request_rec *d)
         
         char *if_modified_since = apr_table_get(d->r->headers_in, "If-Modified-Since");
         if (if_modified_since) {
-            apr_table_set(d->r->headers_out, "Old-IMS", if_modified_since);
+            apr_time_t if_modified_since_date = apr_date_parse_rfc(if_modified_since);
+            if (if_modified_since_date && if_modified_since_date >= d->modification_time - 1000) {
+                return dims_cleanup(d, NULL, DIMS_NOT_MODIFIED);
+            }
         }
         
         d->download_time = (apr_time_now() - start_time) / 1000;

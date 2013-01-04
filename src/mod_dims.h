@@ -50,6 +50,7 @@
 #define DIMS_BAD_ARGUMENTS 32
 #define DIMS_HOSTNAME_NOT_IN_WHITELIST 64
 #define DIMS_FILE_NOT_FOUND 128
+#define DIMS_NOT_MODIFIED 256
 
 typedef struct dims_request_rec dims_request_rec;
 typedef struct dims_config_rec dims_config_rec;
