@@ -814,7 +814,6 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
     if(status != DIMS_IGNORE) {
         d->status = status;
     }
-    apr_table_set(d->r->headers_out, "Found-Modified-Since1", "Older");
 
     if(d->wand) {
         ExceptionType type;
@@ -829,7 +828,6 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
         MagickRelinquishMemory(msg);
         DestroyMagickWand(d->wand);
     }
-    apr_table_set(d->r->headers_out, "Found-Modified-Since2", "Older");
     
     if(err_msg) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
@@ -837,7 +835,9 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
                 err_msg, d->r->uri);
     }
     
-    apr_table_set(d->r->headers_out, "Found-Modified-Since3", "Older");
+    if ( status == DIMS_NOT_MODIFIED) {
+        return HTTP_NOT_MODIFIED;        
+    }
     
     if(d->no_image_url) {
         d->wand = NewMagickWand();
@@ -847,11 +847,7 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
         DestroyMagickWand(d->wand);
     }
     
-    apr_table_set(d->r->headers_out, "Found-Modified-Since4", "Older");
-    
-    if ( status == DIMS_NOT_MODIFIED) {
-        return HTTP_NOT_MODIFIED;        
-    } else if ( status != DIMS_SUCCESS ) {
+    if ( status != DIMS_SUCCESS ) {
         return HTTP_NOT_FOUND;
     } else {
         return DECLINED;   
