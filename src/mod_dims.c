@@ -1100,29 +1100,37 @@ dims_handle_request(dims_request_rec *d)
             return dims_cleanup(d, "Unable to stat image file", DIMS_FILE_NOT_FOUND);
         }
         
+        d->download_time = (apr_time_now() - start_time) / 1000;
+        d->original_image_size = finfo.size;
+        d->modification_time = finfo.mtime;
+        
         char *if_modified_since = apr_table_get(d->r->headers_in, "If-Modified-Since");
         if (if_modified_since) {
-            apr_time_t if_modified_since_date = apr_date_parse_http(if_modified_since);
+            apr_time_t if_modified_since_time = apr_date_parse_http(if_modified_since);
+            apr_int64_t if_modified_since_sec, request_time_sec, modification_time_sec;
+            
+            /* Convert everything to seconds, because HTTP protocol does not allow higher time resolution */
+            if_modified_since_sec = apr_time_sec(if_modified_since_time);
+            request_time_sec = apr_time_sec(d->r->request_time);
+            modification_time_sec = apr_time_sec(d->modification_time);
             
             /* For Debugging */
-            char if_modified_since_number[128];
-            snprintf(if_modified_since_number, 128, "%d", if_modified_since_date);
+            char if_modified_since_string[128];
+            char request_time_string[128];
+            char modification_time_string[128];
+            snprintf(if_modified_since_string, 128, "%d", if_modified_since_sec);
+            snprintf(request_time_string, 128, "%d", request_time_sec);
+            snprintf(modification_time_string, 128, "%d", modification_time_sec);
+
+            apr_table_set(d->r->headers_out, "XX-if_modified_since_string", if_modified_since_string);
+            apr_table_set(d->r->headers_out, "XX-request_time_string", request_time_string);
+            apr_table_set(d->r->headers_out, "XX-modification_time_string", modification_time_string);            
             
-            char buffer[APR_RFC822_DATE_LEN];
-            apr_rfc822_date(buffer, if_modified_since_date);
-            apr_table_set(d->r->headers_out, "Found-Modified-Since-Date", buffer);
-            apr_table_set(d->r->headers_out, "Found-Modified-Since-String", if_modified_since);
-            apr_table_set(d->r->headers_out, "Found-Modified-Since-Number", if_modified_since_number);            
-            
-            if (if_modified_since_date && if_modified_since_date >= d->modification_time - 1000) {
+            if ((if_modified_since_sec >= modification_time_sec) && (if_modified_since_sec <= request_time_sec)) {
                 apr_table_set(d->r->headers_out, "Found-Modified-Since", "Older");
                 return dims_cleanup(d, NULL, DIMS_NOT_MODIFIED);
             }
         }
-        
-        d->download_time = (apr_time_now() - start_time) / 1000;
-        d->original_image_size = finfo.size;
-        d->modification_time = finfo.mtime;
 
         start_time = apr_time_now();
         MAGICK_CHECK(MagickReadImage(d->wand, d->filename), d);
