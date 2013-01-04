@@ -1103,7 +1103,13 @@ dims_handle_request(dims_request_rec *d)
         char *if_modified_since = apr_table_get(d->r->headers_in, "If-Modified-Since");
         if (if_modified_since) {
             apr_time_t if_modified_since_date = apr_date_parse_rfc(if_modified_since);
+            
+            char buffer[APR_RFC822_DATE_LEN];
+            apr_rfc822_date(buffer, if_modified_since_date);
+            apr_table_set(d->r->headers_out, "Found-Modified-Since-Date", buffer);
+            
             if (if_modified_since_date && if_modified_since_date >= d->modification_time - 1000) {
+                apr_table_set(d->r->headers_out, "Found-Modified-Since", "Older");
                 return dims_cleanup(d, NULL, DIMS_NOT_MODIFIED);
             }
         }
