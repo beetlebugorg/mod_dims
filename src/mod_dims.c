@@ -1102,7 +1102,7 @@ dims_handle_request(dims_request_rec *d)
         
         char *if_modified_since = apr_table_get(d->r->headers_in, "If-Modified-Since");
         if (if_modified_since) {
-            apr_time_t if_modified_since_date = apr_date_parse_rfc(if_modified_since);
+            apr_time_t if_modified_since_date = apr_date_parse_http(if_modified_since);
             
             char buffer[APR_RFC822_DATE_LEN];
             apr_rfc822_date(buffer, if_modified_since_date);
