@@ -1104,10 +1104,15 @@ dims_handle_request(dims_request_rec *d)
         if (if_modified_since) {
             apr_time_t if_modified_since_date = apr_date_parse_http(if_modified_since);
             
+            /* For Debugging */
+            char if_modified_since_number[128];
+            snprintf(if_modified_since_number, 128, "%d", if_modified_since_date);
+            
             char buffer[APR_RFC822_DATE_LEN];
             apr_rfc822_date(buffer, if_modified_since_date);
             apr_table_set(d->r->headers_out, "Found-Modified-Since-Date", buffer);
             apr_table_set(d->r->headers_out, "Found-Modified-Since-String", if_modified_since);
+            apr_table_set(d->r->headers_out, "Found-Modified-Since-Number", if_modified_since_number);            
             
             if (if_modified_since_date && if_modified_since_date >= d->modification_time - 1000) {
                 apr_table_set(d->r->headers_out, "Found-Modified-Since", "Older");
