@@ -814,6 +814,7 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
     if(status != DIMS_IGNORE) {
         d->status = status;
     }
+    apr_table_set(d->r->headers_out, "Found-Modified-Since1", "Older");
 
     if(d->wand) {
         ExceptionType type;
@@ -827,14 +828,17 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
 
         MagickRelinquishMemory(msg);
         DestroyMagickWand(d->wand);
-    } 
+    }
+    apr_table_set(d->r->headers_out, "Found-Modified-Since2", "Older");
     
     if(err_msg) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
                 "mod_dims error, '%s', on request: %s ", 
                 err_msg, d->r->uri);
     }
-
+    
+    apr_table_set(d->r->headers_out, "Found-Modified-Since3", "Older");
+    
     if(d->no_image_url) {
         d->wand = NewMagickWand();
         if(!dims_fetch_remote_image(d, NULL)) {
@@ -842,6 +846,8 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
         } 
         DestroyMagickWand(d->wand);
     }
+    
+    apr_table_set(d->r->headers_out, "Found-Modified-Since4", "Older");
     
     if ( status == DIMS_NOT_MODIFIED) {
         return HTTP_NOT_MODIFIED;        
@@ -1115,20 +1121,8 @@ dims_handle_request(dims_request_rec *d)
             request_time_sec = apr_time_sec(d->r->request_time);
             modification_time_sec = apr_time_sec(d->modification_time);
             
-            /* For Debugging */
-            char if_modified_since_string[128];
-            char request_time_string[128];
-            char modification_time_string[128];
-            snprintf(if_modified_since_string, 128, "%d", if_modified_since_sec);
-            snprintf(request_time_string, 128, "%d", request_time_sec);
-            snprintf(modification_time_string, 128, "%d", modification_time_sec);
-
-            apr_table_set(d->r->headers_out, "XX-if_modified_since_string", if_modified_since_string);
-            apr_table_set(d->r->headers_out, "XX-request_time_string", request_time_string);
-            apr_table_set(d->r->headers_out, "XX-modification_time_string", modification_time_string);            
-            
             if ((if_modified_since_sec >= modification_time_sec) && (if_modified_since_sec <= request_time_sec)) {
-                apr_table_set(d->r->headers_out, "Found-Modified-Since", "Older");
+                
                 return dims_cleanup(d, NULL, DIMS_NOT_MODIFIED);
             }
         }
