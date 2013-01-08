@@ -160,34 +160,115 @@ dims_quality_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
+dims_brightness_operation (dims_request_rec *d, char *args, char **err) {
+    MagickStatusType flags;
+    GeometryInfo geometry;
+
+    flags = ParseGeometry(args, &geometry);
+
+    MAGICK_CHECK(MagickBrightnessContrastImage(d->wand,
+            geometry.rho, geometry.sigma), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_flipflop_operation (dims_request_rec *d, char *args, char **err) {
+    if(args != NULL) {
+        if(strcmp(args, "horizontal") == 0) {
+            MAGICK_CHECK(MagickFlopImage(d->wand), d);
+        } else if (strcmp(args, "vertical") == 0) {
+            MAGICK_CHECK(MagickFlipImage(d->wand), d);
+        }
+    }
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_sepia_operation (dims_request_rec *d, char *args, char **err) {
+    double threshold = atof(args);
+
+    MAGICK_CHECK(MagickSepiaToneImage(d->wand, threshold * QuantumRange), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_grayscale_operation (dims_request_rec *d, char *args, char **err) {
+
+    if(args != NULL) {
+        if(strcmp(args, "true") == 0) {
+            MAGICK_CHECK(MagickSetImageColorspace(d->wand, GRAYColorspace), d);
+        }
+    }
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_autolevel_operation (dims_request_rec *d, char *args, char **err) {
+
+    if(args != NULL) {
+        if(strcmp(args, "true") == 0) {
+            MAGICK_CHECK(MagickAutoLevelImage(d->wand), d);
+        }
+    }
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_invert_operation (dims_request_rec *d, char *args, char **err) {
+
+    if(args != NULL) {
+        if(strcmp(args, "true") == 0) {
+            MAGICK_CHECK(MagickNegateImage(d->wand, MagickFalse), d);
+        }
+    }
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
+    double degrees = atof(args);
+
+    PixelWand *pxWand = NewPixelWand();
+    MAGICK_CHECK(MagickRotateImage(d->wand, pxWand, degrees), d);
+    DestroyPixelWand(pxWand);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
 dims_extent_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
-
+    
     flags = ParseAbsoluteGeometry(args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing extent geometry failed";
         return DIMS_FAILURE;
     }
-
+    
     PixelWand *p_wand = NewPixelWand();
     long w,h;
     int x, y;
- 
+    
     PixelSetColor(p_wand, "white");
- 
+    
     w = MagickGetImageWidth(d->wand);
     h = MagickGetImageHeight(d->wand);
- 
+    
     MagickSetImageBackgroundColor(d->wand,p_wand);
     
     x = (w - rec.width) / 2;
     y = (h - rec.height) / 2;
     MAGICK_CHECK(MagickExtentImage(d->wand,rec.width, rec.height, x, y), d);
-        
+    
     return DIMS_SUCCESS;   
 } 
-
 
 /**
  * Legacy API support.

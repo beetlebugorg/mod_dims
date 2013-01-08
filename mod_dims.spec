@@ -3,7 +3,7 @@
 %global __os_install_post /usr/lib/rpm/brp-compress %{nil}
 Summary: Apache Module mod_dims
 Name: mod_dims
-Version: 3.1.0
+Version: 3.3.0
 Release: 4.is24
 License: APL
 Vendor: BeetleBugOrg at GitHub
