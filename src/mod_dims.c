@@ -1482,6 +1482,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "blur", APR_HASH_KEY_STRING, dims_blur_operation);
     apr_hash_set(ops, "format", APR_HASH_KEY_STRING, dims_format_operation);
     apr_hash_set(ops, "brightness", APR_HASH_KEY_STRING, dims_brightness_operation);
+    apr_hash_set(ops, "modulate", APR_HASH_KEY_STRING, dims_modulate_operation);
     apr_hash_set(ops, "flipflop", APR_HASH_KEY_STRING, dims_flipflop_operation);
     apr_hash_set(ops, "sepia", APR_HASH_KEY_STRING, dims_sepia_operation);
     apr_hash_set(ops, "grayscale", APR_HASH_KEY_STRING, dims_grayscale_operation);

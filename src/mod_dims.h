@@ -76,6 +76,7 @@ dims_operation_func
     dims_legacy_thumbnail_operation,
     dims_smart_crop_operation,
     dims_brightness_operation,
+	dims_modulate_operation,
     dims_flipflop_operation,
     dims_sepia_operation,
     dims_grayscale_operation,

@@ -268,6 +268,18 @@ dims_brightness_operation (dims_request_rec *d, char *args, char **err) {
     return DIMS_SUCCESS;
 }
 
+dims_modulate_operation (dims_request_rec *d, char *args, char **err) {
+    //MagickStatusType flags;
+    //GeometryInfo geometry;
+
+	// weird how you use geometry parser to do this
+    //flags = ParseGeometry(args, &geometry);
+
+    MAGICK_CHECK(ModulateImage(GetImageFromMagickWand(d->wand), args), d);
+
+    return DIMS_SUCCESS;
+}
+
 apr_status_t
 dims_flipflop_operation (dims_request_rec *d, char *args, char **err) {
     if(args != NULL) {
