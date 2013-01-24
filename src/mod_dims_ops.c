@@ -118,7 +118,8 @@ dims_adaptive_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
         return DIMS_FAILURE;
@@ -134,7 +135,8 @@ dims_liquid_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
         return DIMS_FAILURE;
@@ -150,7 +152,8 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
         return DIMS_FAILURE;
@@ -182,7 +185,8 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec, rec2;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = ParseMetaGeometry(resize_args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -251,7 +255,87 @@ dims_blur_operation (dims_request_rec *d, char *args, char **err) {
 
     return DIMS_SUCCESS;
 }
-	
+
+dims_brightness_operation (dims_request_rec *d, char *args, char **err) {
+    MagickStatusType flags;
+    GeometryInfo geometry;
+
+    flags = ParseGeometry(args, &geometry);
+
+    MAGICK_CHECK(MagickBrightnessContrastImage(d->wand,
+            geometry.rho, geometry.sigma), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_flipflop_operation (dims_request_rec *d, char *args, char **err) {
+    if(args != NULL) {
+        if(strcmp(args, "horizontal") == 0) {
+            MAGICK_CHECK(MagickFlopImage(d->wand), d);
+        } else if (strcmp(args, "vertical") == 0) {
+            MAGICK_CHECK(MagickFlipImage(d->wand), d);
+        }
+    }
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_sepia_operation (dims_request_rec *d, char *args, char **err) {
+    double threshold = atof(args);
+
+    MAGICK_CHECK(MagickSepiaToneImage(d->wand, threshold * QuantumRange), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_grayscale_operation (dims_request_rec *d, char *args, char **err) {
+
+    if(args != NULL) {
+        if(strcmp(args, "true") == 0) {
+            MAGICK_CHECK(MagickSetImageColorspace(d->wand, GRAYColorspace), d);
+        }
+    }
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_autolevel_operation (dims_request_rec *d, char *args, char **err) {
+
+    if(args != NULL) {
+        if(strcmp(args, "true") == 0) {
+            MAGICK_CHECK(MagickAutoLevelImage(d->wand), d);
+        }
+    }
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_invert_operation (dims_request_rec *d, char *args, char **err) {
+
+    if(args != NULL) {
+        if(strcmp(args, "true") == 0) {
+            MAGICK_CHECK(MagickNegateImage(d->wand, MagickFalse), d);
+        }
+    }
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
+    double degrees = atof(args);
+
+    PixelWand *pxWand = NewPixelWand();
+    MAGICK_CHECK(MagickRotateImage(d->wand, pxWand, degrees), d);
+    DestroyPixelWand(pxWand);
+
+    return DIMS_SUCCESS;
+}
 
 /**
  * Legacy API support.
@@ -293,7 +377,8 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     int x, y;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = ParseMetaGeometry(resize_args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;

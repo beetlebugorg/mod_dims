@@ -33,11 +33,12 @@
  * the License.
  */
 
-#define MODULE_RELEASE "$Revision: 148205 $"
-#define MODULE_VERSION "3.2.4"
+#define MODULE_RELEASE "$Revision: $"
+#define MODULE_VERSION "3.3.0"
 
 #include "mod_dims.h"
 #include "util_md5.h"
+#include "cmyk_icc.h"
 #include <scoreboard.h>
 
 #include <curl/curl.h>
@@ -928,6 +929,17 @@ dims_process_image(dims_request_rec *d)
 
     int exc_strip_cmd = 0;
 
+    /* Convert image to RGB from CMYK. */
+    if(MagickGetImageColorspace(d->wand) == CMYKColorspace) {
+        size_t number_profiles;
+
+        char *profiles = MagickGetImageProfiles(d->wand, "icc", &number_profiles);
+        if (number_profiles == 0) {
+            MagickProfileImage(d->wand, "ICC", cmyk_icc, sizeof(cmyk_icc));
+        }
+        MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
+    }
+
     /* Process operations. */
     while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
         char *command = ap_getword(d->pool, &cmds, '/');
@@ -1381,7 +1393,7 @@ dims_handler(request_rec *r)
         d->unparsed_commands = commands + 6;
 
         return dims_handle_request(d);
-        } else if(strcmp(r->handler, "dims-status") == 0) {
+    } else if(strcmp(r->handler, "dims-status") == 0) {
         apr_time_t uptime;
 
         ap_set_content_type(r, "text/plain");
@@ -1469,7 +1481,13 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "sharpen", APR_HASH_KEY_STRING, dims_sharpen_operation);
     apr_hash_set(ops, "blur", APR_HASH_KEY_STRING, dims_blur_operation);
     apr_hash_set(ops, "format", APR_HASH_KEY_STRING, dims_format_operation);
-    //apr_hash_set(ops, "smart-crop", APR_HASH_KEY_STRING, dims_smart_crop_operation);
+    apr_hash_set(ops, "brightness", APR_HASH_KEY_STRING, dims_brightness_operation);
+    apr_hash_set(ops, "flipflop", APR_HASH_KEY_STRING, dims_flipflop_operation);
+    apr_hash_set(ops, "sepia", APR_HASH_KEY_STRING, dims_sepia_operation);
+    apr_hash_set(ops, "grayscale", APR_HASH_KEY_STRING, dims_grayscale_operation);
+    apr_hash_set(ops, "autolevel", APR_HASH_KEY_STRING, dims_autolevel_operation);
+    apr_hash_set(ops, "rotate", APR_HASH_KEY_STRING, dims_rotate_operation);
+    apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
 
     /* Init APR's atomic functions */
     status = apr_atomic_init(p);
