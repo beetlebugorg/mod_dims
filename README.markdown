@@ -30,6 +30,172 @@ Add the following to the Apache configuration:
 
 This assumes mod_dims.so has been installed in $HTTP_ROOT/modules.
 
+Available filters
+=================
+
+Modulate
+--------
+
+```
+modulate/<brightness>,<saturation>,<hue>
+```
+
+  * brightness: 0 (black) - 100 (normal) - 9999 (completely bleached out)
+  * saturation: 0 (grey) - 100 (normal) - 9999 (aliens)
+  * hue: 0 (shift colour wheel left 180 deg) - 100 (normal) - 200 (shift right 180 deg)
+
+Normalise
+---------
+
+Equalises the curves for a cheap 'punchy' effect.
+
+```
+normalize
+```
+
+Mirrored Floor
+---------------
+
+Flips the image and renders it below the original.  Useful for making quick and dirty background images or repeaters.
+
+```
+mirroredfloor
+```
+
+Flip
+----
+
+Flips an image.
+
+```
+flip
+```
+
+Flop
+----
+
+Flops an image.
+
+```
+flop
+```
+
+Liquid Resize
+-------------
+
+Resize that attempts to preserve features by using seam carving.  Very fun!  Does not honour aspect ratio (by design).
+
+```
+liquidresize/<width>x<height>
+```
+
+Resize
+------
+
+Resize that honours aspect ratio of original so that image is *no larger* than new width x height.
+
+```resize/<width>x<height>```
+
+Sharpen
+-------
+
+```sharpen/<radius>,<sigma>```
+
+  * radius: 0- (pixels, controls size of convolution)
+  * sigma: 0- (pixels, controls rolloff of gaussian used, typically sqrt(radius) for normal usage, e.g. `sharpen/4,2`)
+
+Thumbnail
+---------
+
+Fast resample for small thumbnails which also crops to exactly requested size.
+
+```thumbnail/<width>x<height>```
+
+Crop
+----
+
+```crop/<width>x<height>+<x>+<y>```
+
+Format
+------
+
+```format/<jpg|png|gif>```
+
+Quality 
+-------
+
+```quality/<factor>```
+
+  * quality: 1-100 (only affects JPG output)
+
+Blur
+----
+
+```blur/<radius>,<sigma>```
+
+  * radius: 0- (pixels, controls size of convolution)
+  * sigma: 0- (pixels, controls rolloff of gaussian used, typically sqrt(radius) for normal usage, e.g. `blur/9,3`.  sigma > radius gives interesting effects)
+
+Brightness
+----------
+
+```
+brightness/<brightness>,<contrast>
+```
+
+  * brightness: -100 - 100
+  * contrast: -100 - 100
+
+FlipFlop
+--------
+
+```
+flipflop/<axis>
+```
+
+  * axis: horizontal | vertical
+
+Sepia
+-----
+
+```
+sepia/<threshold>
+```
+
+  * threshold: 0-100
+
+Greyscale (grayscale)
+---------------------
+
+(Faster than desaturate)
+
+```
+grayscale/<true|false>
+```
+
+Autolevel
+---------
+
+```
+autolevel/<true|false>
+```
+
+Invert
+------
+
+```
+invert/<true|false>
+```
+
+Rotate
+------
+
+```
+rotate/<angle>
+```
+
+  * angle: 0-359
+
 Errors
 ======
 

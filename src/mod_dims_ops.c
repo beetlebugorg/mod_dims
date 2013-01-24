@@ -119,6 +119,7 @@ dims_adaptive_resize_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
 
     //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+	SetGeometry(GetImageFromMagickWand(d->wand), &rec);
     flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
@@ -136,6 +137,7 @@ dims_liquid_resize_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
 
     //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+	SetGeometry(GetImageFromMagickWand(d->wand), &rec);
     flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
@@ -153,6 +155,7 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
 
     //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+	SetGeometry(GetImageFromMagickWand(d->wand), &rec);
     flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
@@ -186,6 +189,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
     //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+	SetGeometry(GetImageFromMagickWand(d->wand), &rec);
     flags = ParseMetaGeometry(resize_args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
@@ -390,6 +394,7 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
     //flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+	SetGeometry(GetImageFromMagickWand(d->wand), &rec);
     flags = ParseMetaGeometry(resize_args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
