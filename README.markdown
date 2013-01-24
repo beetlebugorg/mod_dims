@@ -94,12 +94,16 @@ Resize
 
 Resize that honours aspect ratio of original so that image is *no larger* than new width x height.
 
-```resize/<width>x<height>```
+```
+resize/<width>x<height>
+```
 
 Sharpen
 -------
 
-```sharpen/<radius>,<sigma>```
+```
+sharpen/<radius>,<sigma>
+```
 
   * radius: 0- (pixels, controls size of convolution)
   * sigma: 0- (pixels, controls rolloff of gaussian used, typically sqrt(radius) for normal usage, e.g. `sharpen/4,2`)
@@ -109,29 +113,39 @@ Thumbnail
 
 Fast resample for small thumbnails which also crops to exactly requested size.
 
-```thumbnail/<width>x<height>```
+```
+thumbnail/<width>x<height>
+```
 
 Crop
 ----
 
-```crop/<width>x<height>+<x>+<y>```
+```
+crop/<width>x<height>+<x>+<y>
+```
 
 Format
 ------
 
-```format/<jpg|png|gif>```
+```
+format/<jpg|png|gif>
+```
 
 Quality 
 -------
 
-```quality/<factor>```
+```
+quality/<factor>
+```
 
   * quality: 1-100 (only affects JPG output)
 
 Blur
 ----
 
-```blur/<radius>,<sigma>```
+```
+blur/<radius>,<sigma>
+```
 
   * radius: 0- (pixels, controls size of convolution)
   * sigma: 0- (pixels, controls rolloff of gaussian used, typically sqrt(radius) for normal usage, e.g. `blur/9,3`.  sigma > radius gives interesting effects)
