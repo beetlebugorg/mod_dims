@@ -14,4 +14,4 @@ fi
 autoconf || die "Can't execute autoconf"
 automake --add-missing --copy --force || die "Can't execute automake"
 
-./configure
+./configure $@
