@@ -535,6 +535,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
         curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
         curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
+        curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
 
         /* The curl shared handle allows this process to share DNS cache
          * and prevents the DNS cache from going away after every request.
