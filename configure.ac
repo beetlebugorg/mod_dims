@@ -3,14 +3,6 @@ AC_INIT(mod_dims, 3.3.0, [jeremy.collins@beetlebug.org])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src/mod_dims.c])
 
-# For custom installs.
-LDFLAGS+=" -L/usr/local/lib"
-CFLAGS+=" -I/usr/local/include"
-
-# For MacPorts.
-LDFLAGS+=" -L/opt/local/lib"
-CFLAGS+=" -L/opt/local/include"
-
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_LIBTOOL
@@ -20,10 +12,8 @@ AC_ARG_WITH(imagemagick, [  --with-imagemagick        Specify installation direc
     imagemagick_dir=$with_imagemagick
     LDFLAGS+=" -L$imagemagick_dir/lib"
     CFLAGS+=" -I$imagemagick_dir/include/ImageMagick"
-],[
-    CFLAGS+=" -I/usr/local/include/ImageMagick"
-    CFLAGS+=" -I/opt/local/include/ImageMagick"
-])
+],[ ]
+)
 AC_SUBST(imagemagick_dir)
 
 AC_CHECK_LIB(MagickWand, MagickWandGenesis,, [
