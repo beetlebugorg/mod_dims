@@ -16,6 +16,7 @@ BuildArch: x86_64
 BuildRequires: ImageMagick-devel
 BuildRequires: curl-devel
 BuildRequires: httpd-devel
+BuildRequires: libtool
 
 
 Requires: curl, httpd, ImageMagick
