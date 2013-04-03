@@ -51,6 +51,8 @@
 #define DIMS_HOSTNAME_NOT_IN_WHITELIST 64
 #define DIMS_FILE_NOT_FOUND 128
 #define DIMS_NOT_MODIFIED 256
+#define DIMS_SAVED 512
+#define DIMS_NOT_ALLOWED 1024
 
 typedef struct dims_request_rec dims_request_rec;
 typedef struct dims_config_rec dims_config_rec;
@@ -77,11 +79,14 @@ dims_operation_func
     dims_rotate_operation,
     dims_invert_operation,
     dims_extent_operation,
-    dims_legacy_crop_operation;
+    dims_legacy_crop_operation,
+    dims_save_operation;
 
 struct dims_config_rec {
     int download_timeout;
     int imagemagick_timeout;
+
+    int save_allowed;
 
     apr_table_t *whitelist;
     apr_hash_t *clients;

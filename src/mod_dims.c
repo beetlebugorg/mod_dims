@@ -118,7 +118,25 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->secret_key = apr_pstrdup(p,"m0d1ms");
     config->max_expiry_period= 0; // never expire
 
+    config->save_allowed = 0;
+
     return (void *) config;
+}
+
+static const char *
+dims_config_set_save_allowed(cmd_parms *cmd, void *dummy, const char *arg)
+{
+	dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+			cmd->server->module_config,
+			&dims_module) ;
+
+	if(strcmp(arg, "true") == 0) {
+		config->save_allowed = 1;
+	}
+	else {
+		config->save_allowed = 0;
+	}
+	return NULL;
 }
 
 static const char *
@@ -837,7 +855,11 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
     }
     
     if ( status == DIMS_NOT_MODIFIED) {
-        return HTTP_NOT_MODIFIED;        
+        return HTTP_NOT_MODIFIED;
+    } else if (status == DIMS_SAVED) {
+        return HTTP_NO_CONTENT;
+    } else if (status == DIMS_NOT_ALLOWED) {
+    	return HTTP_FORBIDDEN;
     }
     
     if(d->no_image_url) {
@@ -1120,7 +1142,7 @@ dims_handle_request(dims_request_rec *d)
         d->modification_time = finfo.mtime;
         
         char *if_modified_since = apr_table_get(d->r->headers_in, "If-Modified-Since");
-        if (if_modified_since) {
+        if (if_modified_since && (strstr(d->unparsed_commands, "save") == NULL )) {
             apr_time_t if_modified_since_time = apr_date_parse_http(if_modified_since);
             apr_int64_t if_modified_since_sec, request_time_sec, modification_time_sec;
             
@@ -1511,6 +1533,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "rotate", APR_HASH_KEY_STRING, dims_rotate_operation);
     apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
     apr_hash_set(ops, "extent", APR_HASH_KEY_STRING, dims_extent_operation);
+    apr_hash_set(ops, "save", APR_HASH_KEY_STRING, dims_save_operation);
 
     /* Init APR's atomic functions */
     status = apr_atomic_init(p);
@@ -1703,6 +1726,10 @@ static const command_rec dims_commands[] =
                 dims_config_set_strip_metadata, NULL, RSRC_CONF,
                 "Should DIMS strip the metadata from the image, true OR false."
                 "The default is true."),
+    AP_INIT_TAKE1("DimsSaveAllowed",
+    			dims_config_set_save_allowed, NULL, RSRC_CONF,
+    			"Should DIMS be allowed to save an image, true OR false."
+    			"The default is false."),
     {NULL}
 };
 

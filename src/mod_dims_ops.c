@@ -47,6 +47,31 @@ dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
 */
 
 apr_status_t
+dims_save_operation(dims_request_rec *d, char *args, char **err) {
+	apr_status_t status;
+	if (d->config->save_allowed) {
+		MagickStatusType myflags;
+			RectangleInfo myrec;
+			myflags = ParseAbsoluteGeometry(args, &myrec);
+
+			if (!(myrec.width > MagickGetImageWidth(d->wand)
+					|| myrec.height > MagickGetImageHeight(d->wand))) {
+				dims_resize_operation(d, args, err);
+			}
+
+			if (MagickWriteImage(d->wand, d->r->filename) == MagickTrue) {
+				status = DIMS_SAVED;
+			} else {
+				status = DIMS_FAILURE;
+			}
+	} else {
+		status = DIMS_NOT_ALLOWED;
+	}
+
+	return status;
+}
+
+apr_status_t
 dims_strip_operation (dims_request_rec *d, char *args, char **err) {
 
     /* If args is passed from the user and 
