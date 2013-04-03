@@ -191,8 +191,8 @@ dims_brightness_operation (dims_request_rec *d, char *args, char **err) {
 
     flags = ParseGeometry(args, &geometry);
 
-    MAGICK_CHECK(MagickBrightnessContrastImage(d->wand,
-            geometry.rho, geometry.sigma), d);
+    //MAGICK_CHECK(MagickBrightnessContrastImage(d->wand,
+    //        geometry.rho, geometry.sigma), d);
 
     return DIMS_SUCCESS;
 }
@@ -236,7 +236,7 @@ dims_autolevel_operation (dims_request_rec *d, char *args, char **err) {
 
     if(args != NULL) {
         if(strcmp(args, "true") == 0) {
-            MAGICK_CHECK(MagickAutoLevelImage(d->wand), d);
+            // MAGICK_CHECK(MagickAutoLevelImage(d->wand), d);
         }
     }
 
