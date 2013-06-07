@@ -130,6 +130,7 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     ExceptionInfo ex_info;
+    char *page = "0x0+0+0";
 
     flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
     if(!(flags & AllValues)) {
@@ -138,6 +139,7 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     }
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
+    MAGICK_CHECK(MagickResetImagePage(d->wand, page), d);
 
     return DIMS_SUCCESS;
 }
