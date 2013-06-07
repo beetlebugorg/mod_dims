@@ -318,9 +318,21 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 
 apr_status_t
 dims_background_operation (dims_request_rec *d, char *args, char **err) {
+    MagickWand *flat;
     PixelWand *bgcolor = NewPixelWand();
     PixelSetColor(bgcolor, args);
+
     MAGICK_CHECK(MagickSetImageBackgroundColor(d->wand, bgcolor), d);
+
+    /* These steps are necessary or the background color
+       will be applied but then discarded */
+    MAGICK_CHECK(flat = MagickMergeImageLayers(d->wand, FlattenLayer), d);
+
+    /* XXX Appropriate way to replace d->wand? */
+    DestroyMagickWand(d->wand);
+    d->wand = flat;
+
     DestroyPixelWand(bgcolor);
+
     return DIMS_SUCCESS;
 }
