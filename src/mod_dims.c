@@ -580,6 +580,28 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             
             if(response_code == 404) {
                 d->status = DIMS_FILE_NOT_FOUND;
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Received a 404 NOT FOUND on request: %s ",
+                    d->r->uri);
+            }
+
+            /* This shouldn't happen with CURLOPT_FOLLOWLOCATION => 1 */
+            else if(response_code == 301 || response_code == 302) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Received a %d REDIRECT on request: %s ",
+                    response_code, d->r->uri);
+            }
+
+            else if(response_code >= 500) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Received a %d SERVER ERROR on request: %s ",
+                    response_code, d->r->uri);
+            }
+
+            else {
+                ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, d->r,
+                    "Received a %d non-ok status on request: %s ",
+                    response_code, d->r->uri);
             }
 
             free(fetch_url);
