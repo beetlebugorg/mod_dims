@@ -1480,6 +1480,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "autolevel", APR_HASH_KEY_STRING, dims_autolevel_operation);
     apr_hash_set(ops, "rotate", APR_HASH_KEY_STRING, dims_rotate_operation);
     apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
+    apr_hash_set(ops, "background", APR_HASH_KEY_STRING, dims_background_operation);
 
     /* Init APR's atomic functions */
     status = apr_atomic_init(p);

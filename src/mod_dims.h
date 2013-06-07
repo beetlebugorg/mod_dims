@@ -75,7 +75,8 @@ dims_operation_func
     dims_autolevel_operation,
     dims_rotate_operation,
     dims_invert_operation,
-    dims_legacy_crop_operation;
+    dims_legacy_crop_operation,
+    dims_background_operation;
 
 struct dims_config_rec {
     int download_timeout;

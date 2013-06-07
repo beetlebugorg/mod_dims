@@ -316,3 +316,11 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     return DIMS_SUCCESS;
 }
 
+apr_status_t
+dims_background_operation (dims_request_rec *d, char *args, char **err) {
+    PixelWand *bgcolor = NewPixelWand();
+    PixelSetColor(bgcolor, args);
+    MAGICK_CHECK(MagickSetImageBackgroundColor(d->wand, bgcolor), d);
+    DestroyPixelWand(pxWand);
+    return DIMS_SUCCESS;
+}
