@@ -316,3 +316,26 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     return DIMS_SUCCESS;
 }
 
+apr_status_t
+dims_liquid_rescale_operation (dims_request_rec *d, char *args, char **err) {
+    MagickStatusType flags;
+    RectangleInfo rec;
+
+    ExceptionInfo ex_info;
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
+    if(!(flags & AllValues)) {
+        *err = "Parsing liquid resize geometry failed";
+        return DIMS_FAILURE;
+    }
+
+    MAGICK_CHECK(MagickLiquidRescaleImage(d->wand, rec.width, rec.height, 3, 25), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_gravity_operation (dims_request_rec *d, char *args, char **err) {
+    int gravity = ParseMagickOption(MagickGravityOptions,MagickFalse,args);
+    MAGICK_CHECK(MagickSetImageGravity(d->wand, gravity), d);
+    return DIMS_SUCCESS;
+}
