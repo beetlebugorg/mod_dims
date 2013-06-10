@@ -77,7 +77,8 @@ dims_operation_func
     dims_invert_operation,
     dims_legacy_crop_operation,
     dims_liquid_rescale_operation,
-    dims_gravity_operation;
+    dims_gravity_operation,
+    dims_background_operation;
 
 struct dims_config_rec {
     int download_timeout;

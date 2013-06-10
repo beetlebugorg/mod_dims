@@ -1504,6 +1504,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
     apr_hash_set(ops, "liquid_rescale", APR_HASH_KEY_STRING, dims_liquid_rescale_operation);
     apr_hash_set(ops, "gravity", APR_HASH_KEY_STRING, dims_gravity_operation);
+    apr_hash_set(ops, "background", APR_HASH_KEY_STRING, dims_background_operation);
 
     /* Init APR's atomic functions */
     status = apr_atomic_init(p);
