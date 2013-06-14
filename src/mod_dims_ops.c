@@ -337,7 +337,7 @@ dims_liquid_rescale_operation (dims_request_rec *d, char *args, char **err) {
 
 apr_status_t
 dims_gravity_operation (dims_request_rec *d, char *args, char **err) {
-    int gravity = ParseMagickOption(MagickGravityOptions,MagickFalse,args);
+    int gravity = ParseCommandOption(MagickGravityOptions,MagickFalse,args);
     MAGICK_CHECK(MagickSetImageGravity(d->wand, gravity), d);
     return DIMS_SUCCESS;
 }
