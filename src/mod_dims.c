@@ -292,6 +292,17 @@ dims_config_set_imagemagick_disk_size(cmd_parms *cmd, void *dummy, const char *a
     
     return NULL;
 }
+
+static const char *
+dims_config_set_imagemagick_thread_limit(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->thread_limit = atol(arg);
+
+    return NULL;
+}
+
 static const char *
 dims_config_set_secretkeyExpiryPeriod(cmd_parms *cmd, void *dummy, const char *arg)
 {
@@ -1484,6 +1495,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     MagickSetResourceLimit(DiskResource, config->disk_size);
     MagickSetResourceLimit(MemoryResource, config->memory_size);
     MagickSetResourceLimit(MapResource, config->map_size);
+    MagickSetResourceLimit(ThreadResource, config->thread_limit);
 
     ops = apr_hash_make(p);
     apr_hash_set(ops, "strip", APR_HASH_KEY_STRING, dims_strip_operation);
@@ -1689,6 +1701,10 @@ static const command_rec dims_commands[] =
                   dims_config_set_imagemagick_disk_size, NULL, RSRC_CONF,
                   "Maximum amount of disk space in megabytes to use for the pixel cache."
                   "The default is 1024mb."),
+    AP_INIT_TAKE1("DimsImagemagickThreadLimit",
+                  dims_config_set_imagemagick_thread_limit, NULL, RSRC_CONF,
+                  "Maximum number of threads that should be used by ImageMagick."
+                  "The default is ImageMagick default."),
     AP_INIT_TAKE1("DimsSecretMaxExpiryPeriod",
                 dims_config_set_secretkeyExpiryPeriod, NULL, RSRC_CONF,
                 "How long in the future (in seconds) can the expiry date on the URL be requesting. 0 = forever"

@@ -96,6 +96,7 @@ struct dims_config_rec {
     MagickSizeType memory_size;
     MagickSizeType map_size;
     MagickSizeType disk_size;
+    MagickSizeType thread_limit;
 
     int curl_queue_size;
     char *secret_key;
