@@ -292,6 +292,17 @@ dims_config_set_imagemagick_disk_size(cmd_parms *cmd, void *dummy, const char *a
     
     return NULL;
 }
+
+static const char *
+dims_config_set_imagemagick_thread_limit(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->thread_limit = atol(arg);
+
+    return NULL;
+}
+
 static const char *
 dims_config_set_secretkeyExpiryPeriod(cmd_parms *cmd, void *dummy, const char *arg)
 {
@@ -580,6 +591,28 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             
             if(response_code == 404) {
                 d->status = DIMS_FILE_NOT_FOUND;
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Received a 404 NOT FOUND on request: %s ",
+                    d->r->uri);
+            }
+
+            /* This shouldn't happen with CURLOPT_FOLLOWLOCATION => 1 */
+            else if(response_code == 301 || response_code == 302) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Received a %d REDIRECT on request: %s ",
+                    response_code, d->r->uri);
+            }
+
+            else if(response_code >= 500) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Received a %d SERVER ERROR on request: %s ",
+                    response_code, d->r->uri);
+            }
+
+            else {
+                ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, d->r,
+                    "Received a %d non-ok status on request: %s ",
+                    response_code, d->r->uri);
             }
 
             free(fetch_url);
@@ -1462,6 +1495,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     MagickSetResourceLimit(DiskResource, config->disk_size);
     MagickSetResourceLimit(MemoryResource, config->memory_size);
     MagickSetResourceLimit(MapResource, config->map_size);
+    MagickSetResourceLimit(ThreadResource, config->thread_limit);
 
     ops = apr_hash_make(p);
     apr_hash_set(ops, "strip", APR_HASH_KEY_STRING, dims_strip_operation);
@@ -1480,6 +1514,9 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "autolevel", APR_HASH_KEY_STRING, dims_autolevel_operation);
     apr_hash_set(ops, "rotate", APR_HASH_KEY_STRING, dims_rotate_operation);
     apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
+    apr_hash_set(ops, "liquid_rescale", APR_HASH_KEY_STRING, dims_liquid_rescale_operation);
+    apr_hash_set(ops, "gravity", APR_HASH_KEY_STRING, dims_gravity_operation);
+    apr_hash_set(ops, "background", APR_HASH_KEY_STRING, dims_background_operation);
 
     /* Init APR's atomic functions */
     status = apr_atomic_init(p);
@@ -1664,6 +1701,10 @@ static const command_rec dims_commands[] =
                   dims_config_set_imagemagick_disk_size, NULL, RSRC_CONF,
                   "Maximum amount of disk space in megabytes to use for the pixel cache."
                   "The default is 1024mb."),
+    AP_INIT_TAKE1("DimsImagemagickThreadLimit",
+                  dims_config_set_imagemagick_thread_limit, NULL, RSRC_CONF,
+                  "Maximum number of threads that should be used by ImageMagick."
+                  "The default is ImageMagick default."),
     AP_INIT_TAKE1("DimsSecretMaxExpiryPeriod",
                 dims_config_set_secretkeyExpiryPeriod, NULL, RSRC_CONF,
                 "How long in the future (in seconds) can the expiry date on the URL be requesting. 0 = forever"

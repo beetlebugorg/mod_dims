@@ -130,6 +130,7 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     ExceptionInfo ex_info;
+    char *page = "0x0+0+0";
 
     flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
     if(!(flags & AllValues)) {
@@ -138,6 +139,7 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     }
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
+    MAGICK_CHECK(MagickResetImagePage(d->wand, page), d);
 
     return DIMS_SUCCESS;
 }
@@ -316,3 +318,46 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     return DIMS_SUCCESS;
 }
 
+apr_status_t
+dims_liquid_rescale_operation (dims_request_rec *d, char *args, char **err) {
+    MagickStatusType flags;
+    RectangleInfo rec;
+
+    ExceptionInfo ex_info;
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
+    if(!(flags & AllValues)) {
+        *err = "Parsing liquid resize geometry failed";
+        return DIMS_FAILURE;
+    }
+
+    MAGICK_CHECK(MagickLiquidRescaleImage(d->wand, rec.width, rec.height, 3, 25), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
+dims_gravity_operation (dims_request_rec *d, char *args, char **err) {
+    int gravity = ParseCommandOption(MagickGravityOptions,MagickFalse,args);
+    MAGICK_CHECK(MagickSetImageGravity(d->wand, gravity), d);
+    return DIMS_SUCCESS;
+}
+
+dims_background_operation (dims_request_rec *d, char *args, char **err) {
+    MagickWand *flat;
+    PixelWand *bgcolor = NewPixelWand();
+    PixelSetColor(bgcolor, args);
+
+    MAGICK_CHECK(MagickSetImageBackgroundColor(d->wand, bgcolor), d);
+
+    /* These steps are necessary or the background color
+       will be applied but then discarded */
+    MAGICK_CHECK(flat = MagickMergeImageLayers(d->wand, FlattenLayer), d);
+
+    /* XXX Appropriate way to replace d->wand? */
+    DestroyMagickWand(d->wand);
+    d->wand = flat;
+
+    DestroyPixelWand(bgcolor);
+
+    return DIMS_SUCCESS;
+}

@@ -75,7 +75,10 @@ dims_operation_func
     dims_autolevel_operation,
     dims_rotate_operation,
     dims_invert_operation,
-    dims_legacy_crop_operation;
+    dims_legacy_crop_operation,
+    dims_liquid_rescale_operation,
+    dims_gravity_operation,
+    dims_background_operation;
 
 struct dims_config_rec {
     int download_timeout;
@@ -93,6 +96,7 @@ struct dims_config_rec {
     MagickSizeType memory_size;
     MagickSizeType map_size;
     MagickSizeType disk_size;
+    MagickSizeType thread_limit;
 
     int curl_queue_size;
     char *secret_key;
