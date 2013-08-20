@@ -54,8 +54,8 @@ dims_save_operation(dims_request_rec *d, char *args, char **err) {
 			RectangleInfo myrec;
 			myflags = ParseAbsoluteGeometry(args, &myrec);
 
-			if (!(myrec.width > MagickGetImageWidth(d->wand)
-					|| myrec.height > MagickGetImageHeight(d->wand))) {
+			if (myrec.width < MagickGetImageWidth(d->wand)
+                            || myrec.height < MagickGetImageHeight(d->wand)) {
 				dims_resize_operation(d, args, err);
 			}
 
