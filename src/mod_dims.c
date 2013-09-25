@@ -549,6 +549,12 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 "Encoded URL: %s ", fetch_url);
 
         curl_handle = curl_easy_init();
+        
+        char * proxyHost = getEnv("https_proxy");
+        if(proxyHost != NULL){
+            curl_easy_setopt(curl_handle, CURLOPT_PROXY, proxyHost);
+        }
+        
         curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
         curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
         curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
