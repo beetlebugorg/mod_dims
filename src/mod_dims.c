@@ -551,9 +551,11 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         curl_handle = curl_easy_init();
         
         char * proxyHost = getenv("https_proxy");
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, 0, "I'm a testing info: what's my proxy? (%s)", proxyHost);
         if(proxyHost != NULL){
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, 0, "I'm a testing info: what's my proxy? (%s)", proxyHost);
             curl_easy_setopt(curl_handle, CURLOPT_PROXY, proxyHost);
+        }else{
+        	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, 0, "no proxy found");
         }
         
         curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
