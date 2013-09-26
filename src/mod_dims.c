@@ -1291,6 +1291,8 @@ dims_handler(request_rec *r)
     dims_request_rec *d = (dims_request_rec *) 
             apr_palloc(r->pool, sizeof(dims_request_rec));
 
+    ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "my url arguments at the beginning: %s", r->args);
+
     d->r = r;
     d->pool = r->pool;
     d->wand = NULL;
