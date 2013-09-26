@@ -555,6 +555,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "I'm a testing info: what's my proxy? (%s)", proxyHost);
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "setting hard coded proxy to http://proxy.rz.is24.loc:3128");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "I will fetch url: (%s)", fetch_url);
             curl_easy_setopt(curl_handle, CURLOPT_PROXY, "http://proxy.rz.is24.loc:3128");
         }
 //        else{
