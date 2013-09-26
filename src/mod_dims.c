@@ -1302,7 +1302,7 @@ dims_handler(request_rec *r)
     ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "my url arguments at the beginning: %s", r->args);
 
     d->r = r;
-    d->image_url_args = r->args;
+    d->image_url_args = NULL;
     d->pool = r->pool;
     d->wand = NULL;
     d->config = (dims_config_rec *) ap_get_module_config(r->server->module_config, &dims_module);
@@ -1432,6 +1432,13 @@ dims_handler(request_rec *r)
 
         /* Check first if URL is passed as a query parameter. */
         if(r->args) {
+
+        	//add complete query params needed for as3 urls
+        	char tmp[]="?";
+        	d->image_url_args = &tmp;
+
+        	strcat(d->image_url_args, args);
+
             char *token;
             char *strtokstate;
             token = apr_strtok(r->args, "&", &strtokstate);
