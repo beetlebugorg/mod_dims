@@ -1437,7 +1437,7 @@ dims_handler(request_rec *r)
         	char tmp[]="?";
         	d->image_url_args = &tmp;
 
-        	strcat(d->image_url_args, args);
+        	strcat(d->image_url_args, r->args);
 
             char *token;
             char *strtokstate;
