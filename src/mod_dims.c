@@ -559,8 +559,10 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "I'm a testing info: what's my proxy? (%s)", proxyHost);
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "setting hard coded proxy to http://proxy.rz.is24.loc:3128");
 
-        strcat(fetch_url, "?");
-        strcat(fetch_url, queryArgs);
+		if (queryArgs) {
+			strcat(fetch_url, "?");
+			strcat(fetch_url, queryArgs);
+		}
 
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "I will fetch url: %s", fetch_url);
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "my url arguments selfmade: %s", d->image_url_args);
@@ -1436,9 +1438,9 @@ dims_handler(request_rec *r)
         if(r->args) {
 
         	//add complete query params needed for as3 urls
-//        	d->image_url_args = ap_getword(d->pool, &(r->args), '\n');
-        	d->image_url_args = malloc(strlen(r->args)+1) ;
-        	strcat(d->image_url_args, r->args);
+        	d->image_url_args = ap_getword(d->pool, &(r->args), '\n');
+//        	d->image_url_args = malloc(strlen(r->args)+1) ;
+//        	strcat(d->image_url_args, r->args);
 
             char *token;
             char *strtokstate;
