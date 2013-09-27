@@ -1300,7 +1300,8 @@ dims_handler(request_rec *r)
             apr_palloc(r->pool, sizeof(dims_request_rec));
 
 //    ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "my uri at the beginning: %s", r->uri);
-    ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "my url arguments at the beginning: %s", r->args);
+	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+			"my url arguments at the beginning: %s",(r->args ? r->args : NULL));
 
     d->r = r;
     d->image_url_args = NULL;
