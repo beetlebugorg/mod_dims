@@ -1350,6 +1350,12 @@ dims_handler(request_rec *r)
                 (char *) &appid, (char *) &b, (char *) &w, (char *) &h, 
                 (char *) &q);
 
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is appid?: %s", appid);
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is b?: %s", b);
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is w?: %s", w);
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is h?: %s", h);
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is q?: %s", q);
+
         if(status != 5) {
             return dims_cleanup(d, NULL, DIMS_BAD_URL);
         }
