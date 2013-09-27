@@ -1361,15 +1361,10 @@ dims_handler(request_rec *r)
             return dims_cleanup(d, NULL, DIMS_BAD_URL);
         }
 
-        /* HACK: If URL has "http:/" instead of "http://" or https:/ instead of https://, correct it. */
-		url = strstr(r->uri, "http");
-		if(url) {
-			if(*(url + 6) != '/'){ // --> http:/
-				fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
-			}
-//			else if (*(url + 4) == 's' && *(url + 7) != '/'){ // --> https:/
-//				fixed_url = apr_psprintf(r->pool, "https://%s", url + 7);
-//			}
+        /* HACK: If URL has "http:/" instead of "http://", correct it. */
+		url = strstr(r->uri, "http:/");
+		if(url && *(url + 6) != '/') {
+			fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
 		} else if(!url) {
 			return dims_cleanup(d, NULL, DIMS_BAD_URL);
 		} else {
