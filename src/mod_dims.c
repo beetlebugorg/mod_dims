@@ -1366,9 +1366,10 @@ dims_handler(request_rec *r)
 		if(url) {
 			if(*(url + 6) != '/'){ // --> http:/
 				fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
-			}else if (*(url + 4) == 's' && *(url + 7) != '/'){ // --> https:/
-				fixed_url = apr_psprintf(r->pool, "https://%s", url + 7);
 			}
+//			else if (*(url + 4) == 's' && *(url + 7) != '/'){ // --> https:/
+//				fixed_url = apr_psprintf(r->pool, "https://%s", url + 7);
+//			}
 		} else if(!url) {
 			return dims_cleanup(d, NULL, DIMS_BAD_URL);
 		} else {
