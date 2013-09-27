@@ -1435,7 +1435,7 @@ dims_handler(request_rec *r)
         if(r->args) {
 
         	//add complete query params needed for as3 urls
-        	d->image_url_args = ap_getword(d->pool, &(r->args), '*');
+        	d->image_url_args = ap_getword(d->pool, &(r->args), '\n');
 
             char *token;
             char *strtokstate;
