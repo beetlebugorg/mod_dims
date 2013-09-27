@@ -135,9 +135,6 @@ struct dims_request_rec {
     /* The URL to the NOIMAGE image in case of failures. */
     char *no_image_url;
 
-    /* The args from remote img url. */
-    char *image_url_args;
-
     /* The filename if this is a local request. */
     char *filename;
 

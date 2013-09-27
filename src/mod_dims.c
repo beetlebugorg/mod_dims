@@ -549,29 +549,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 "Encoded URL: %s ", fetch_url);
 
         curl_handle = curl_easy_init();
-        
-        char * proxyHost = getenv("https_proxy");
-        //if(proxyHost != NULL)
-
-        char * queryArgs = d->image_url_args;
-        {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "fetch url without query: %s", fetch_url);
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "I'm a testing info: what's my proxy? (%s)", proxyHost);
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "setting hard coded proxy to http://proxy.rz.is24.loc:3128");
-
-		if (queryArgs) {
-			strcat(fetch_url, "?");
-			strcat(fetch_url, queryArgs);
-		}
-
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "I will fetch url: %s", fetch_url);
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "my url arguments selfmade: %s", d->image_url_args);
-            curl_easy_setopt(curl_handle, CURLOPT_PROXY, "http://proxy.rz.is24.loc:3128");
-        }
-//        else{
-//        	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "no proxy found");
-//        }
-        
         curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
         curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
         curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
@@ -606,7 +583,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             d->download_time = (apr_time_now() - start_time) / 1000;
 
             free(fetch_url);
-            free(queryArgs);
 
             return 1;
         }
@@ -1301,11 +1277,7 @@ dims_handler(request_rec *r)
     dims_request_rec *d = (dims_request_rec *) 
             apr_palloc(r->pool, sizeof(dims_request_rec));
 
-    ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "my uri at the beginning: %s", r->uri);
-	ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "my url arguments at the beginning: %s",(r->args ? r->args : NULL));
-
     d->r = r;
-    d->image_url_args = NULL;
     d->pool = r->pool;
     d->wand = NULL;
     d->config = (dims_config_rec *) ap_get_module_config(r->server->module_config, &dims_module);
@@ -1349,12 +1321,6 @@ dims_handler(request_rec *r)
                 "/%49[^/]/%9[^/]/%9[^/]/%9[^/]/%9[^/]/", 
                 (char *) &appid, (char *) &b, (char *) &w, (char *) &h, 
                 (char *) &q);
-
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is appid?: %s", appid);
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is b?: %s", b);
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is w?: %s", w);
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is h?: %s", h);
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "what is q?: %s", q);
 
         if(status != 5) {
             return dims_cleanup(d, NULL, DIMS_BAD_URL);
@@ -1441,12 +1407,6 @@ dims_handler(request_rec *r)
 
         /* Check first if URL is passed as a query parameter. */
         if(r->args) {
-
-        	//add complete query params needed for as3 urls
-        	d->image_url_args = ap_getword(d->pool, &(r->args), '\n');
-//        	d->image_url_args = malloc(strlen(r->args)+1) ;
-//        	strcat(d->image_url_args, r->args);
-
             char *token;
             char *strtokstate;
             token = apr_strtok(r->args, "&", &strtokstate);
