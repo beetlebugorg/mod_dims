@@ -1360,7 +1360,7 @@ dims_handler(request_rec *r)
             token = apr_strtok(r->args, "&", &strtokstate);
             while (token) {
                 if(strncmp(token, "url=", 4) == 0) {
-                    ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, d->r, "ARG: %s", token);
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                     fixed_url = apr_pstrdup(r->pool, token + 4);
                     ap_unescape_url(fixed_url);
                 }
