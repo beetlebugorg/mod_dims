@@ -121,6 +121,8 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 
         MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
     }
+
+    MAGICK_CHECK(MagickSetImagePage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
     
     return DIMS_SUCCESS;
 }
@@ -138,6 +140,7 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     }
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
+    MAGICK_CHECK(MagickSetImagePage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
 
     return DIMS_SUCCESS;
 }

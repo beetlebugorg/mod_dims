@@ -1003,13 +1003,6 @@ dims_process_image(dims_request_rec *d)
                 }
             }
         }
-
-    }
-
-    if (images > 0) {
-        MagickWand *wand = MagickCoalesceImages(d->wand);
-        DestroyMagickWand(d->wand);
-        d->wand = wand;
     }
 
     /*
