@@ -11,7 +11,7 @@ else
   libtoolize --automake --force || die "Can't execute libtoolize"
 fi
 
-autoconf || die "Can't execute autoconf"
+autoreconf -vfi || die "Can't execute autoconf"
 automake --add-missing --copy --force || die "Can't execute automake"
 
 ./configure $@
