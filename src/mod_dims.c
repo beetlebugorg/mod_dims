@@ -1096,6 +1096,14 @@ dims_handle_request(dims_request_rec *d)
   
     dims_set_optimal_geometry(d);
 
+    if (d->image_url && *d->image_url == '/') {
+        request_rec *sub_req = ap_sub_req_lookup_uri(d->image_url, d->r, NULL);
+        if (sub_req) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Looking up image locally: %s", sub_req->canonical_filename);
+            d->filename = sub_req->canonical_filename;
+        }
+    }
+
     if(d->filename) {
         /* Handle local images. */
 
