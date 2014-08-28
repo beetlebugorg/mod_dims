@@ -765,7 +765,7 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->subprocess_env, buf, d->client_id);
     }
 
-    char *etag;
+    char *etag = NULL;
     if (d->etag) {
         etag = ap_md5(d->pool,
                 (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->etag, NULL));
@@ -774,7 +774,9 @@ dims_send_image(dims_request_rec *d)
                 (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->last_modified, NULL));
     }
 
-    apr_table_set(d->r->headers_out, "ETag", etag);
+    if (etag) {
+        apr_table_set(d->r->headers_out, "ETag", etag);
+    }
 
     ap_rwrite(blob, length, d->r);
     ap_rflush(d->r);
