@@ -715,14 +715,14 @@ dims_send_image(dims_request_rec *d)
 
 
         if(trust_src_img) {
-            cache_control = apr_psprintf(d->pool, "max-age=%d", src_max_age);
+            cache_control = apr_psprintf(d->pool, "max-age=%d, public", src_max_age);
             if(d->client_config->edge_control_downstream_ttl != -1) {
                 edge_control = apr_psprintf(d->pool, "downstream-ttl=%d", src_max_age);
             }
             expire_time = src_max_age;
         }
         else {
-            cache_control = apr_psprintf(d->pool, "max-age=%d",
+            cache_control = apr_psprintf(d->pool, "max-age=%d, public",
                     d->client_config->cache_control_max_age);
 
             if(d->client_config->edge_control_downstream_ttl != -1) {
@@ -734,10 +734,10 @@ dims_send_image(dims_request_rec *d)
 
     } else if(d->status == DIMS_SUCCESS) {
         expire_time = d->config->default_expire;
-        cache_control = apr_psprintf(d->pool, "max-age=%d", expire_time);
+        cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
     } else {
         expire_time = d->config->no_image_expire;
-        cache_control = apr_psprintf(d->pool, "max-age=%d", expire_time);
+        cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
     }
 
     if(cache_control) {
