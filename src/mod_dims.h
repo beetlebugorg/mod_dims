@@ -146,6 +146,9 @@ struct dims_request_rec {
     /* The cache headers from the downloaded image. */
     char *cache_control;
     char *edge_control;
+    char *last_modified;
+    char *etag;
+    char *request_hash;
 
     /* The current status of this request.  If downloading
      * or manipulating the image times out this will

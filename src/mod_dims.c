@@ -400,6 +400,10 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
         d->cache_control = value;
     } else if(key && value && strcmp(key, "Edge-Control") == 0) {
         d->edge_control = value;
+    } else if(key && value && strcmp(key, "Last-Modified") == 0) {
+        d->last_modified = value;
+    } else if(key && value && strcmp(key, "ETag") == 0) {
+        d->etag = value;
     }
 
     return realsize;
@@ -632,7 +636,7 @@ dims_send_image(dims_request_rec *d)
     int expire_time = 0;
 
     char *cache_control = NULL,
-         *edge_control = NULL;;
+         *edge_control = NULL;
 
     // variables referring to the src image
     char *src_header;
@@ -760,6 +764,17 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->notes, "DIMS_CLIENT", d->client_id);
         apr_table_set(d->r->subprocess_env, buf, d->client_id);
     }
+
+    char *etag;
+    if (d->etag) {
+        etag = ap_md5(d->pool,
+                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->etag, NULL));
+    } else if (d->last_modified) {
+        etag = ap_md5(d->pool,
+                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->last_modified, NULL));
+    }
+
+    apr_table_set(d->r->headers_out, "ETag", etag);
 
     ap_rwrite(blob, length, d->r);
     ap_rflush(d->r);
@@ -1093,6 +1108,10 @@ dims_handle_request(dims_request_rec *d)
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
             "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);    
     }
+
+    d->request_hash = ap_md5(d->pool,
+            (unsigned char *) apr_pstrcat(d->pool, d->client_id,
+                d->unparsed_commands, d->image_url, NULL));
   
     dims_set_optimal_geometry(d);
 
