@@ -959,9 +959,7 @@ dims_process_image(dims_request_rec *d)
 
     /* Process operations, iterating over all frames of this image. */
     ssize_t images = MagickGetIteratorIndex(d->wand);
-    for (int i = 0; i <= images; i++) {
-        MagickSetIteratorIndex(d->wand, i);
-
+    if (images == 0) {
         const char *cmds = d->unparsed_commands;
         while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
             char *command = ap_getword(d->pool, &cmds, '/');
