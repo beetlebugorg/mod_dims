@@ -1270,6 +1270,9 @@ dims_handler(request_rec *r)
     d->filename = NULL;
     d->cache_control = NULL;
     d->edge_control = NULL;
+    d->etag = NULL;
+    d->last_modified = NULL;
+    d->request_hash = NULL;
     d->status = APR_SUCCESS;
     d->start_time = apr_time_now();
     d->download_time = 0;
