@@ -778,6 +778,13 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->headers_out, "ETag", etag);
     }
 
+    MagickSizeType image_size = 0;
+    MagickGetImageLength(d->wand, &image_size);
+
+    char content_length[256] = "";
+    snprintf(content_length, sizeof(content_length), "%zu", (size_t)image_size);
+    apr_table_set(d->r->headers_out, "Content-Length", content_length);
+
     ap_rwrite(blob, length, d->r);
     ap_rflush(d->r);
 
