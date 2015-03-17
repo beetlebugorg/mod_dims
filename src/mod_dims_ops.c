@@ -222,6 +222,14 @@ dims_quality_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
+dims_interlace_operation (dims_request_rec *d, char *args, char **err) {
+	if(strcmp(args, "true") == 0) {
+	   MAGICK_CHECK(MagickSetImageInterlaceScheme(d->wand, LineInterlace), d);
+	}
+	return DIMS_SUCCESS;
+}
+
+apr_status_t
 dims_brightness_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     GeometryInfo geometry;
