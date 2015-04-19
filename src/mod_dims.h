@@ -88,6 +88,7 @@ struct dims_config_rec {
     long no_image_expire;
     long default_expire;
     int strip_metadata;
+    float optimize_resize;
 
     MagickSizeType area_size;
     MagickSizeType memory_size;
@@ -136,6 +137,9 @@ struct dims_request_rec {
 
     /* The original image size in bytes. */
     long original_image_size;
+
+    /* The sample factor for optimizing resizing. */
+    float optimize_resize;
 
     /* The global configuration. */
     dims_config_rec *config;

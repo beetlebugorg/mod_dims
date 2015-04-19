@@ -104,6 +104,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->default_expire = 86400;
 
     config->strip_metadata = 1;
+    config->optimize_resize = 0;
 
     config->area_size = 128 * 1024 * 1024;         //  128mb max.
     config->memory_size = 512 * 1024 * 1024;       //  512mb max.
@@ -194,6 +195,15 @@ dims_config_set_strip_metadata(cmd_parms *cmd, void *dummy, const char *arg)
     else {
         config->strip_metadata = 1;
     }
+    return NULL;
+}
+
+static const char *
+dims_config_set_optimize_resize(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->optimize_resize = atof(arg);
     return NULL;
 }
 
@@ -1278,6 +1288,7 @@ dims_handler(request_rec *r)
     d->download_time = 0;
     d->imagemagick_time = 0;
     d->use_secret_key=0;
+    d->optimize_resize = d->config->optimize_resize;
 
     /* Set initial notes to be logged by mod_log_config. */
     apr_table_setn(r->notes, "DIMS_STATUS", "0");
@@ -1400,6 +1411,9 @@ dims_handler(request_rec *r)
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                     fixed_url = apr_pstrdup(r->pool, token + 4);
                     ap_unescape_url(fixed_url);
+                } else if(strncmp(token, "optimizeResize=", 4) == 0) {
+                    d->optimize_resize = atof(token + 15);
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Overriding optimize resize: %f", d->optimize_resize);
                 }
                 token = apr_strtok(NULL, "&", &strtokstate);
             }
@@ -1709,6 +1723,10 @@ static const command_rec dims_commands[] =
                 dims_config_set_strip_metadata, NULL, RSRC_CONF,
                 "Should DIMS strip the metadata from the image, true OR false."
                 "The default is true."),
+    AP_INIT_TAKE1("DimsOptimizeResize",
+                dims_config_set_optimize_resize, NULL, RSRC_CONF,
+                "Should DIMS optimize resize operations. This has a slight impact on image quality. 0 = disabled"
+                "The default is 0."),
     {NULL}
 };
 
