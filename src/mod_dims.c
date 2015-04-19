@@ -363,7 +363,7 @@ dims_write_image_cb(void *ptr, size_t size, size_t nmemb, void *data)
 
     /* Allocate more memory if needed. */
     if(mem->size - mem->used <= realsize) {
-        mem->size = mem->size == 0 ? realsize : (mem->size + realsize) * 2;
+        mem->size = mem->size == 0 ? realsize : (mem->size + realsize) * 1.25;
         mem->data = (char *) realloc(mem->data, mem->size);
     }
 
