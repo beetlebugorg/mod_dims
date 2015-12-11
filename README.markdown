@@ -5,6 +5,16 @@ Dependencies
 * Imagemagick 6.6+
 * libcurl 7.18.0+
 
+Compiling
+=========
+
+./autorun.sh --with-imagemagick=/path/to/imagemagick --with-apache=/path/to/apache
+
+The paths provided above are prefix paths used to install those dependencies. If you installed
+Imagemagick and Apache (including APR) in /usr/local you would run:
+
+./autorun.sh --with-imagemagick=/usr/local --with-apache=/usr/local
+
 Installation
 ============
 

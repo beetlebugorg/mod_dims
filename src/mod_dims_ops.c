@@ -162,7 +162,26 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
-    MAGICK_CHECK(MagickResizeImage(d->wand, rec.width, rec.height, SincFilter, 0.9), d);
+    if (d->optimize_resize) {
+        size_t orig_width;
+        size_t orig_height;
+
+        RectangleInfo sampleRec = rec;
+        sampleRec.width *= d->optimize_resize;
+        sampleRec.height *= d->optimize_resize;
+
+        orig_width = MagickGetImageWidth(d->wand);
+        orig_height = MagickGetImageHeight(d->wand);
+
+        if(sampleRec.width < orig_width && sampleRec.height < orig_height) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %dx%d before resizing.", sampleRec.width, sampleRec.height);
+            MAGICK_CHECK(MagickSampleImage(d->wand, sampleRec.width, sampleRec.height), d);
+        }
+    	MAGICK_CHECK(MagickScaleImage(d->wand, rec.width, rec.height), d);
+    } else {
+		/* SLOWWWW but looks nice */
+    	MAGICK_CHECK(MagickResizeImage(d->wand, rec.width, rec.height, SincFilter, 0.9), d);
+	}
 
     return DIMS_SUCCESS;
 }
@@ -196,6 +215,23 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
+    if (d->optimize_resize) {
+        size_t orig_width;
+        size_t orig_height;
+
+        RectangleInfo sampleRec = rec;
+        sampleRec.width *= d->optimize_resize;
+        sampleRec.height *= d->optimize_resize;
+
+        orig_width = MagickGetImageWidth(d->wand);
+        orig_height = MagickGetImageHeight(d->wand);
+
+        if(sampleRec.width < orig_width && sampleRec.height < orig_height) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %dx%d before resizing.", sampleRec.width, sampleRec.height);
+            MAGICK_CHECK(MagickSampleImage(d->wand, sampleRec.width, sampleRec.height), d);
+        }
+    }
+
     MAGICK_CHECK(MagickThumbnailImage(d->wand, rec.width, rec.height), d);
 
     if(!(flags & PercentValue)) {
@@ -207,6 +243,8 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 
         MAGICK_CHECK(MagickCropImage(d->wand, rec2.width, rec2.height, (int)((rec.width - rec2.width) / 2), (int)((rec.height - rec2.height) / 2)), d);
     }
+
+    MAGICK_CHECK(MagickSetImagePage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
     
     return DIMS_SUCCESS;
 }
@@ -224,13 +262,14 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     }
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
+    MAGICK_CHECK(MagickSetImagePage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
 
     return DIMS_SUCCESS;
 }
 
 apr_status_t
 dims_format_operation (dims_request_rec *d, char *args, char **err) {
-    MAGICK_CHECK(MagickSetFormat(d->wand, args), d);
+    MAGICK_CHECK(MagickSetImageFormat(d->wand, args), d);
     return DIMS_SUCCESS;
 }
 
