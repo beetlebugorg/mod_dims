@@ -11,6 +11,7 @@ RUN buildDeps=' \
     		libmagickwand-dev \
     		libcurl4-gnutls-dev  \
     	' && \
+    	set -x -v && \
     	cd /var/tmp/build && \
         apt-get update && \
         apt-get -y --no-install-recommends install $buildDeps && \
