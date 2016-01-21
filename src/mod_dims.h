@@ -69,7 +69,6 @@ dims_operation_func
     dims_thumbnail_operation,
     dims_sharpen_operation,
     dims_quality_operation,
-    dims_interlace_operation,
     dims_format_operation,
     dims_legacy_thumbnail_operation,
     dims_smart_crop_operation,
