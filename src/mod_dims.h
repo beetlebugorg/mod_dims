@@ -89,6 +89,7 @@ struct dims_config_rec {
     long default_expire;
     int strip_metadata;
     float optimize_resize;
+    int include_disposition;
 
     MagickSizeType area_size;
     MagickSizeType memory_size;
