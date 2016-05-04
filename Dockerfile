@@ -21,3 +21,4 @@ RUN buildDeps=' \
         apt-get purge -y --auto-remove $buildDeps && \
         cd / && rm -rf /var/tmp/build
 
+ADD policy.xml /etc/ImageMagick/policy.xml

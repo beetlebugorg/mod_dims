@@ -29,6 +29,9 @@ which is a fork of https://github.com/beetlebugorg/mod_dims.git
 
 To checkout the source, do: git clone https://github.com/Scout24-CoC-MPS/mod_dims.git
 
+%post
+cp policy.xml /etc/ImageMagick/policy.xml
+
 %prep
 
 %setup
