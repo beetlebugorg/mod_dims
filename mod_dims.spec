@@ -34,9 +34,6 @@ echo '<policymap><policy domain="coder" rights="none" pattern="EPHEMERAL" /><pol
 
 %prep
 
-%post
-echo '<policymap><policy domain="coder" rights="none" pattern="EPHEMERAL" /><policy domain="coder" rights="none" pattern="URL" /><policy domain="coder" rights="none" pattern="HTTPS" /><policy domain="coder" rights="none" pattern="MVG" /><policy domain="coder" rights="none" pattern="MSL" /></policymap>' > /etc/ImageMagick/policy.xml
-
 %setup
 
 %build
