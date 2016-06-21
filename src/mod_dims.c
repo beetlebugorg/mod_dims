@@ -34,7 +34,7 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.0"
+#define MODULE_VERSION "3.3.9"
 
 #include "mod_dims.h"
 #include "util_md5.h"
@@ -105,6 +105,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->default_expire = 86400;
 
     config->strip_metadata = 1;
+    config->optimize_resize = 0;
 
     config->area_size = 128 * 1024 * 1024;         //  128mb max.
     config->memory_size = 512 * 1024 * 1024;       //  512mb max.
@@ -195,6 +196,29 @@ dims_config_set_strip_metadata(cmd_parms *cmd, void *dummy, const char *arg)
     else {
         config->strip_metadata = 1;
     }
+    return NULL;
+}
+
+static const char *
+dims_config_set_include_disposition(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    if(strcmp(arg, "true") == 0) {
+        config->include_disposition = 1;
+    }
+    else {
+        config->include_disposition = 0;
+    }
+    return NULL;
+}
+
+static const char *
+dims_config_set_optimize_resize(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->optimize_resize = atof(arg);
     return NULL;
 }
 
@@ -364,7 +388,7 @@ dims_write_image_cb(void *ptr, size_t size, size_t nmemb, void *data)
 
     /* Allocate more memory if needed. */
     if(mem->size - mem->used <= realsize) {
-        mem->size = mem->size == 0 ? realsize : (mem->size + realsize) * 2;
+        mem->size = mem->size == 0 ? realsize : (mem->size + realsize) * 1.25;
         mem->data = (char *) realloc(mem->data, mem->size);
     }
 
@@ -401,6 +425,10 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
         d->cache_control = value;
     } else if(key && value && strcmp(key, "Edge-Control") == 0) {
         d->edge_control = value;
+    } else if(key && value && strcmp(key, "Last-Modified") == 0) {
+        d->last_modified = value;
+    } else if(key && value && strcmp(key, "ETag") == 0) {
+        d->etag = value;
     }
 
     return realsize;
@@ -536,6 +564,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
         curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
         curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
+        curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
 
         /* The curl shared handle allows this process to share DNS cache
          * and prevents the DNS cache from going away after every request.
@@ -632,7 +661,7 @@ dims_send_image(dims_request_rec *d)
     int expire_time = 0;
 
     char *cache_control = NULL,
-         *edge_control = NULL;;
+         *edge_control = NULL;
 
     // variables referring to the src image
     char *src_header;
@@ -646,8 +675,10 @@ dims_send_image(dims_request_rec *d)
 
     format = MagickGetImageFormat(d->wand);
 
+    MagickResetIterator(d->wand);
+
     start_time = apr_time_now();
-    blob = MagickGetImageBlob(d->wand, &length);
+    blob = MagickGetImagesBlob(d->wand, &length);
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
     /* Set the Content-Type based on the image format. */
@@ -713,14 +744,14 @@ dims_send_image(dims_request_rec *d)
 
 
         if(trust_src_img) {
-            cache_control = apr_psprintf(d->pool, "max-age=%d", src_max_age);
+            cache_control = apr_psprintf(d->pool, "max-age=%d, public", src_max_age);
             if(d->client_config->edge_control_downstream_ttl != -1) {
                 edge_control = apr_psprintf(d->pool, "downstream-ttl=%d", src_max_age);
             }
             expire_time = src_max_age;
         }
         else {
-            cache_control = apr_psprintf(d->pool, "max-age=%d",
+            cache_control = apr_psprintf(d->pool, "max-age=%d, public",
                     d->client_config->cache_control_max_age);
 
             if(d->client_config->edge_control_downstream_ttl != -1) {
@@ -732,10 +763,10 @@ dims_send_image(dims_request_rec *d)
 
     } else if(d->status == DIMS_SUCCESS) {
         expire_time = d->config->default_expire;
-        cache_control = apr_psprintf(d->pool, "max-age=%d", expire_time);
+        cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
     } else {
         expire_time = d->config->no_image_expire;
-        cache_control = apr_psprintf(d->pool, "max-age=%d", expire_time);
+        cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
     }
 
     if(cache_control) {
@@ -744,6 +775,11 @@ dims_send_image(dims_request_rec *d)
 
     if(edge_control) {
         apr_table_set(d->r->headers_out, "Edge-Control", edge_control);
+    }
+
+    if(d->filename && d->config->include_disposition) {
+        char *disposition = apr_psprintf(d->pool, "inline; filename=\"%s\"", d->filename);
+        apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
     }
 
     if(expire_time) {
@@ -757,6 +793,19 @@ dims_send_image(dims_request_rec *d)
         snprintf(buf, 128, "DIMS_CLIENT_%s", d->client_id);
         apr_table_set(d->r->notes, "DIMS_CLIENT", d->client_id);
         apr_table_set(d->r->subprocess_env, buf, d->client_id);
+    }
+
+    char *etag = NULL;
+    if (d->etag) {
+        etag = ap_md5(d->pool,
+                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->etag, NULL));
+    } else if (d->last_modified) {
+        etag = ap_md5(d->pool,
+                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->last_modified, NULL));
+    }
+
+    if (etag) {
+        apr_table_set(d->r->headers_out, "ETag", etag);
     }
 
     ap_rwrite(blob, length, d->r);
@@ -911,7 +960,6 @@ static apr_status_t
 dims_process_image(dims_request_rec *d) 
 {
     apr_time_t start_time = apr_time_now();
-    const char *cmds = d->unparsed_commands;
 
     /* Hook in the progress monitor.  It gets passed a 
      * dims_progress_rec which keeps track of the start time.
@@ -940,64 +988,73 @@ dims_process_image(dims_request_rec *d)
         MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
     }
 
-    /* Process operations. */
-    while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
-        char *command = ap_getword(d->pool, &cmds, '/');
+    /* Process operations, iterating over all frames of this image. */
+    ssize_t images = MagickGetIteratorIndex(d->wand);
+    if (images == 0) {
+        const char *cmds = d->unparsed_commands;
+        while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
+            char *command = ap_getword(d->pool, &cmds, '/');
 
-        if(strlen(command) > 0) {
-            char *args = ap_getword(d->pool, &cmds, '/');
+            if(strlen(command) > 0) {
+                char *args = ap_getword(d->pool, &cmds, '/');
 
-            /* If the NOIMAGE image is being used for some reason then
-             * we don't want to crop it.
-             */
-            if(d->use_no_image && 
-                    (strcmp(command, "crop") == 0 ||
-                     strcmp(command, "legacy_thumbnail") == 0 ||
-                     strcmp(command, "legacy_crop") == 0 ||
-                     strcmp(command, "thumbnail") == 0)) {
-                MagickStatusType flags;
-                RectangleInfo rec;
+                /* If the NOIMAGE image is being used for some reason then
+                * we don't want to crop it.
+                */
+                if(d->use_no_image && 
+                        (strcmp(command, "crop") == 0 ||
+                        strcmp(command, "legacy_thumbnail") == 0 ||
+                        strcmp(command, "legacy_crop") == 0 ||
+                        strcmp(command, "thumbnail") == 0)) {
+                    MagickStatusType flags;
+                    RectangleInfo rec;
 
-                flags = ParseAbsoluteGeometry(args, &rec);
+                    flags = ParseAbsoluteGeometry(args, &rec);
 
-                if(rec.width > 0 && rec.height == 0) {
-                    args = apr_psprintf(d->pool, "%ld", rec.width);
-                } else if(rec.height > 0 && rec.width == 0) {
-                    args = apr_psprintf(d->pool, "x%ld", rec.height);
-                } else if(rec.width > 0 && rec.height > 0) {
-                    args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
-                } else {
-                    return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
+                    if(rec.width > 0 && rec.height == 0) {
+                        args = apr_psprintf(d->pool, "%ld", rec.width);
+                    } else if(rec.height > 0 && rec.width == 0) {
+                        args = apr_psprintf(d->pool, "x%ld", rec.height);
+                    } else if(rec.width > 0 && rec.height > 0) {
+                        args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
+                    } else {
+                        return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
+                    }
+
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+                        "Rewriting command %s to 'resize' because a NOIMAGE "
+                        "image is being processed.", command);
+
+                    command = "resize"; 
                 }
 
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-                    "Rewriting command %s to 'resize' because a NOIMAGE "
-                    "image is being processed.", command);
+                // Check if the command is present and set flag.
+                if(strcmp(command, "strip") == 0) {
+                    exc_strip_cmd = 1;
+                }
 
-                command = "resize"; 
-            }
+                dims_operation_func *func =
+                        apr_hash_get(ops, command, APR_HASH_KEY_STRING);
+                if(func != NULL) {
+                    char *err = NULL;
+                    apr_status_t code;
 
-            // Check if the command is present and set flag.
-            if(strcmp(command, "strip") == 0) {
-                exc_strip_cmd = 1;
-            }
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+                        "Executing command %s(%s), on request %s", 
+                        command, args, d->r->uri);
 
-            dims_operation_func *func =
-                    apr_hash_get(ops, command, APR_HASH_KEY_STRING);
-            if(func != NULL) {
-                char *err = NULL;
-                apr_status_t code;
-
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-                    "Executing command %s(%s), on request %s", 
-                    command, args, d->r->uri);
-
-                if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                    return dims_cleanup(d, err, code); 
+                    if((code = func(d, args, &err)) != DIMS_SUCCESS) {
+                        return dims_cleanup(d, err, code); 
+                    }
                 }
             }
         }
     }
+
+    /*
+     * Flip image orientation, if needed.
+     */
+    MagickAutoOrientImage(d->wand);
 
     /*
      * If the strip command was not executed from the loop, call it anyway with NULL args
@@ -1087,8 +1144,20 @@ dims_handle_request(dims_request_rec *d)
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
             "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);    
     }
+
+    d->request_hash = ap_md5(d->pool,
+            (unsigned char *) apr_pstrcat(d->pool, d->client_id,
+                d->unparsed_commands, d->image_url, NULL));
   
     dims_set_optimal_geometry(d);
+
+    if (d->image_url && *d->image_url == '/') {
+        request_rec *sub_req = ap_sub_req_lookup_uri(d->image_url, d->r, NULL);
+        if (sub_req) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Looking up image locally: %s", sub_req->canonical_filename);
+            d->filename = sub_req->canonical_filename;
+        }
+    }
 
     if(d->filename) {
         /* Handle local images. */
@@ -1128,6 +1197,12 @@ dims_handle_request(dims_request_rec *d)
         if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
             return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
         }
+
+        char *filename = strrchr(uri.path, '/');
+        if (*filename == '/') {
+            d->filename = ++filename;
+        }
+
         hostname = uri.hostname;
         if ( d->use_secret_key == 1 ) {
             done = found = 1;
@@ -1237,11 +1312,15 @@ dims_handler(request_rec *r)
     d->filename = NULL;
     d->cache_control = NULL;
     d->edge_control = NULL;
+    d->etag = NULL;
+    d->last_modified = NULL;
+    d->request_hash = NULL;
     d->status = APR_SUCCESS;
     d->start_time = apr_time_now();
     d->download_time = 0;
     d->imagemagick_time = 0;
     d->use_secret_key=0;
+    d->optimize_resize = d->config->optimize_resize;
 
     /* Set initial notes to be logged by mod_log_config. */
     apr_table_setn(r->notes, "DIMS_STATUS", "0");
@@ -1361,9 +1440,12 @@ dims_handler(request_rec *r)
             token = apr_strtok(r->args, "&", &strtokstate);
             while (token) {
                 if(strncmp(token, "url=", 4) == 0) {
-                    ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, d->r, "ARG: %s", token);
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                     fixed_url = apr_pstrdup(r->pool, token + 4);
                     ap_unescape_url(fixed_url);
+                } else if(strncmp(token, "optimizeResize=", 4) == 0) {
+                    d->optimize_resize = atof(token + 15);
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Overriding optimize resize: %f", d->optimize_resize);
                 }
                 token = apr_strtok(NULL, "&", &strtokstate);
             }
@@ -1681,6 +1763,14 @@ static const command_rec dims_commands[] =
                 dims_config_set_strip_metadata, NULL, RSRC_CONF,
                 "Should DIMS strip the metadata from the image, true OR false."
                 "The default is true."),
+    AP_INIT_TAKE1("DimsIncludeDisposition",
+                dims_config_set_include_disposition, NULL, RSRC_CONF,
+                "Should DIMS include Content-Disposition header, true OR false."
+                "The default is false."),
+    AP_INIT_TAKE1("DimsOptimizeResize",
+                dims_config_set_optimize_resize, NULL, RSRC_CONF,
+                "Should DIMS optimize resize operations. This has a slight impact on image quality. 0 = disabled"
+                "The default is 0."),
     {NULL}
 };
 
