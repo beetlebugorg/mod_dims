@@ -1260,14 +1260,13 @@ dims_sizer(dims_request_rec *d)
 
     d->wand = NewMagickWand();
     now_time = apr_time_now();
-    if(!d->image_url ) {
-        return DECLINED;
-    }
-    if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
-        return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
-    }
-    if(dims_fetch_remote_image(d, d->image_url ) != 0) {
-        return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
+    if( d->image_url ) {
+		if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
+			return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+		}
+		if(dims_fetch_remote_image(d, d->image_url ) != 0) {
+			return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
+		}
     }
  
     width = MagickGetImageWidth(d->wand);
@@ -1523,6 +1522,14 @@ dims_handler(request_rec *r)
 
 
         return dims_sizer(d);
+    } else if(strcmp(r->handler, "dims-local-sizer") == 0 &&
+			(r->path_info && strlen(r->path_info) != 0)) {
+
+        /* Handle local filesystem images w/DIMS parameters. */
+        d->filename = r->canonical_filename;
+        d->unparsed_commands = r->path_info;
+
+        return dims_sizer(d);
     }
 
     return DECLINED;
@@ -1552,7 +1559,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "flip", APR_HASH_KEY_STRING, dims_flip_operation);
     apr_hash_set(ops, "flop", APR_HASH_KEY_STRING, dims_flop_operation);
     apr_hash_set(ops, "mirroredfloor", APR_HASH_KEY_STRING, dims_mirroredfloor_operation);
-    apr_hash_set(ops, "liquidresize", APR_HASH_KEY_STRING, dims_liquid_resize_operation);
+//    apr_hash_set(ops, "liquidresize", APR_HASH_KEY_STRING, dims_liquid_resize_operation);
     apr_hash_set(ops, "resize", APR_HASH_KEY_STRING, dims_resize_operation);
     apr_hash_set(ops, "adaptiveresize", APR_HASH_KEY_STRING, dims_adaptive_resize_operation);
     apr_hash_set(ops, "crop", APR_HASH_KEY_STRING, dims_crop_operation);

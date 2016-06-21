@@ -90,14 +90,14 @@ Flops an image.
 flop
 ```
 
-Liquid Resize
--------------
-
-Resize that attempts to preserve features by using seam carving.  Very fun!  Does not honour aspect ratio (by design).
-
-```
-liquidresize/<width>x<height>
-```
+#Liquid Resize
+#-------------
+#
+#Resize that attempts to preserve features by using seam carving.  Very fun!  Does not honour aspect ratio (by design).
+#
+#```
+#liquidresize/<width>x<height>
+#```
 
 Resize
 ------
