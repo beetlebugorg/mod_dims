@@ -1268,6 +1268,29 @@ dims_sizer(dims_request_rec *d)
 			return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
 		}
     }
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+                    "Statting file \"%s\"", d->filename);
+
+    if(d->filename) {
+        /* Handle local images. */
+
+        apr_finfo_t finfo;
+        apr_status_t status;
+        apr_time_t start_time;
+
+        /* Read image from disk. */
+        start_time = apr_time_now();
+        status = apr_stat(&finfo, d->filename, APR_FINFO_SIZE, d->pool);
+        if(status != 0) {
+            return dims_cleanup(d, "Unable to stat image file", DIMS_FILE_NOT_FOUND);
+        }
+        d->download_time = (apr_time_now() - start_time) / 1000;
+        d->original_image_size = finfo.size;
+
+        start_time = apr_time_now();
+        MAGICK_CHECK(MagickReadImage(d->wand, d->filename), d);
+        d->imagemagick_time += (apr_time_now() - start_time) / 1000;
+	}
  
     width = MagickGetImageWidth(d->wand);
     height = MagickGetImageHeight(d->wand);
@@ -1525,7 +1548,7 @@ dims_handler(request_rec *r)
     } else if(strcmp(r->handler, "dims-local-sizer") == 0 &&
 			(r->path_info && strlen(r->path_info) != 0)) {
 
-        /* Handle local filesystem images w/DIMS parameters. */
+        /* Handle local filesystem images */
         d->filename = r->canonical_filename;
         d->unparsed_commands = r->path_info;
 
