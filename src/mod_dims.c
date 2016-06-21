@@ -34,7 +34,7 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.8"
+#define MODULE_VERSION "3.3.9"
 
 #include "mod_dims.h"
 #include "util_md5.h"
@@ -195,6 +195,20 @@ dims_config_set_strip_metadata(cmd_parms *cmd, void *dummy, const char *arg)
     }
     else {
         config->strip_metadata = 1;
+    }
+    return NULL;
+}
+
+static const char *
+dims_config_set_include_disposition(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    if(strcmp(arg, "true") == 0) {
+        config->include_disposition = 1;
+    }
+    else {
+        config->include_disposition = 0;
     }
     return NULL;
 }
@@ -763,6 +777,11 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->headers_out, "Edge-Control", edge_control);
     }
 
+    if(d->filename && d->config->include_disposition) {
+        char *disposition = apr_psprintf(d->pool, "inline; filename=\"%s\"", d->filename);
+        apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
+    }
+
     if(expire_time) {
         char buf[APR_RFC822_DATE_LEN];
         apr_time_t e = apr_time_now() + ((long long) expire_time * 1000L * 1000L);
@@ -1033,6 +1052,11 @@ dims_process_image(dims_request_rec *d)
     }
 
     /*
+     * Flip image orientation, if needed.
+     */
+    MagickAutoOrientImage(d->wand);
+
+    /*
      * If the strip command was not executed from the loop, call it anyway with NULL args
      */
     if(!exc_strip_cmd) {
@@ -1173,6 +1197,12 @@ dims_handle_request(dims_request_rec *d)
         if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
             return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
         }
+
+        char *filename = strrchr(uri.path, '/');
+        if (*filename == '/') {
+            d->filename = ++filename;
+        }
+
         hostname = uri.hostname;
         if ( d->use_secret_key == 1 ) {
             done = found = 1;
@@ -1733,6 +1763,10 @@ static const command_rec dims_commands[] =
                 dims_config_set_strip_metadata, NULL, RSRC_CONF,
                 "Should DIMS strip the metadata from the image, true OR false."
                 "The default is true."),
+    AP_INIT_TAKE1("DimsIncludeDisposition",
+                dims_config_set_include_disposition, NULL, RSRC_CONF,
+                "Should DIMS include Content-Disposition header, true OR false."
+                "The default is false."),
     AP_INIT_TAKE1("DimsOptimizeResize",
                 dims_config_set_optimize_resize, NULL, RSRC_CONF,
                 "Should DIMS optimize resize operations. This has a slight impact on image quality. 0 = disabled"
