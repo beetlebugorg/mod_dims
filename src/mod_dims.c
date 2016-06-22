@@ -1260,15 +1260,35 @@ dims_sizer(dims_request_rec *d)
 
     d->wand = NewMagickWand();
     now_time = apr_time_now();
-    if(!d->image_url ) {
-        return DECLINED;
+    if( d->image_url ) {
+		if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
+			return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+		}
+		if(dims_fetch_remote_image(d, d->image_url ) != 0) {
+			return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
+		}
     }
-    if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
-        return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
-    }
-    if(dims_fetch_remote_image(d, d->image_url ) != 0) {
-        return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
-    }
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+                    "Statting file \"%s\"", d->filename);
+
+    if(d->filename) {
+
+        apr_finfo_t finfo;
+        apr_status_t status;
+        apr_time_t start_time;
+
+        start_time = apr_time_now();
+        status = apr_stat(&finfo, d->filename, APR_FINFO_SIZE, d->pool);
+        if(status != 0) {
+            return dims_cleanup(d, "Unable to stat image file", DIMS_FILE_NOT_FOUND);
+        }
+        d->download_time = (apr_time_now() - start_time) / 1000;
+        d->original_image_size = finfo.size;
+
+        start_time = apr_time_now();
+        MAGICK_CHECK(MagickPingImage(d->wand, d->filename), d);
+        d->imagemagick_time += (apr_time_now() - start_time) / 1000;
+	}
  
     width = MagickGetImageWidth(d->wand);
     height = MagickGetImageHeight(d->wand);
@@ -1523,6 +1543,14 @@ dims_handler(request_rec *r)
 
 
         return dims_sizer(d);
+    } else if(strcmp(r->handler, "dims-local-sizer") == 0 &&
+			(r->path_info && strlen(r->path_info) != 0)) {
+
+        /* Handle local filesystem images */
+        d->filename = r->canonical_filename;
+        d->unparsed_commands = r->path_info;
+
+        return dims_sizer(d);
     }
 
     return DECLINED;
@@ -1552,7 +1580,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "flip", APR_HASH_KEY_STRING, dims_flip_operation);
     apr_hash_set(ops, "flop", APR_HASH_KEY_STRING, dims_flop_operation);
     apr_hash_set(ops, "mirroredfloor", APR_HASH_KEY_STRING, dims_mirroredfloor_operation);
-    apr_hash_set(ops, "liquidresize", APR_HASH_KEY_STRING, dims_liquid_resize_operation);
+//    apr_hash_set(ops, "liquidresize", APR_HASH_KEY_STRING, dims_liquid_resize_operation);
     apr_hash_set(ops, "resize", APR_HASH_KEY_STRING, dims_resize_operation);
     apr_hash_set(ops, "adaptiveresize", APR_HASH_KEY_STRING, dims_adaptive_resize_operation);
     apr_hash_set(ops, "crop", APR_HASH_KEY_STRING, dims_crop_operation);

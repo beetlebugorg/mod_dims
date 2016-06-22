@@ -131,7 +131,7 @@ dims_adaptive_resize_operation (dims_request_rec *d, char *args, char **err) {
     return DIMS_SUCCESS;
 }
 
-apr_status_t
+/* DANGEROUS! apr_status_t
 dims_liquid_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
@@ -147,7 +147,7 @@ dims_liquid_resize_operation (dims_request_rec *d, char *args, char **err) {
     MAGICK_CHECK(MagickLiquidRescaleImage(d->wand, rec.width, rec.height, 1.0, 0.0), d);
 
     return DIMS_SUCCESS;
-}
+}*/
 
 apr_status_t
 dims_resize_operation (dims_request_rec *d, char *args, char **err) {
