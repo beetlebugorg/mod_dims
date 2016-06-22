@@ -1054,7 +1054,7 @@ dims_process_image(dims_request_rec *d)
     /*
      * Flip image orientation, if needed.
      */
-    MagickAutoOrientImage(d->wand);
+    // NOT AVAILABLE IN 6.6 MagickAutoOrientImage(d->wand);
 
     /*
      * If the strip command was not executed from the loop, call it anyway with NULL args
