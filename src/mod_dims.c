@@ -1272,13 +1272,11 @@ dims_sizer(dims_request_rec *d)
                     "Statting file \"%s\"", d->filename);
 
     if(d->filename) {
-        /* Handle local images. */
 
         apr_finfo_t finfo;
         apr_status_t status;
         apr_time_t start_time;
 
-        /* Read image from disk. */
         start_time = apr_time_now();
         status = apr_stat(&finfo, d->filename, APR_FINFO_SIZE, d->pool);
         if(status != 0) {
@@ -1288,7 +1286,7 @@ dims_sizer(dims_request_rec *d)
         d->original_image_size = finfo.size;
 
         start_time = apr_time_now();
-        MAGICK_CHECK(MagickReadImage(d->wand, d->filename), d);
+        MAGICK_CHECK(MagickPingImage(d->wand, d->filename), d);
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 	}
  
