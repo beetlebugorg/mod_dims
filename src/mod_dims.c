@@ -213,15 +213,15 @@ dims_config_set_include_disposition(cmd_parms *cmd, void *dummy, const char *arg
 }
 
 static const char *
-dims_config_set_auto_rotate(cmd_parms *cmd, void *dummy, const char *arg)
+dims_config_set_auto_orient(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
     if (strcmp(arg, "false") == 0) {
-        config->auto_rotate = 0;
+        config->auto_orient = 0;
     }
     else {
-        config->auto_rotate = 1;
+        config->auto_orient = 1;
     }
     return NULL;
 }
@@ -1066,7 +1066,7 @@ dims_process_image(dims_request_rec *d)
     /*
      * Flip image orientation, if needed.
      */
-    if(d->config->auto_rotate) {
+    if(d->config->auto_orient) {
         MagickAutoOrientImage(d->wand);
     }
 
@@ -1773,9 +1773,9 @@ static const command_rec dims_commands[] =
                 dims_config_set_include_disposition, NULL, RSRC_CONF,
                 "Should DIMS include Content-Disposition header, true OR false."
                 "The default is false."),
-    AP_INIT_TAKE1("DimsAutoRotate",
-                dims_config_set_auto_rotate, NULL, RSRC_CONF,
-                "Should DIMS auto-rotate images containing rotation metadata, true OR false."
+    AP_INIT_TAKE1("DimsAutoOrient",
+                dims_config_set_auto_orient, NULL, RSRC_CONF,
+                "Should DIMS auto-orient images containing rotation metadata, true OR false."
                 "The default is false."),
     AP_INIT_TAKE1("DimsOptimizeResize",
                 dims_config_set_optimize_resize, NULL, RSRC_CONF,
