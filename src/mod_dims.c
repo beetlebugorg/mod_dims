@@ -217,11 +217,11 @@ dims_config_set_auto_rotate(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    if (strcmp(arg, "true") == 0) {
-        config->auto_rotate = 1;
+    if (strcmp(arg, "false") == 0) {
+        config->auto_rotate = 0;
     }
     else {
-        config->auto_rotate = 0;
+        config->auto_rotate = 1;
     }
     return NULL;
 }
