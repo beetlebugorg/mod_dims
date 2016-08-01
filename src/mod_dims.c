@@ -213,6 +213,20 @@ dims_config_set_include_disposition(cmd_parms *cmd, void *dummy, const char *arg
 }
 
 static const char *
+dims_config_set_auto_rotate(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    if (strcmp(arg, "true") == 0) {
+        config->auto_rotate = 1;
+    }
+    else {
+        config->auto_rotate = 0;
+    }
+    return NULL;
+}
+
+static const char *
 dims_config_set_optimize_resize(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -1052,7 +1066,9 @@ dims_process_image(dims_request_rec *d)
     /*
      * Flip image orientation, if needed.
      */
-    MagickAutoOrientImage(d->wand);
+    if(d->config->auto_rotate) {
+        MagickAutoOrientImage(d->wand);
+    }
 
     /*
      * If the strip command was not executed from the loop, call it anyway with NULL args
@@ -1757,6 +1773,10 @@ static const command_rec dims_commands[] =
                 dims_config_set_include_disposition, NULL, RSRC_CONF,
                 "Should DIMS include Content-Disposition header, true OR false."
                 "The default is false."),
+    AP_INIT_TAKE1("DimsAutoRotate",
+                dims_config_set_auto_rotate, NULL, RSRC_CONF,
+                "Should DIMS auto-rotate images containing rotation metadata, true OR false."
+                "The default is false.")
     AP_INIT_TAKE1("DimsOptimizeResize",
                 dims_config_set_optimize_resize, NULL, RSRC_CONF,
                 "Should DIMS optimize resize operations. This has a slight impact on image quality. 0 = disabled"

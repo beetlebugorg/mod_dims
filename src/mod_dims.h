@@ -90,6 +90,7 @@ struct dims_config_rec {
     int strip_metadata;
     float optimize_resize;
     int include_disposition;
+    int auto_rotate;
 
     MagickSizeType area_size;
     MagickSizeType memory_size;
