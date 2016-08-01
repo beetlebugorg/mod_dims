@@ -1776,7 +1776,7 @@ static const command_rec dims_commands[] =
     AP_INIT_TAKE1("DimsAutoOrient",
                 dims_config_set_auto_orient, NULL, RSRC_CONF,
                 "Should DIMS auto-orient images containing orientation metadata, true OR false."
-                "The default is false."),
+                "The default is true."),
     AP_INIT_TAKE1("DimsOptimizeResize",
                 dims_config_set_optimize_resize, NULL, RSRC_CONF,
                 "Should DIMS optimize resize operations. This has a slight impact on image quality. 0 = disabled"
