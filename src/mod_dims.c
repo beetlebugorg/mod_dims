@@ -986,6 +986,11 @@ dims_process_image(dims_request_rec *d)
         MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
     }
 
+    /*
+     * Flip image orientation, if needed.
+     */
+    MagickAutoOrientImage(d->wand);
+
     /* Process operations, iterating over all frames of this image. */
     ssize_t images = MagickGetIteratorIndex(d->wand);
     if (images == 0) {
@@ -1048,11 +1053,6 @@ dims_process_image(dims_request_rec *d)
             }
         }
     }
-
-    /*
-     * Flip image orientation, if needed.
-     */
-    MagickAutoOrientImage(d->wand);
 
     /*
      * If the strip command was not executed from the loop, call it anyway with NULL args
