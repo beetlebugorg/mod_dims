@@ -1,7 +1,5 @@
 FROM httpd:2.2
 
-ADD . /var/tmp/build
-
 RUN buildDeps=' \
     		autotools-dev \
     		automake \
@@ -9,9 +7,11 @@ RUN buildDeps=' \
     		make \
     	' && \
     	set -x -v && \
-    	cd /var/tmp/build && \
         apt-get update && \
-        apt-get -y --no-install-recommends install $buildDeps libmagickcore-dev libmagickwand-dev  libcurl4-gnutls-dev && \
+        apt-get -y --no-install-recommends install $buildDeps libmagickcore-dev libmagickwand-dev  libcurl4-gnutls-dev
+
+ADD . /var/tmp/build
+RUN  cd /var/tmp/build && \
         ./autorun.sh && \
         export LDFLAGS="$LDFLAGS -L/usr/lib64/httpd" && \
         export CFLAGS="$CFLAGS -I/usr/include/httpd -I/usr/include/ImageMagick" && \

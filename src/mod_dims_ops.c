@@ -72,6 +72,22 @@ dims_save_operation(dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
+dims_blur_operation (dims_request_rec *d, char *args, char **err) {
+	apr_status_t status;
+	MagickStatusType flags;
+    GeometryInfo geometry;
+
+    flags = ParseGeometry(args, &geometry);
+    if ((flags & SigmaValue) == 0) {
+        geometry.sigma=1.0;
+    }
+
+    MAGICK_CHECK(MagickBlurImage(d->wand,  geometry.rho, geometry.sigma), d);
+
+	return DIMS_SUCCESS;
+}
+
+apr_status_t
 dims_strip_operation (dims_request_rec *d, char *args, char **err) {
 
     /* If args is passed from the user and 

@@ -81,7 +81,8 @@ dims_operation_func
     dims_invert_operation,
     dims_extent_operation,
     dims_legacy_crop_operation,
-    dims_save_operation;
+    dims_save_operation,
+    dims_blur_operation;
 
 struct dims_config_rec {
     int download_timeout;
