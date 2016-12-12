@@ -1585,6 +1585,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
     apr_hash_set(ops, "extent", APR_HASH_KEY_STRING, dims_extent_operation);
     apr_hash_set(ops, "save", APR_HASH_KEY_STRING, dims_save_operation);
+    apr_hash_set(ops, "blur", APR_HASH_KEY_STRING, dims_blur_operation);
 
     /* Init APR's atomic functions */
     status = apr_atomic_init(p);
