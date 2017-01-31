@@ -570,6 +570,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
         curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
         curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
+        curl_easy_setopt(curl_handle, CURLOPT_FILETIME, 1);
 
         /* The curl shared handle allows this process to share DNS cache
          * and prevents the DNS cache from going away after every request.
@@ -580,6 +581,17 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         } 
 
         start_time = apr_time_now();
+
+        char *if_modified_since = apr_table_get(d->r->headers_in, "If-Modified-Since");
+
+        if (if_modified_since && (strstr(d->unparsed_commands, "save") == NULL )) {
+            apr_time_t if_modified_since_time = apr_date_parse_http(if_modified_since);
+            apr_int64_t if_modified_since_sec;
+            if_modified_since_sec = apr_time_sec(if_modified_since_time);
+            curl_easy_setopt(curl_handle, CURLOPT_TIMEVALUE, if_modified_since_sec);
+            curl_easy_setopt(curl_handle, CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
+        }
+
         if((code = curl_easy_perform(curl_handle)) != 0) {
             curl_easy_cleanup(curl_handle);
             if(image_data.data) {
@@ -605,8 +617,13 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
         /* Verify we actually recieved an image. */
         long response_code = 0;
+        apr_time_t last_modified = 0;
         curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
+        curl_easy_getinfo(curl_handle, CURLINFO_FILETIME, &last_modified);
         curl_easy_cleanup(curl_handle);
+        char buffer[APR_RFC822_DATE_LEN + 1];
+        apr_rfc822_date(buffer, last_modified*1000000);
+        apr_table_set(d->r->headers_out, "Last-Modified", buffer);;
         if(response_code != 200) {
             if(image_data.data) {
                 free(image_data.data);
@@ -614,6 +631,10 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             
             if(response_code == 404) {
                 d->status = DIMS_FILE_NOT_FOUND;
+            }
+
+            if(response_code == 304) {
+                d->status = DIMS_NOT_MODIFIED;
             }
 
             free(fetch_url);
@@ -1253,6 +1274,9 @@ dims_handle_request(dims_request_rec *d)
 
         /* Fetch the image into a buffer. */
         if(fetch_url && dims_fetch_remote_image(d, fetch_url) != 0) {
+            if(dims_fetch_remote_image(d, fetch_url) == 1 && d->status == DIMS_NOT_MODIFIED) {
+                return dims_cleanup(d, NULL, DIMS_NOT_MODIFIED);
+            }
             /* If image failed to download replace it with
              * the NOIMAGE image.
              */
