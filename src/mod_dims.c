@@ -623,7 +623,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         curl_easy_cleanup(curl_handle);
         char buffer[APR_RFC822_DATE_LEN + 1];
         apr_rfc822_date(buffer, last_modified*1000000);
-        apr_table_set(d->r->headers_out, "Last-Modified", buffer);;
+        apr_table_set(d->r->headers_out, "Last-Modified", buffer);
         if(response_code != 200) {
             if(image_data.data) {
                 free(image_data.data);
@@ -1273,17 +1273,19 @@ dims_handle_request(dims_request_rec *d)
         }
 
         /* Fetch the image into a buffer. */
-        if(fetch_url && dims_fetch_remote_image(d, fetch_url) != 0) {
-            if(dims_fetch_remote_image(d, fetch_url) == 1 && d->status == DIMS_NOT_MODIFIED) {
+        if(fetch_url) {
+            int fetch_result = dims_fetch_remote_image(d, fetch_url);
+            if(fetch_result == 1 && d->status == DIMS_NOT_MODIFIED) {
                 return dims_cleanup(d, NULL, DIMS_NOT_MODIFIED);
+            } else if (fetch_result != 0) {
+                /* If image failed to download replace it with
+                 * the NOIMAGE image.
+                 */
+                if (dims_fetch_remote_image(d, NULL) != 0) {
+                    return DECLINED;
+                }
+                d->use_no_image = 1;
             }
-            /* If image failed to download replace it with
-             * the NOIMAGE image.
-             */
-            if(dims_fetch_remote_image(d, NULL) != 0) {
-                return DECLINED;
-            }
-            d->use_no_image = 1;
         }
 
         return dims_process_image(d);
