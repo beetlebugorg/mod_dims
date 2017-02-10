@@ -621,9 +621,9 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
         curl_easy_getinfo(curl_handle, CURLINFO_FILETIME, &last_modified);
         curl_easy_cleanup(curl_handle);
-        char buffer[APR_RFC822_DATE_LEN + 1];
-        apr_rfc822_date(buffer, last_modified*1000000);
-        apr_table_set(d->r->headers_out, "Last-Modified", buffer);
+        if (last_modified && last_modified > 0) {
+            d->modification_time = last_modified*1000000;
+        }
         if(response_code != 200) {
             if(image_data.data) {
                 free(image_data.data);
