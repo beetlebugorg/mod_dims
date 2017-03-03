@@ -487,7 +487,7 @@ char to_hex(char code) {
 char *url_encode(char *str) {
     char *pstr = str, *buf = malloc(strlen(str) * 3 + 1), *pbuf = buf;
     while (*pstr) {
-        if (isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' || *pstr == '~' || *pstr == ':' || *pstr == '/' || *pstr == '?' || *pstr == '=' || *pstr == '&')
+        if (isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' || *pstr == '~' || *pstr == ':' || *pstr == '/' || *pstr == '?' || *pstr == '=' || *pstr == '&' || *pstr == '+')
             *pbuf++ = *pstr;
         else
             *pbuf++ = '%', *pbuf++ = to_hex(*pstr >> 4), *pbuf++ = to_hex(*pstr & 15);
@@ -629,7 +629,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 free(image_data.data);
             }
             
-            if(response_code == 404) {
+            if(response_code == 404 || response_code == 403) {
                 d->status = DIMS_FILE_NOT_FOUND;
             }
 
@@ -1386,6 +1386,8 @@ dims_handler(request_rec *r)
         return dims_handle_request(d);
     } else if(r->uri && strncmp(r->uri, "/dims/", 6) == 0) {
         int status = 0;
+        int offset = 7;
+	char *protocol = "https:/";
         char appid[50], b[10], w[10], h[10], q[10];
         char *fixed_url, *url;
 
@@ -1410,9 +1412,14 @@ dims_handler(request_rec *r)
         }
 
         /* HACK: If URL has "http:/" instead of "http://", correct it. */
-		url = strstr(r->uri, "http:/");
-		if(url && *(url + 6) != '/') {
-			fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
+		url = strstr(r->uri, protocol);
+		if (!url) {
+			protocol = "http:/";
+			offset = 6;
+			url = strstr(r->uri, protocol);
+		}
+		if(url && *(url + offset) != '/') {
+			fixed_url = apr_psprintf(r->pool, "%s/%s", protocol, url + offset);
 		} else if(!url) {
 			return dims_cleanup(d, NULL, DIMS_BAD_URL);
 		} else {
@@ -1475,6 +1482,8 @@ dims_handler(request_rec *r)
             (strcmp( r->handler,"dims4") == 0 )) {
         /* Handle new-style DIMS parameters. */
         char *p, *url = NULL, *fixed_url = NULL, *commands = NULL;
+        int offset = 7;
+        char *protocol = "https:/";
         if (( strcmp( r->handler,"dims4") == 0)) {
                d->use_secret_key = 1;
         }
@@ -1502,9 +1511,14 @@ dims_handler(request_rec *r)
          */
         commands = apr_pstrdup(r->pool, r->uri);
         if(fixed_url == NULL) {
-            url = strstr(r->uri, "http:/");
-            if(url && *(url + 6) != '/') {
-                fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
+            url = strstr(r->uri, protocol);
+            if (!url) {
+		protocol = "http:/";
+		offset = 6;
+		url = strstr(r->uri, protocol);
+	    }
+            if(url && *(url + offset) != '/') {
+                fixed_url = apr_psprintf(r->pool, "%s/%s", protocol, url + offset);
             } else if(!url) {
                 return dims_cleanup(d, NULL, DIMS_BAD_URL);
             } else {
@@ -1512,13 +1526,13 @@ dims_handler(request_rec *r)
             }
 
             /* Strip URL off URI.  This leaves only the tranformation parameters. */
-            p = strstr(commands, "http:/");
+            p = strstr(commands, protocol);
             if(!p) return dims_cleanup(d, NULL, DIMS_BAD_URL);
             *p = '\0';
         }
 
         d->image_url = fixed_url;
-        d->unparsed_commands = commands + 6;
+        d->unparsed_commands = commands + offset;
 
         return dims_handle_request(d);
     } else if(strcmp(r->handler, "dims-status") == 0) {
