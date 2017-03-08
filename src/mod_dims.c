@@ -1022,6 +1022,11 @@ dims_process_image(dims_request_rec *d)
         MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
     }
 
+    /* MagickAutoOrientImage is only available from version 6.8.9-9 onwards - dc=no, cloud=yes */
+    #ifdef AWSBUILD
+    	MagickAutoOrientImage(d->wand);
+    #endif
+
     /* Process operations, iterating over all frames of this image. */
     ssize_t images = MagickGetIteratorIndex(d->wand);
     if (images == 0) {
