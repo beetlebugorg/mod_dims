@@ -78,6 +78,12 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
+    char *format = MagickGetImageFormat(d->wand);
+    if (strcmp(format, "JPEG") == 0) {
+        double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
+    }
+
     if (d->optimize_resize) {
         size_t orig_width;
         size_t orig_height;
@@ -125,6 +131,12 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
+    }
+
+    char *format = MagickGetImageFormat(d->wand);
+    if (strcmp(format, "JPEG") == 0) {
+        double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
     }
 
     if (d->optimize_resize) {
@@ -323,6 +335,12 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
+    }
+
+    char *format = MagickGetImageFormat(d->wand);
+    if (strcmp(format, "JPEG") == 0) {
+        double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
     }
 
     if(rec.width < 200 && rec.height < 200) {
