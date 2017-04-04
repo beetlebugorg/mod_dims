@@ -34,7 +34,7 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.10"
+#define MODULE_VERSION "3.3.11"
 
 #include "mod_dims.h"
 #include "util_md5.h"
