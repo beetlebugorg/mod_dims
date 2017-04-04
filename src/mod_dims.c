@@ -677,7 +677,9 @@ dims_send_image(dims_request_rec *d)
     MagickResetIterator(d->wand);
 
     start_time = apr_time_now();
-    blob = MagickGetImagesBlob(d->wand, &length);
+    MagickWand *newwand = MagickMergeImageLayers(d->wand, FlattenLayer);
+    blob = MagickGetImagesBlob(newwand, &length);
+    DestroyMagickWand(newwand);
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
     /* Set the Content-Type based on the image format. */
