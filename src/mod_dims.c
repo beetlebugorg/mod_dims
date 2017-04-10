@@ -1288,8 +1288,10 @@ dims_handle_request(dims_request_rec *d)
                  */
                 if (dims_fetch_remote_image(d, NULL) != 0) {
                     return DECLINED;
+                } else {
+                    d->use_no_image = 1;
+                    return dims_cleanup(d, NULL, DIMS_FILE_NOT_FOUND);
                 }
-                d->use_no_image = 1;
             }
         }
 

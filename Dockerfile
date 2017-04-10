@@ -11,6 +11,7 @@ RUN buildDeps=' \
     	set -x -v && \
         apt-get update && \
         apt-get -y --no-install-recommends install $buildDeps && \
+        apt-get install ca-certificates -y && \
         cd /var/tmp/build && \
         ./autorun.sh && \
         export LDFLAGS="$LDFLAGS -L/usr/lib64/httpd" && \
