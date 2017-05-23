@@ -122,6 +122,28 @@ dims_sharpen_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
+dims_blur_operation (dims_request_rec *d, char *args, char **err) {
+    MagickStatusType flags;
+    GeometryInfo geometry;
+    long width, height;
+
+    flags = ParseGeometry(args, &geometry);
+    if ((flags & SigmaValue) == 0) {
+        geometry.sigma = geometry.rho;
+        geometry.rho = 0.0;
+    }
+
+    width = MagickGetImageWidth(d->wand);
+    height = MagickGetImageHeight(d->wand);
+
+    MAGICK_CHECK(MagickSampleImage(d->wand, width * .10, height * .10), d);
+    MAGICK_CHECK(MagickBlurImage(d->wand, geometry.rho, geometry.sigma * .09), d);
+    MAGICK_CHECK(MagickResizeImage(d->wand, width, height, GaussianFilter, 1), d);
+
+    return DIMS_SUCCESS;
+}
+
+apr_status_t
 dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
