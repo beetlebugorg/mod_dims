@@ -20,6 +20,6 @@ RUN buildDeps=' \
         make && \
         install -m 0644 src/.libs/libmod_dims.so -D $HTTPD_PREFIX/modules/mod_dims.so && \
         apt-get purge -y --auto-remove $buildDeps && \
-        cd / && rm -rf /var/tmp/build
+        cd / && rm -rf /var/tmp/build && chmod 1777 /tmp/
 
 ADD policy.xml /etc/ImageMagick/policy.xml
