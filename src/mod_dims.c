@@ -816,7 +816,7 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->subprocess_env, buf, d->client_id);
     }
     
-    if (d->modification_time) {
+    if (d->modification_time && ( d->status == DIMS_SUCCESS || d->status == DIMS_NOT_MODIFIED ) ) {
         char buffer[APR_RFC822_DATE_LEN];
         apr_rfc822_date(buffer, d->modification_time);
         apr_table_set(d->r->headers_out, "Last-Modified", buffer);
