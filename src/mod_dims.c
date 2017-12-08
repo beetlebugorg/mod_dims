@@ -8,23 +8,23 @@
  * Code Flow Logic:
  *
  *  dims_handler - called by apache, determines if request should be processed
- *    \            and does initial request setup.  
+ *    \            and does initial request setup.
  *     dims_handle_request - validates against whitelist, client list and loads image.
  *       \
  *        dims_process_image - parses operations (resize, etc) and executes them
- *          \                  using imagemagick api. 
+ *          \                  using imagemagick api.
  *           dims_send_image - sends image to connection w/appropriate headers
  *
  * Any errors during processing will call 'dims_cleanup' which will free
  * any memory and return the 'no image' image to the connection.
- * 
- * Copyright 2009 AOL LLC 
+ *
+ * Copyright 2009 AOL LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
- * the License at 
- *         
- *         http://www.apache.org/licenses/LICENSE-2.0 
+ * the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -44,7 +44,7 @@
 #include <curl/curl.h>
 #include <curl/easy.h>
 
-module dims_module; 
+module dims_module;
 
 #define DIMS_CURL_SHARED_KEY "dims_curl_shared"
 
@@ -54,7 +54,7 @@ module dims_module;
             return dims_cleanup(d, NULL, DIMS_FAILURE); \
         if(d->status == DIMS_IMAGEMAGICK_TIMEOUT) \
             return dims_cleanup(d, NULL, d->status); \
-    } while(0); 
+    } while(0);
 
 typedef struct {
     CURLSH *share;
@@ -124,7 +124,7 @@ static const char *
 dims_config_set_whitelist(cmd_parms *cmd, void *d, int argc, char *const argv[])
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-            cmd->server->module_config, 
+            cmd->server->module_config,
             &dims_module);
     int i;
 
@@ -132,7 +132,7 @@ dims_config_set_whitelist(cmd_parms *cmd, void *d, int argc, char *const argv[])
         char *hostname = argv[i];
 
         /* Remove glob character and '.' if they're on the string and set
-         * the value in the hash to glob.  
+         * the value in the hash to glob.
          */
         if(hostname[0] == '*') {
             if(*++hostname == '.') {
@@ -235,8 +235,8 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
     }
 
     if(argc >= 1) {
-        client_config = (dims_client_config_rec *) 
-                apr_pcalloc(cmd->pool, 
+        client_config = (dims_client_config_rec *)
+                apr_pcalloc(cmd->pool,
                             sizeof(dims_client_config_rec));
 
         client_config->no_image_url = NULL;
@@ -314,7 +314,7 @@ dims_config_set_imagemagick_disk_size(cmd_parms *cmd, void *dummy, const char *a
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
     config->disk_size = atol(arg) * 1024 * 1024;
-    
+
     return NULL;
 }
 static const char *
@@ -436,12 +436,12 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
 
 /**
  * This callback is called by the MagicWand API during transformation
- * operations.  How often it's called is dependent on the operation 
+ * operations.  How often it's called is dependent on the operation
  * being performed but in general it's called enough that timeout
- * resolution is close enough.  For instance this won't be called if 
+ * resolution is close enough.  For instance this won't be called if
  * ImageMagick is busy loading up the pixel cache.
  */
-MagickBooleanType 
+MagickBooleanType
 dims_imagemagick_progress_cb(const char *text, const MagickOffsetType offset,
                              const MagickSizeType span, void *client_data)
 {
@@ -453,11 +453,11 @@ dims_imagemagick_progress_cb(const char *text, const MagickOffsetType offset,
 
     if(diff > p->d->config->imagemagick_timeout) {
         p->d->status = DIMS_IMAGEMAGICK_TIMEOUT;
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, p->d->r, 
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, p->d->r,
                 "Imagemagick operation, '%s', "
                 "timed out after %d ms. "
                 "(max: %d), on request: %s",
-                text, (int) diff, 
+                text, (int) diff,
                 (int) p->d->config->imagemagick_timeout,
                 p->d->r->uri);
         return MagickFalse;
@@ -496,7 +496,7 @@ char *url_encode(char *str) {
  * Fetch remote image.  If successful the MagicWand will
  * have the new image loaded.
  */
-static int 
+static int
 dims_fetch_remote_image(dims_request_rec *d, const char *url)
 {
     CURL *curl_handle;
@@ -506,7 +506,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
     int extra_time = 0;
     apr_time_t start_time;
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
             "Loading image from %s", fetch_url);
 
     /* Allow file:/// references for NOIMAGE urls. */
@@ -520,7 +520,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         start_time = apr_time_now();
         status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool);
         if(status != 0) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
                     "mod_dims error, 'NOIMAGE image not found at %s', "
                     "on request: %s ", filename, d->r->uri);
             return 1;
@@ -530,7 +530,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
         start_time = apr_time_now();
         if(MagickReadImage(d->wand, filename) == MagickFalse) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
                     "mod_dims error, 'Failed to load NOIMAGE image from %s', "
                     "on request: %s ", filename, d->r->uri);
             return 1;
@@ -544,7 +544,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             extra_time += 500;
         }
 
-        apr_pool_userdata_get((void *) &s, DIMS_CURL_SHARED_KEY, 
+        apr_pool_userdata_get((void *) &s, DIMS_CURL_SHARED_KEY,
                 d->r->server->process->pool);
 
         image_data.data = NULL;
@@ -572,7 +572,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         if(s) {
             dims_curl_rec *locks = (dims_curl_rec *) s;
             curl_easy_setopt(curl_handle, CURLOPT_SHARE, locks->share);
-        } 
+        }
 
         start_time = apr_time_now();
         if((code = curl_easy_perform(curl_handle)) != 0) {
@@ -581,8 +581,8 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 free(image_data.data);
             }
 
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "libcurl error, '%s', on request: %s ", 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "libcurl error, '%s', on request: %s ",
                     curl_easy_strerror(code), d->r->uri);
 
             if(code == CURLE_OPERATION_TIMEDOUT) {
@@ -606,7 +606,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             if(image_data.data) {
                 free(image_data.data);
             }
-            
+
             if(response_code == 404) {
                 d->status = DIMS_FILE_NOT_FOUND;
             }
@@ -617,16 +617,16 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         }
 
         start_time = apr_time_now();
-        if(MagickReadImageBlob(d->wand, image_data.data, image_data.used) 
+        if(MagickReadImageBlob(d->wand, image_data.data, image_data.used)
                 == MagickFalse) {
             ExceptionType et;
 
             if(image_data.data) {
                 free(image_data.data);
-            } 
+            }
 
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "ImageMagick error, '%s', on request: %s ", 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "ImageMagick error, '%s', on request: %s ",
                     MagickGetException(d->wand, &et), d->r->uri);
 
             free(fetch_url);
@@ -650,7 +650,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 }
 
 static apr_status_t
-dims_send_image(dims_request_rec *d) 
+dims_send_image(dims_request_rec *d)
 {
     char buf[128];
     unsigned char *blob;
@@ -724,7 +724,7 @@ dims_send_image(dims_request_rec *d)
 
                 // if the max-age value is between the min and max, use the src value
                 if( (d->client_config->min_src_cache_control == -1 ||
-                        src_max_age >= d->client_config->min_src_cache_control) && 
+                        src_max_age >= d->client_config->min_src_cache_control) &&
                         (d->client_config->max_src_cache_control == -1 ||
                         src_max_age <= d->client_config->max_src_cache_control)) {
 
@@ -841,7 +841,7 @@ dims_send_image(dims_request_rec *d)
     snprintf(buf, 128, "%lld", (apr_time_now() - d->start_time) / 1000);
     apr_table_set(d->r->notes, "DIMS_TOTAL_TIME", buf);
 
-    if(d->status != DIMS_DOWNLOAD_TIMEOUT && 
+    if(d->status != DIMS_DOWNLOAD_TIMEOUT &&
             d->status != DIMS_IMAGEMAGICK_TIMEOUT) {
         snprintf(buf, 128, "%lld", d->imagemagick_time);
         apr_table_set(d->r->notes, "DIMS_IM_TIME", buf);
@@ -850,7 +850,7 @@ dims_send_image(dims_request_rec *d)
     return OK;
 }
 
-static apr_status_t 
+static apr_status_t
 dims_cleanup(dims_request_rec *d, char *err_msg, int status)
 {
     if(status != DIMS_IGNORE) {
@@ -862,18 +862,18 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
         char *msg = MagickGetException(d->wand, &type);
 
         if(type != UndefinedException && msg) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "Imagemagick error, '%s', on request: %s ", 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Imagemagick error, '%s', on request: %s ",
                     msg, d->r->uri);
         }
 
         MagickRelinquishMemory(msg);
         DestroyMagickWand(d->wand);
-    } 
-    
+    }
+
     if(err_msg) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                "mod_dims error, '%s', on request: %s ", 
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                "mod_dims error, '%s', on request: %s ",
                 err_msg, d->r->uri);
     }
 
@@ -881,16 +881,16 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
         d->wand = NewMagickWand();
         if(!dims_fetch_remote_image(d, NULL)) {
             return dims_send_image(d);
-        } 
+        }
         DestroyMagickWand(d->wand);
     }
     if ( status != DIMS_SUCCESS ) {
         return HTTP_NOT_FOUND;
     }
     else {
-     return DECLINED;   
+     return DECLINED;
     }
-     
+
 }
 
 /**
@@ -943,7 +943,7 @@ dims_set_optimal_geometry(dims_request_rec *d)
 
 /**
  * This is the main code for processing images.  It will parse
- * the command string into individual commands and execute them.  
+ * the command string into individual commands and execute them.
  * When it's finished it will write the content type header and
  * image data to connection and flush the connection.
  *
@@ -957,11 +957,11 @@ dims_set_optimal_geometry(dims_request_rec *d)
  * to the connection.
  */
 static apr_status_t
-dims_process_image(dims_request_rec *d) 
+dims_process_image(dims_request_rec *d)
 {
     apr_time_t start_time = apr_time_now();
 
-    /* Hook in the progress monitor.  It gets passed a 
+    /* Hook in the progress monitor.  It gets passed a
      * dims_progress_rec which keeps track of the start time.
      */
     dims_progress_rec *progress_rec = (dims_progress_rec *) apr_palloc(
@@ -972,7 +972,7 @@ dims_process_image(dims_request_rec *d)
     /* Setting the progress monitor from the MagickWand API does not
      * seem to work.  The monitor never gets called.
      */
-    SetImageProgressMonitor(GetImageFromMagickWand(d->wand), dims_imagemagick_progress_cb, 
+    SetImageProgressMonitor(GetImageFromMagickWand(d->wand), dims_imagemagick_progress_cb,
             (void *) progress_rec);
 
     int exc_strip_cmd = 0;
@@ -990,7 +990,8 @@ dims_process_image(dims_request_rec *d)
 
     /* Process operations, iterating over all frames of this image. */
     ssize_t images = MagickGetIteratorIndex(d->wand);
-    if (images == 0) {
+    for (int i = 0; i <= images; i++) {
+        MagickSetIteratorIndex(d->wand, i);
         const char *cmds = d->unparsed_commands;
         while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
             char *command = ap_getword(d->pool, &cmds, '/');
@@ -1001,7 +1002,7 @@ dims_process_image(dims_request_rec *d)
                 /* If the NOIMAGE image is being used for some reason then
                 * we don't want to crop it.
                 */
-                if(d->use_no_image && 
+                if(d->use_no_image &&
                         (strcmp(command, "crop") == 0 ||
                         strcmp(command, "legacy_thumbnail") == 0 ||
                         strcmp(command, "legacy_crop") == 0 ||
@@ -1021,11 +1022,11 @@ dims_process_image(dims_request_rec *d)
                         return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
                     }
 
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                         "Rewriting command %s to 'resize' because a NOIMAGE "
                         "image is being processed.", command);
 
-                    command = "resize"; 
+                    command = "resize";
                 }
 
                 // Check if the command is present and set flag.
@@ -1039,12 +1040,12 @@ dims_process_image(dims_request_rec *d)
                     char *err = NULL;
                     apr_status_t code;
 
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-                        "Executing command %s(%s), on request %s", 
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                        "Executing command %s(%s), on request %s",
                         command, args, d->r->uri);
 
                     if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                        return dims_cleanup(d, err, code); 
+                        return dims_cleanup(d, err, code);
                     }
                 }
             }
@@ -1071,13 +1072,13 @@ dims_process_image(dims_request_rec *d)
             if((code = strip_func(d, NULL, &err)) != DIMS_SUCCESS) {
                 return dims_cleanup(d, err, code);
             }
-        }        
+        }
     }
 
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
     /* Disable timeouts at this point since the only thing left
-     * to do is save the image. 
+     * to do is save the image.
      */
     SetImageProgressMonitor(GetImageFromMagickWand(d->wand), NULL, NULL);
 
@@ -1097,7 +1098,7 @@ dims_handle_request(dims_request_rec *d)
 
     d->client_id = ap_getword(d->pool, (const char **) &d->unparsed_commands, '/');
 
-    if(!(d->client_config = 
+    if(!(d->client_config =
             apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
         return dims_cleanup(d, "Application ID is not valid", DIMS_BAD_CLIENT);
     }
@@ -1122,33 +1123,33 @@ dims_handle_request(dims_request_rec *d)
             return dims_cleanup( d, "Image Key has expired", DIMS_BAD_URL);
         }
         if ( expires - now > d->config->max_expiry_period && d->config->max_expiry_period >0 ) {
-            ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r, 
+            ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r,
                 "Image expiry too far in the future:%s %s now=%ld",expires_str, d->r->uri,now);
             return dims_cleanup(d, "Image key too far in the future", DIMS_BAD_URL);
         }
         gen_hash = ap_md5(d->pool,
-            (unsigned char *) apr_pstrcat(d->pool, expires_str, 
+            (unsigned char *) apr_pstrcat(d->pool, expires_str,
                 d->client_config->secret_key, d->unparsed_commands, d->image_url, NULL));
-        
+
         if(d->client_config->secret_key == NULL) {
             gen_hash[7] = '\0';
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r,
                 "Developer key not set for client '%s'", d->client_config->id);
             return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_URL);
         } else if (strncasecmp(hash, gen_hash, 6) != 0) {
             gen_hash[7] = '\0';
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r,
                 "Key Mismatch: wanted %6s got %6s %s", gen_hash, hash, d->r->uri);
             return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
         }
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-            "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);    
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+            "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);
     }
 
     d->request_hash = ap_md5(d->pool,
             (unsigned char *) apr_pstrcat(d->pool, d->client_id,
                 d->unparsed_commands, d->image_url, NULL));
-  
+
     dims_set_optimal_geometry(d);
 
     if (d->image_url && *d->image_url == '/') {
@@ -1225,7 +1226,7 @@ dims_handle_request(dims_request_rec *d)
         if(found) {
             fetch_url = d->image_url;
         } else {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
                     "Requested URL has hostname that is not in the "
                     "whitelist. (%s)", uri.hostname);
             return dims_cleanup(d, NULL, DIMS_HOSTNAME_NOT_IN_WHITELIST);
@@ -1254,7 +1255,7 @@ static apr_status_t
 dims_sizer(dims_request_rec *d)
 {
     apr_time_t now_time;
-    
+
     apr_uri_t uri;
     long width, height;
 
@@ -1268,7 +1269,7 @@ dims_sizer(dims_request_rec *d)
 			return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
 		}
     }
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                     "Statting file \"%s\"", d->filename);
 
     if(d->filename) {
@@ -1289,7 +1290,7 @@ dims_sizer(dims_request_rec *d)
         MAGICK_CHECK(MagickPingImage(d->wand, d->filename), d);
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 	}
- 
+
     width = MagickGetImageWidth(d->wand);
     height = MagickGetImageHeight(d->wand);
     DestroyMagickWand(d->wand);
@@ -1306,19 +1307,19 @@ dims_sizer(dims_request_rec *d)
  * Depending on how this function is called it will do one of three
  * things:
  *
- * 1) Transform old-style request into a new-style request and 
+ * 1) Transform old-style request into a new-style request and
  *    pass it along to the dims_handle_newstyle function.
- * 
+ *
  * 2) Parse out the URL and commands and pass them along
  *    to the dims_handle_newstyle function.
  *
  * 3) Load the image from the filesystem and pass it along
  *    with the commands (r->path_info) to dims_process_image.
  */
-static apr_status_t 
+static apr_status_t
 dims_handler(request_rec *r)
 {
-    dims_request_rec *d = (dims_request_rec *) 
+    dims_request_rec *d = (dims_request_rec *)
             apr_palloc(r->pool, sizeof(dims_request_rec));
 
     d->r = r;
@@ -1348,7 +1349,7 @@ dims_handler(request_rec *r)
     apr_table_setn(r->notes, "DIMS_DL_TIME", "-");
     apr_table_setn(r->notes, "DIMS_IM_TIME", "-");
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
             "Handler %s : %s", r->handler, r->uri);
     /* Handle old-style DIMS parameters. */
     if(strcmp(r->handler, "dims-local") == 0 &&
@@ -1365,9 +1366,9 @@ dims_handler(request_rec *r)
 
         /* Translate provided parameters into new-style parameters. */
         b[0] = w[0] = h[0] = q[0] = '-';
-        status = sscanf(r->uri + 5, 
-                "/%49[^/]/%9[^/]/%9[^/]/%9[^/]/%9[^/]/", 
-                (char *) &appid, (char *) &b, (char *) &w, (char *) &h, 
+        status = sscanf(r->uri + 5,
+                "/%49[^/]/%9[^/]/%9[^/]/%9[^/]/%9[^/]/",
+                (char *) &appid, (char *) &b, (char *) &w, (char *) &h,
                 (char *) &q);
 
         if(status != 5) {
@@ -1399,19 +1400,19 @@ dims_handler(request_rec *r)
             if(!width && !height) {
                 return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
             }
-            commands = apr_psprintf(r->pool, "%s/legacy_thumbnail/%ldx%ld", 
+            commands = apr_psprintf(r->pool, "%s/legacy_thumbnail/%ldx%ld",
                     commands, (long) width, (long) height);
         } else if(bitmap & LEGACY_DIMS_CROP || bitmap & LEGACY_DIMS_RESIZE) {
             char *cmd = (bitmap & LEGACY_DIMS_RESIZE) ? "resize" : "legacy_crop";
 
             if(width && !height) {
-                commands = apr_psprintf(r->pool, "%s/%s/%ld", 
+                commands = apr_psprintf(r->pool, "%s/%s/%ld",
                         commands, cmd, (long) width);
             } else if(height && !width) {
-                commands = apr_psprintf(r->pool, "%s/%s/x%ld", 
+                commands = apr_psprintf(r->pool, "%s/%s/x%ld",
                         commands, cmd, (long) height);
             } else if(width && height) {
-                commands = apr_psprintf(r->pool, "%s/%s/%ldx%ld", 
+                commands = apr_psprintf(r->pool, "%s/%s/%ldx%ld",
                         commands, cmd, (long) width, (long) height);
             } else {
                 return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
@@ -1419,23 +1420,23 @@ dims_handler(request_rec *r)
         }
 
         if(bitmap & LEGACY_DIMS_JPG) {
-            commands = apr_psprintf(r->pool, "%s/format/jpg", 
+            commands = apr_psprintf(r->pool, "%s/format/jpg",
                     commands);
         } else if(bitmap & LEGACY_DIMS_PNG) {
-            commands = apr_psprintf(r->pool, "%s/format/png", 
+            commands = apr_psprintf(r->pool, "%s/format/png",
                     commands);
         } else if(bitmap & LEGACY_DIMS_GIF) {
-            commands = apr_psprintf(r->pool, "%s/format/gif", 
+            commands = apr_psprintf(r->pool, "%s/format/gif",
                     commands);
         }
 
         if(bitmap & LEGACY_DIMS_SHARPEN) {
-            commands = apr_psprintf(r->pool, "%s/sharpen/0.0x1.5", 
+            commands = apr_psprintf(r->pool, "%s/sharpen/0.0x1.5",
                     commands);
         }
 
         if(quality > 0 && quality <= 100) {
-            commands = apr_psprintf(r->pool, "%s/quality/%d", 
+            commands = apr_psprintf(r->pool, "%s/quality/%d",
                     commands, quality);
         }
 
@@ -1472,7 +1473,7 @@ dims_handler(request_rec *r)
         }
 
         /* Parse out URL to image.
-         * HACK: If URL has "http:/" instead of "http://", correct it. 
+         * HACK: If URL has "http:/" instead of "http://", correct it.
          */
         commands = apr_pstrdup(r->pool, r->uri);
         if(fixed_url == NULL) {
@@ -1506,7 +1507,7 @@ dims_handler(request_rec *r)
 
         show_time(r, uptime);
 
-        ap_rprintf(r, "Restart time: %s\n", 
+        ap_rprintf(r, "Restart time: %s\n",
                 ap_ht_time(r->pool,
                 ap_scoreboard_image->global->restart_time,
                 "%A, %d-%b-%Y %H:%M:%S %Z", 0));
@@ -1516,14 +1517,14 @@ dims_handler(request_rec *r)
         ap_rprintf(r, "libcurl version: %s\n", curl_version());
 
         ap_rprintf(r, "\nDetails\n-------\n");
-        
-        ap_rprintf(r, "Successful requests: %d\n", 
+
+        ap_rprintf(r, "Successful requests: %d\n",
                 apr_atomic_read32(&stats->success_count));
-        ap_rprintf(r, "Failed requests: %d\n\n", 
+        ap_rprintf(r, "Failed requests: %d\n\n",
                 apr_atomic_read32(&stats->failure_count));
-        ap_rprintf(r, "Download timeouts: %d\n", 
+        ap_rprintf(r, "Download timeouts: %d\n",
                 apr_atomic_read32(&stats->download_timeout_count));
-        ap_rprintf(r, "Imagemagick Timeouts: %d\n", 
+        ap_rprintf(r, "Imagemagick Timeouts: %d\n",
                 apr_atomic_read32(&stats->imagemagick_timeout_count));
 
         ap_rflush(r);
@@ -1556,10 +1557,10 @@ dims_handler(request_rec *r)
     return DECLINED;
 }
 
-static int 
+static int
 dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
 {
-    dims_config_rec *config = (dims_config_rec *) 
+    dims_config_rec *config = (dims_config_rec *)
             ap_get_module_config(s->module_config, &dims_module);
     apr_status_t status;
     apr_size_t retsize;
@@ -1657,11 +1658,11 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     return OK;
 }
 
-void 
-lock_share(CURL *handle, curl_lock_data data, 
+void
+lock_share(CURL *handle, curl_lock_data data,
               curl_lock_access access, void *userptr)
 {
-    dims_curl_rec *locks = (dims_curl_rec *) userptr;       
+    dims_curl_rec *locks = (dims_curl_rec *) userptr;
 
     switch(data) {
         case CURL_LOCK_DATA_DNS:
@@ -1672,9 +1673,9 @@ lock_share(CURL *handle, curl_lock_data data,
     }
 }
 
-void unlock_share(CURL *handle, curl_lock_data data, void *userptr) 
+void unlock_share(CURL *handle, curl_lock_data data, void *userptr)
 {
-    dims_curl_rec *locks = (dims_curl_rec *) userptr;       
+    dims_curl_rec *locks = (dims_curl_rec *) userptr;
 
     switch(data) {
         case CURL_LOCK_DATA_DNS:
@@ -1686,7 +1687,7 @@ void unlock_share(CURL *handle, curl_lock_data data, void *userptr)
 }
 
 static apr_status_t
-dims_curl_cleanup(void *data) 
+dims_curl_cleanup(void *data)
 {
     dims_curl_rec *locks = (dims_curl_rec *) data;
 
@@ -1695,7 +1696,7 @@ dims_curl_cleanup(void *data)
     apr_thread_mutex_destroy(locks->share_mutex);
     apr_thread_mutex_destroy(locks->dns_mutex);
 
-    apr_pool_userdata_set(NULL, DIMS_CURL_SHARED_KEY, NULL, 
+    apr_pool_userdata_set(NULL, DIMS_CURL_SHARED_KEY, NULL,
             locks->s->process->pool);
 
     return APR_SUCCESS;
@@ -1705,18 +1706,18 @@ static void
 dims_child_init(apr_pool_t *p, server_rec *s)
 {
     curl_global_init(CURL_GLOBAL_ALL);
-    dims_curl_rec *locks = 
+    dims_curl_rec *locks =
             (dims_curl_rec *) apr_pcalloc(p, sizeof(dims_curl_rec));
 
     locks->s = s;
-    locks->share = curl_share_init(); 
+    locks->share = curl_share_init();
 
     apr_thread_mutex_create(&locks->share_mutex, APR_THREAD_MUTEX_DEFAULT, p);
     apr_thread_mutex_create(&locks->dns_mutex, APR_THREAD_MUTEX_DEFAULT, p);
 
-    curl_share_setopt(locks->share, CURLSHOPT_LOCKFUNC, lock_share); 
-    curl_share_setopt(locks->share, CURLSHOPT_UNLOCKFUNC, unlock_share); 
-    curl_share_setopt(locks->share, CURLSHOPT_USERDATA, (void *) locks); 
+    curl_share_setopt(locks->share, CURLSHOPT_LOCKFUNC, lock_share);
+    curl_share_setopt(locks->share, CURLSHOPT_UNLOCKFUNC, unlock_share);
+    curl_share_setopt(locks->share, CURLSHOPT_USERDATA, (void *) locks);
     curl_share_setopt(locks->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
 
     /* We have to associate our handle/locks with the process->pool otherwise
@@ -1732,15 +1733,15 @@ dims_child_init(apr_pool_t *p, server_rec *s)
     apr_pool_cleanup_register(p, locks, dims_curl_cleanup, dims_curl_cleanup);
 }
 
-static void 
+static void
 dims_register_hooks(apr_pool_t *p)
 {
     ap_hook_post_config(dims_init, NULL, NULL, APR_HOOK_MIDDLE);
-    ap_hook_child_init(dims_child_init, NULL, NULL,APR_HOOK_MIDDLE); 
+    ap_hook_child_init(dims_child_init, NULL, NULL,APR_HOOK_MIDDLE);
     ap_hook_handler(dims_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
-static const command_rec dims_commands[] = 
+static const command_rec dims_commands[] =
 {
     AP_INIT_TAKE_ARGV("DimsAddWhitelist",
                       dims_config_set_whitelist, NULL, RSRC_CONF,
