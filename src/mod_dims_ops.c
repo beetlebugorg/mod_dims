@@ -292,6 +292,31 @@ dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
 
 apr_status_t
 dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
+    char *fixed_url;
+
+    if (d->r->args) {
+        const size_t args_len = strlen(d->r->args) + 1;
+        char *args_copy = malloc(args_len);
+        strncpy(args_copy, d->r->args, args_len);
+        char *token;
+        char *strtokstate;
+        token = apr_strtok(args_copy, "&", &strtokstate);
+
+        while (token) {
+            if(strncmp(token, "overlay=", 4) == 0) {
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
+                fixed_url = apr_pstrdup(d->r->pool, token + 8);
+                ap_unescape_url(fixed_url);
+            }
+            token = apr_strtok(NULL, "&", &strtokstate);
+        }
+    }
+
+    MagickWand *overlay_wand = NewMagickWand();
+    MagickReadImage(overlay_wand, fixed_url);
+
+    MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, NorthEastGravity), d);
+
     return DIMS_SUCCESS;
 }
 
