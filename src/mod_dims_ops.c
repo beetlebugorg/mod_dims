@@ -290,6 +290,11 @@ dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
     return DIMS_SUCCESS;
 }
 
+/*
+ * Watermark expects (in order) opacity, size of overlay in respect to source image (percentage), and region.
+ * Eg. /watermark/.2,.5,se
+ * This would give us a watermark of 0.2 opacity, 50% of the source image's size, in the southeast region.
+ */
 apr_status_t
 dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     char *fixed_url;
