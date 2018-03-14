@@ -1,11 +1,11 @@
 /*
- * Copyright 2009 AOL LLC 
+ * Copyright 2009 AOL LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
- * the License at 
- *         
- *         http://www.apache.org/licenses/LICENSE-2.0 
+ * the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -49,7 +49,7 @@ dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
 apr_status_t
 dims_strip_operation (dims_request_rec *d, char *args, char **err) {
 
-    /* If args is passed from the user and 
+    /* If args is passed from the user and
      *   a) it equals true, strip the image.
      *   b) it equals false, don't strip the image.
      *   c) it is neither true/false, strip based on config value.
@@ -169,7 +169,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     }
 
     MAGICK_CHECK(MagickSetImagePage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
-    
+
     return DIMS_SUCCESS;
 }
 
@@ -290,6 +290,11 @@ dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
     return DIMS_SUCCESS;
 }
 
+apr_status_t
+dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
+    return DIMS_SUCCESS;
+}
+
 
 /**
  * Legacy API support.
@@ -314,8 +319,8 @@ dims_legacy_crop_operation (dims_request_rec *d, char *args, char **err) {
     x = (width / 2) - (rec.width / 2);
     y = (height / 2) - (rec.height / 2);
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "legacy_crop will crop to %ldx%ld+%d+%d", 
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+        "legacy_crop will crop to %ldx%ld+%d+%d",
         rec.width, rec.height, x, y);
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, x, y), d);
@@ -349,7 +354,7 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         MAGICK_CHECK(MagickScaleImage(d->wand, rec.width, rec.height), d);
     }
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
         "legacy_thumbnail will resize to %ldx%ld", rec.width, rec.height);
 
     flags = ParseAbsoluteGeometry(args, &rec);
@@ -363,7 +368,7 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     x = (width / 2) - (rec.width / 2);
     y = (height / 2) - (rec.height / 2);
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
         "legacy_thumbnail will crop to %ldx%ld+%d+%d", rec.width, rec.height, x, y);
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, x, y), d);
