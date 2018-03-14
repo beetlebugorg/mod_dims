@@ -303,7 +303,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         token = apr_strtok(args_copy, "&", &strtokstate);
 
         while (token) {
-            if(strncmp(token, "overlay=", 4) == 0) {
+            if (strncmp(token, "overlay=", 4) == 0) {
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                 fixed_url = apr_pstrdup(d->r->pool, token + 8);
                 ap_unescape_url(fixed_url);
@@ -312,10 +312,63 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         }
     }
 
+    float opacity;
+    double percentage;
+    GravityType gravity;
+
+    char *token = strtok(args, ",");
+
+    if (token) {
+        opacity = atof(token);
+    }
+
+    token = strtok(NULL, ",");
+
+    if (token) {
+        percentage = atof(token);
+    }
+
+    token = strtok(NULL, ",");
+
+    if (token) {
+        if (strcmp(token, "nw") == 0) {
+            gravity = NorthWestGravity;
+
+        } else if (strcmp(token, "n") == 0) {
+            gravity = NorthGravity;
+
+        } else if (strcmp(token, "ne") == 0) {
+            gravity = NorthEastGravity;
+
+        } else if (strcmp(token, "w") == 0) {
+            gravity = WestGravity;
+
+        } else if (strcmp(token, "c") == 0) {
+            gravity = CenterGravity;
+
+        } else if (strcmp(token, "e") == 0) {
+            gravity = EastGravity;
+
+        } else if (strcmp(token, "sw") == 0) {
+            gravity = SouthWestGravity;
+
+        } else if (strcmp(token, "s") == 0) {
+            gravity = SouthGravity;
+
+        } else if (strcmp(token, "se") == 0) {
+            gravity = SouthEastGravity;
+        }
+    }
+
     MagickWand *overlay_wand = NewMagickWand();
     MagickReadImage(overlay_wand, fixed_url);
+    MagickSetImageOpacity(overlay_wand, opacity);
 
-    MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, NorthEastGravity), d);
+    // Resize based on percentage.
+    MAGICK_CHECK(MagickScaleImage(overlay_wand, MagickGetImageWidth(d->wand) * percentage, MagickGetImageHeight(d->wand) * percentage), d);
+
+    // Apply overlay.
+    MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, gravity), d);
 
     return DIMS_SUCCESS;
 }
