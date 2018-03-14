@@ -1440,9 +1440,12 @@ dims_handler(request_rec *r)
 
         /* Check first if URL is passed as a query parameter. */
         if(r->args) {
+            const size_t args_len = strlen(r->args) + 1;
+            char *args_copy = malloc(args_len);
+            strncpy(args_copy, r->args, args_len);
             char *token;
             char *strtokstate;
-            token = apr_strtok(r->args, "&", &strtokstate);
+            token = apr_strtok(args_copy, "&", &strtokstate);
             while (token) {
                 if(strncmp(token, "url=", 4) == 0) {
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
