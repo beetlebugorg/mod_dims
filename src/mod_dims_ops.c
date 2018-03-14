@@ -318,7 +318,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     }
 
     float opacity;
-    double percentage;
+    double size;
     GravityType gravity;
 
     char *token = strtok(args, ",");
@@ -330,7 +330,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     token = strtok(NULL, ",");
 
     if (token) {
-        percentage = atof(token);
+        size = atof(token);
     }
 
     token = strtok(NULL, ",");
@@ -370,7 +370,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     MagickSetImageOpacity(overlay_wand, opacity);
 
     // Resize based on percentage.
-    MAGICK_CHECK(MagickScaleImage(overlay_wand, MagickGetImageWidth(d->wand) * percentage, MagickGetImageHeight(d->wand) * percentage), d);
+    MAGICK_CHECK(MagickScaleImage(overlay_wand, MagickGetImageWidth(d->wand) * size, MagickGetImageHeight(d->wand) * size), d);
 
     // Apply overlay.
     MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, gravity), d);
