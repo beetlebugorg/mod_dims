@@ -383,7 +383,13 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     // New wand for overlay image.
     MagickWand *overlay_wand = NewMagickWand();
     MagickReadImage(overlay_wand, overlay_url);
-    MagickSetImageOpacity(overlay_wand, opacity);
+
+    // Opacity.
+    PixelWand *pColorize = NewPixelWand();
+    PixelWand *pGivenAlpha = NewPixelWand();
+    PixelSetColor(pColorize, "transparent");
+    PixelSetAlpha(pGivenAlpha, opacity);
+    MagickColorizeImage(overlay_wand, pColorize, pGivenAlpha);
 
     // Resize based on percentage.
     MAGICK_CHECK(MagickScaleImage(overlay_wand, MagickGetImageWidth(d->wand) * size, MagickGetImageHeight(d->wand) * size), d);
