@@ -291,38 +291,25 @@ dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 /*
- * Watermark expects (in order) opacity, size of overlay in respect to source image (percentage), and region.
- * Eg. /watermark/.2,.5,se
- * This would give us a watermark of 0.2 opacity, 50% of the source image's size, in the southeast region.
- * This also expects the overlay image url as an additional query parameter.
+ * Watermark expects (in order) index, opacity, size of overlay in respect to source image (percentage), and region.
+ * Eg. /watermark/1,.2,.5,se
+ * This would give us a watermark of index 1, 0.2 opacity, 50% of the source image's size, in the southeast region.
+ * The index is used to map to the appropriate overlay parameter. In the example above, we'll use the parameter overlay1.
  */
 apr_status_t
 dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
-    char *fixed_url;
-
-    if (d->r->args) {
-        const size_t args_len = strlen(d->r->args) + 1;
-        char *args_copy = malloc(args_len);
-        strncpy(args_copy, d->r->args, args_len);
-        char *token;
-        char *strtokstate;
-        token = apr_strtok(args_copy, "&", &strtokstate);
-
-        while (token) {
-            if (strncmp(token, "overlay=", 4) == 0) {
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
-                fixed_url = apr_pstrdup(d->r->pool, token + 8);
-                ap_unescape_url(fixed_url);
-            }
-            token = apr_strtok(NULL, "&", &strtokstate);
-        }
-    }
-
+    char *index;
     float opacity;
     double size;
     GravityType gravity;
 
     char *token = strtok(args, ",");
+
+    if (token) {
+        index = token;
+    }
+
+    token = strtok(NULL, ",");
 
     if (token) {
         opacity = atof(token);
@@ -366,8 +353,36 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         }
     }
 
+    char *overlay_url;
+
+    if (d->r->args) {
+        const size_t args_len = strlen(d->r->args) + 1;
+        char *args_copy = malloc(args_len);
+        strncpy(args_copy, d->r->args, args_len);
+        char *token;
+        char *strtokstate;
+        token = apr_strtok(args_copy, "&", &strtokstate);
+
+        char *param = malloc(strlen(index) + 9);
+        strcpy(param, "overlay");
+        strcat(param, index);
+        strcat(param, "=");
+
+        while (token) {
+            if (strncmp(token, param, 4) == 0) {
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
+                overlay_url = apr_pstrdup(d->r->pool, token + strlen(index) + 8);
+                ap_unescape_url(overlay_url);
+            }
+            token = apr_strtok(NULL, "&", &strtokstate);
+        }
+
+        free(param);
+    }
+
+    // New wand for overlay image.
     MagickWand *overlay_wand = NewMagickWand();
-    MagickReadImage(overlay_wand, fixed_url);
+    MagickReadImage(overlay_wand, overlay_url);
     MagickSetImageOpacity(overlay_wand, opacity);
 
     // Resize based on percentage.
