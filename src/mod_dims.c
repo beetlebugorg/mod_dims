@@ -40,6 +40,8 @@
 #include "util_md5.h"
 #include "cmyk_icc.h"
 #include <scoreboard.h>
+#include <openssl/evp.h>
+#include <openssl/aes.h>
 
 #include <curl/curl.h>
 
@@ -1451,7 +1453,41 @@ dims_handler(request_rec *r)
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                     fixed_url = apr_pstrdup(r->pool, token + 4);
                     ap_unescape_url(fixed_url);
-                } else if(strncmp(token, "optimizeResize=", 4) == 0) {
+
+                } else if (strncmp(token, "eurl=", 4) == 0) {
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
+
+                    // Base64 decode.
+                    char *encoded = apr_pstrdup(r->pool, token + 5);
+                    char *decoded = malloc(strlen(encoded));
+                    BIO *bmem = BIO_new_mem_buf(encoded, strlen(encoded));
+                    BIO *b64 = BIO_new(BIO_f_base64());
+                    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+                    bmem = BIO_push(b64, bmem);
+                    long n = BIO_read(bmem, decoded, strlen(encoded));
+
+                    if (n > 0) {
+                        decoded[n] = 0;
+
+                    } else {
+                        decoded[0] = 0;
+                    }
+
+                    BIO_free_all(bmem);
+
+                    // AES decrypt.
+
+                    char key[] = "abcdefhijklmnopq";
+
+                    // TODO: AES encrypt.
+
+                    fixed_url = malloc(args_len);
+                    strncpy(fixed_url, decoded, strlen(decoded) + 1);
+                    free(decoded);
+                    free(xor);
+                    break;
+
+                } else if (strncmp(token, "optimizeResize=", 4) == 0) {
                     d->optimize_resize = atof(token + 15);
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Overriding optimize resize: %f", d->optimize_resize);
                 }
