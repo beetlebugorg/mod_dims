@@ -1543,7 +1543,6 @@ dims_handler(request_rec *r)
 
                     free(decoded_iv);
                     free(decoded_url);
-                    free(secret);
 
                     fixed_url = malloc(decrypted_len);
                     strncpy(fixed_url, decrypted, decrypted_len);
