@@ -41,7 +41,7 @@
 #include "cmyk_icc.h"
 #include <scoreboard.h>
 #include <openssl/evp.h>
-#include <openssl/aes.h>
+#include <openssl/sha.h>
 
 #include <curl/curl.h>
 
@@ -1286,6 +1286,56 @@ dims_sizer(dims_request_rec *d)
 
 }
 
+static char *
+base_64_decode(char *input)
+{
+    BIO *b64, *bmem;
+    char *buffer = (char *) malloc(strlen(input) + 1);
+    memset(buffer, 0, strlen(input) + 1);
+
+    b64 = BIO_new(BIO_f_base64());
+    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    bmem = BIO_new_mem_buf(input, strlen(input));
+    bmem = BIO_push(b64, bmem);
+
+    BIO_read(bmem, buffer, strlen(input));
+    buffer[strlen(input)] = '\0';
+    BIO_free_all(bmem);
+
+    return buffer;
+}
+
+static int
+aes_128_decrypt(unsigned char *ciphertext, unsigned char *key, unsigned char *iv, unsigned char *plaintext)
+{
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    int plaintext_len;
+
+    if(!(ctx = EVP_CIPHER_CTX_new())) {
+        abort();
+    }
+
+    if(1 != EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv)) {
+        abort();
+    }
+
+    if(1 != EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, strlen(ciphertext))) {
+        abort();
+    }
+
+    plaintext_len = len;
+
+    if(1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
+        abort();
+    }
+
+    plaintext_len += len;
+    EVP_CIPHER_CTX_free(ctx);
+
+    return plaintext_len;
+}
+
 /**
  * The apache handler.  Apache will call this method when a request
  * for /dims/, /dims3/, /dims4/ or an image is recieved.
@@ -1435,7 +1485,7 @@ dims_handler(request_rec *r)
             (r->uri && strncmp(r->uri, "/dims3/", 7) == 0) ||
             (strcmp( r->handler,"dims4") == 0 )) {
         /* Handle new-style DIMS parameters. */
-        char *p, *url = NULL, *fixed_url = NULL, *commands = NULL;
+        char *p, *url = NULL, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
         if (( strcmp( r->handler,"dims4") == 0)) {
                d->use_secret_key = 1;
         }
@@ -1455,37 +1505,48 @@ dims_handler(request_rec *r)
                     ap_unescape_url(fixed_url);
 
                 } else if (strncmp(token, "eurl=", 4) == 0) {
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
+                    eurl = apr_pstrdup(r->pool, token + 5);
 
-                    // Base64 decode.
-                    char *encoded = apr_pstrdup(r->pool, token + 5);
-                    char *decoded = malloc(strlen(encoded));
-                    BIO *bmem = BIO_new_mem_buf(encoded, strlen(encoded));
-                    BIO *b64 = BIO_new(BIO_f_base64());
-                    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-                    bmem = BIO_push(b64, bmem);
-                    long n = BIO_read(bmem, decoded, strlen(encoded));
+                    // First 24 bytes is IV, rest is URL.
+                    unsigned char encoded_iv[256];
+                    strncpy(encoded_iv, eurl, 24);
+                    encoded_iv[24] = '\0';
 
-                    if (n > 0) {
-                        decoded[n] = 0;
+                    unsigned char encoded_url[256];
+                    strcpy(encoded_url, &eurl[24]);
+                    encoded_url[sizeof(encoded_url)] = '\0';
 
-                    } else {
-                        decoded[0] = 0;
+                    unsigned char *decoded_iv = base_64_decode(encoded_iv);
+                    unsigned char *decoded_url = base_64_decode(encoded_url);
+                    //unsigned char *secret = (unsigned char *) d->config->secret_key;
+                    unsigned char *secret = (unsigned char *) "32804b6d";
+
+                    // Hash secret via SHA-1.
+                    unsigned char hash[SHA_DIGEST_LENGTH];
+                    SHA1(secret, sizeof(secret), hash);
+
+                    // Convert to HEX.
+                    char hex[SHA_DIGEST_LENGTH * 2 + 1];
+
+                    for(int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+                        sprintf(&hex[i * 2], "%02X", hash[i]);
                     }
 
-                    BIO_free_all(bmem);
+                    // Use first 16 bytes.
+                    unsigned char key[256];
+                    strncpy(key, hex, 16);
+                    key[16] = '\0';
 
-                    // AES decrypt.
+                    unsigned char decrypted[128];
+                    int decrypted_len = aes_128_decrypt(decoded_url, key, decoded_iv, decrypted);
+                    decrypted[decrypted_len] = '\0';
 
-                    char key[] = "abcdefhijklmnopq";
+                    free(decoded_iv);
+                    free(decoded_url);
+                    free(secret);
 
-                    // TODO: AES encrypt.
-
-                    fixed_url = malloc(args_len);
-                    strncpy(fixed_url, decoded, strlen(decoded) + 1);
-                    free(decoded);
-                    free(xor);
-                    break;
+                    fixed_url = malloc(decrypted_len);
+                    strncpy(fixed_url, decrypted, decrypted_len);
 
                 } else if (strncmp(token, "optimizeResize=", 4) == 0) {
                     d->optimize_resize = atof(token + 15);
