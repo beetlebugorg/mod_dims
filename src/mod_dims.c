@@ -1525,7 +1525,7 @@ dims_handler(request_rec *r)
                     unsigned char hash[SHA_DIGEST_LENGTH];
                     SHA1(secret, sizeof(secret), hash);
 
-                    // Convert to HEX.
+                    // Convert to hex.
                     char hex[SHA_DIGEST_LENGTH * 2 + 1];
 
                     for(int i = 0; i < SHA_DIGEST_LENGTH; i++) {
