@@ -298,7 +298,7 @@ dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
  */
 apr_status_t
 dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
-    char *overlay_url;
+    char *overlay_url = NULL;
 
     if (d->r->args) {
         const size_t args_len = strlen(d->r->args) + 1;
@@ -316,6 +316,11 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
             }
             token = apr_strtok(NULL, "&", &strtokstate);
         }
+    }
+
+    if (overlay_url == NULL) {
+        *err = "No overlay url!";
+        return DIMS_FAILURE;
     }
 
     float opacity;
