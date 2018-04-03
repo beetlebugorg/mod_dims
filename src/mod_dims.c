@@ -1490,6 +1490,14 @@ dims_handler(request_rec *r)
                d->use_secret_key = 1;
         }
 
+        char *unparsed_commands = apr_pstrdup(r->pool, r->uri + 7);
+        d->client_id = ap_getword(d->pool, (const char **) &unparsed_commands, '/');
+
+        if(!(d->client_config =
+                apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
+            return dims_cleanup(d, "Application ID is not valid", DIMS_BAD_CLIENT);
+        }
+
         /* Check first if URL is passed as a query parameter. */
         if(r->args) {
             const size_t args_len = strlen(r->args) + 1;
@@ -1518,8 +1526,7 @@ dims_handler(request_rec *r)
 
                     unsigned char *decoded_iv = base_64_decode(encoded_iv);
                     unsigned char *decoded_url = base_64_decode(encoded_url);
-                    //unsigned char *secret = (unsigned char *) d->config->secret_key;
-                    unsigned char *secret = (unsigned char *) "32804b6d";
+                    unsigned char *secret = (unsigned char *) d->client_config->secret_key;
 
                     // Hash secret via SHA-1.
                     unsigned char hash[SHA_DIGEST_LENGTH];
