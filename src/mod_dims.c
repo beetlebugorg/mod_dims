@@ -710,7 +710,11 @@ dims_send_image(dims_request_rec *d)
     /* Set the Content-Type based on the image format. */
     content_type = apr_psprintf(d->pool, "image/%s", format);
     ap_content_type_tolower(content_type);
+    if (strcmp(content_type, "image/jpg") == 0) {
+        content_type = "image/jpeg";
+    }
     ap_set_content_type(d->r, content_type);
+    apr_table_set(d->r->headers_out, "Content-Type", content_type);
 
     if(d->status == DIMS_FILE_NOT_FOUND) {
         d->r->status = HTTP_NOT_FOUND;
