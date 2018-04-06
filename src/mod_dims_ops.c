@@ -382,8 +382,39 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     PixelSetAlpha(pGivenAlpha, opacity);
     MagickColorizeImage(overlay_wand, pColorize, pGivenAlpha);
 
+    // Size.
+    size_t originalWidth = MagickGetImageWidth(d->wand);
+    size_t originalHeight = MagickGetImageHeight(d->wand);
+
+    size_t overlayWidth = MagickGetImageWidth(overlay_wand);
+    size_t overlayHeight = MagickGetImageHeight(overlay_wand);
+
+    size_t finalWidth;
+    size_t finalHeight;
+
+    if (originalWidth > originalHeight) {
+        finalWidth = originalWidth * size;
+
+        if (overlayWidth > overlayHeight) {
+            finalHeight = finalWidth / (overlayWidth / overlayHeight);
+
+        } else {
+            finalHeight = finalWidth / (overlayHeight / overlayWidth);
+        }
+
+    } else {
+        finalHeight = originalHeight * size;
+
+        if (overlayWidth > overlayHeight) {
+            finalWidth = finalHeight / (overlayWidth / overlayHeight);
+
+        } else {
+            finalWidth = finalHeight / (overlayHeight / overlayWidth);
+        }
+    }
+
     // Resize based on percentage.
-    MAGICK_CHECK(MagickScaleImage(overlay_wand, MagickGetImageWidth(d->wand) * size, MagickGetImageHeight(d->wand) * size), d);
+    MAGICK_CHECK(MagickScaleImage(overlay_wand, finalWidth, finalHeight), d);
 
     // Apply overlay.
     MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, gravity), d);
