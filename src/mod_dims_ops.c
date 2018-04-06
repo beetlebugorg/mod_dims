@@ -414,7 +414,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         }
     }
 
-    // Resize based on percentage.
     MAGICK_CHECK(MagickScaleImage(overlay_wand, finalWidth, finalHeight), d);
 
     // Apply overlay.
