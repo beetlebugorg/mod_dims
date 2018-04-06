@@ -392,6 +392,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     size_t finalWidth;
     size_t finalHeight;
 
+    // Scale based on largest dimension.
     if (originalWidth > originalHeight) {
         finalWidth = originalWidth * size;
 
