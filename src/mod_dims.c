@@ -1287,7 +1287,7 @@ dims_sizer(dims_request_rec *d)
 }
 
 static char *
-base_64_decode(char *input)
+base_64_decode(char *input, int *decoded_length)
 {
     BIO *b64, *bmem;
     char *buffer = (char *) malloc(strlen(input) + 1);
@@ -1298,7 +1298,7 @@ base_64_decode(char *input)
     bmem = BIO_new_mem_buf(input, strlen(input));
     bmem = BIO_push(b64, bmem);
 
-    BIO_read(bmem, buffer, strlen(input));
+    *decoded_length = BIO_read(bmem, buffer, strlen(input));
     buffer[strlen(input)] = '\0';
     BIO_free_all(bmem);
 
@@ -1306,27 +1306,27 @@ base_64_decode(char *input)
 }
 
 static int
-aes_128_decrypt(unsigned char *ciphertext, unsigned char *key, unsigned char *iv, unsigned char *plaintext)
+aes_128_decrypt(unsigned char *ciphertext, unsigned char *key, unsigned char *plaintext, int length)
 {
     EVP_CIPHER_CTX *ctx;
     int len;
     int plaintext_len;
 
-    if(!(ctx = EVP_CIPHER_CTX_new())) {
+    if (!(ctx = EVP_CIPHER_CTX_new())) {
         abort();
     }
 
-    if(1 != EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv)) {
+    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, key, NULL)) {
         abort();
     }
 
-    if(1 != EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, strlen(ciphertext))) {
+    if (1 != EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, length)) {
         abort();
     }
 
     plaintext_len = len;
 
-    if(1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
+    if (1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
         abort();
     }
 
@@ -1514,18 +1514,8 @@ dims_handler(request_rec *r)
 
                 } else if (strncmp(token, "eurl=", 4) == 0) {
                     eurl = apr_pstrdup(r->pool, token + 5);
-
-                    // First 24 bytes is IV, rest is URL.
-                    unsigned char encoded_iv[256];
-                    strncpy(encoded_iv, eurl, 24);
-                    encoded_iv[24] = '\0';
-
-                    unsigned char encoded_url[256];
-                    strcpy(encoded_url, &eurl[24]);
-                    encoded_url[sizeof(encoded_url)] = '\0';
-
-                    unsigned char *decoded_iv = base_64_decode(encoded_iv);
-                    unsigned char *decoded_url = base_64_decode(encoded_url);
+                    int decoded_length;
+                    unsigned char *decoded_url = base_64_decode(eurl, &decoded_length);
                     unsigned char *secret = (unsigned char *) d->client_config->secret_key;
 
                     // Hash secret via SHA-1.
@@ -1535,7 +1525,7 @@ dims_handler(request_rec *r)
                     // Convert to hex.
                     char hex[SHA_DIGEST_LENGTH * 2 + 1];
 
-                    for(int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+                    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
                         sprintf(&hex[i * 2], "%02X", hash[i]);
                     }
 
@@ -1545,13 +1535,13 @@ dims_handler(request_rec *r)
                     key[16] = '\0';
 
                     unsigned char decrypted[128];
-                    int decrypted_len = aes_128_decrypt(decoded_url, key, decoded_iv, decrypted);
+                    int decrypted_len = aes_128_decrypt(decoded_url, key, decrypted, decoded_length);
                     decrypted[decrypted_len] = '\0';
 
-                    free(decoded_iv);
+                    fixed_url = (char *) decrypted;
                     free(decoded_url);
 
-                    fixed_url = (char *) decrypted;
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "URL: %s", fixed_url);
 
                 } else if (strncmp(token, "optimizeResize=", 4) == 0) {
                     d->optimize_resize = atof(token + 15);
