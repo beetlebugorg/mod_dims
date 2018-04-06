@@ -1572,6 +1572,7 @@ dims_handler(request_rec *r)
                     free(decoded_url);
 
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "URL: %s", fixed_url);
+                    break;
 
                 } else if (strncmp(token, "optimizeResize=", 4) == 0) {
                     d->optimize_resize = atof(token + 15);
