@@ -1133,9 +1133,39 @@ dims_handle_request(dims_request_rec *d)
                 "Image expiry too far in the future:%s %s now=%ld",expires_str, d->r->uri,now);
             return dims_cleanup(d, "Image key too far in the future", DIMS_BAD_URL);
         }
-        gen_hash = ap_md5(d->pool,
-            (unsigned char *) apr_pstrcat(d->pool, expires_str, 
-                d->client_config->secret_key, d->unparsed_commands, d->image_url, NULL));
+
+        // Throw all query params and their values into a hash table.
+        // This is used to derive additional signature params.
+        apr_hash_t *params = apr_hash_make(d->pool);
+
+        if (d->r->args) {
+            const size_t args_len = strlen(d->r->args) + 1;
+            char *args_copy = malloc(args_len);
+            strncpy(args_copy, d->r->args, args_len);
+            char *token;
+            char *strtokstate;
+            token = apr_strtok(args_copy, "&", &strtokstate);
+            while (token) {
+                char *param = strtok(token, "=");
+                apr_hash_set(params, param, APR_HASH_KEY_STRING, apr_pstrdup(d->r->pool, param + strlen(param) + 1));
+                token = apr_strtok(NULL, "&", &strtokstate);
+            }
+        }
+
+        // Standard signature params.
+        char *signatureParams = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, d->unparsed_commands, d->image_url, NULL);
+
+        // Concatenate additional params.
+        char *token;
+        char *strtokstate;
+        token = apr_strtok(apr_hash_get(params, "_keys", APR_HASH_KEY_STRING), ",", &strtokstate);
+        while (token) {
+            signatureParams = apr_pstrcat(d->pool, signatureParams, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
+            token = apr_strtok(NULL, ",", &strtokstate);
+        }
+
+        // Hash.
+        gen_hash = ap_md5(d->pool, (unsigned char *) signatureParams);
         
         if(d->client_config->secret_key == NULL) {
             gen_hash[7] = '\0';
