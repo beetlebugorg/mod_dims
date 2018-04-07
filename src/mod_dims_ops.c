@@ -298,6 +298,7 @@ dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
  */
 apr_status_t
 dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
+    MagickWand *overlay_wand = NewMagickWand();
     char *overlay_url = NULL;
 
     if (d->r->args) {
@@ -320,6 +321,22 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
     if (overlay_url == NULL) {
         *err = "No overlay url!";
+        return DIMS_FAILURE;
+    }
+
+    CURL *curl_handle;
+    CURLcode code;
+    dims_image_data_t image_data;
+    long response_code;
+    get_image_data(d, curl_handle, &code, overlay_url, &image_data, &response_code);
+
+    if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
+        ExceptionType et;
+
+        if (image_data.data) {
+            free(image_data.data);
+        }
+
         return DIMS_FAILURE;
     }
 
@@ -370,10 +387,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
             gravity = SouthEastGravity;
         }
     }
-
-    // New wand for overlay image.
-    MagickWand *overlay_wand = NewMagickWand();
-    MagickReadImage(overlay_wand, overlay_url);
 
     // Opacity.
     PixelWand *pColorize = NewPixelWand();

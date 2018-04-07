@@ -67,12 +67,6 @@ typedef struct {
 } dims_curl_rec;
 
 typedef struct {
-    char *data;
-    size_t size;
-    size_t used;
-} dims_image_data_t;
-
-typedef struct {
     dims_request_rec *d;
     apr_time_t start_time;
 } dims_progress_rec;
@@ -493,6 +487,56 @@ char *url_encode(char *str) {
     return buf;
 }
 
+void
+get_image_data(dims_request_rec *d, CURL *curl_handle, CURLcode *code, char *fetch_url, dims_image_data_t *data, long *response_code)
+{
+    dims_image_data_t image_data;
+    image_data.data = NULL;
+    image_data.size = 0;
+    image_data.used = 0;
+    int extra_time = 0;
+
+    /* Allow for some extra time to download the NOIMAGE image. */
+    void *s = NULL;
+
+    if (d->status == DIMS_DOWNLOAD_TIMEOUT) {
+        extra_time += 500;
+    }
+
+    apr_pool_userdata_get((void *) &s, DIMS_CURL_SHARED_KEY,
+            d->r->server->process->pool);
+
+    /* Encode the fetch URL before downloading */
+    fetch_url = url_encode(fetch_url);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
+
+    curl_handle = curl_easy_init();
+    curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
+    curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, dims_write_header_cb);
+    curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
+    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
+    curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
+    curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
+
+    /* The curl shared handle allows this process to share DNS cache
+     * and prevents the DNS cache from going away after every request.
+     */
+    if (s) {
+        dims_curl_rec *locks = (dims_curl_rec *) s;
+        curl_easy_setopt(curl_handle, CURLOPT_SHARE, locks->share);
+    }
+
+    *code = curl_easy_perform(curl_handle);
+    *data = image_data;
+
+    long response;
+    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response);
+    curl_easy_cleanup(curl_handle);
+    *response_code = response;
+}
+
 /**
  * Fetch remote image.  If successful the MagicWand will
  * have the new image loaded.
@@ -538,45 +582,11 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
     } else {
-        /* Allow for some extra time to download the NOIMAGE image. */
-        void *s = NULL;
-
-        if(d->status == DIMS_DOWNLOAD_TIMEOUT) {
-            extra_time += 500;
-        }
-
-        apr_pool_userdata_get((void *) &s, DIMS_CURL_SHARED_KEY, 
-                d->r->server->process->pool);
-
-        image_data.data = NULL;
-        image_data.size = 0;
-        image_data.used = 0;
-
-        /* Encode the fetch URL before downloading */
-        fetch_url = url_encode(fetch_url);
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                "Encoded URL: %s ", fetch_url);
-
-        curl_handle = curl_easy_init();
-        curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
-        curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
-        curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
-        curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, dims_write_header_cb);
-        curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
-        curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
-        curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
-        curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
-
-        /* The curl shared handle allows this process to share DNS cache
-         * and prevents the DNS cache from going away after every request.
-         */
-        if(s) {
-            dims_curl_rec *locks = (dims_curl_rec *) s;
-            curl_easy_setopt(curl_handle, CURLOPT_SHARE, locks->share);
-        } 
+        long response_code;
+        get_image_data(d, curl_handle, &code, fetch_url, &image_data, &response_code);
 
         start_time = apr_time_now();
-        if((code = curl_easy_perform(curl_handle)) != 0) {
+        if(code != 0) {
             curl_easy_cleanup(curl_handle);
             if(image_data.data) {
                 free(image_data.data);
@@ -592,17 +602,11 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
             d->download_time = (apr_time_now() - start_time) / 1000;
 
-            free(fetch_url);
-
             return 1;
         }
 
         d->download_time = (apr_time_now() - start_time) / 1000;
 
-        /* Verify we actually recieved an image. */
-        long response_code = 0;
-        curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
-        curl_easy_cleanup(curl_handle);
         if(response_code != 200) {
             if(image_data.data) {
                 free(image_data.data);
@@ -611,8 +615,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             if(response_code == 404) {
                 d->status = DIMS_FILE_NOT_FOUND;
             }
-
-            free(fetch_url);
 
             return 1;
         }
@@ -630,8 +632,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                     "ImageMagick error, '%s', on request: %s ", 
                     MagickGetException(d->wand, &et), d->r->uri);
 
-            free(fetch_url);
-
             return 1;
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
@@ -643,8 +643,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
             d->original_image_size = image_data.used;
         }
-
-        free(fetch_url);
     }
 
     return 0;
