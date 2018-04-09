@@ -16,6 +16,8 @@
 
 #include "mod_dims.h"
 
+#include <sys/stat.h>
+
 #define MAGICK_CHECK(func, rec) \
     do { \
         apr_status_t code = func; \
@@ -324,20 +326,42 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
-    CURL *curl_handle;
-    CURLcode code;
-    dims_image_data_t image_data;
-    long response_code;
-    get_image_data(d, curl_handle, &code, overlay_url, &image_data, &response_code);
+    apr_finfo_t finfo;
+    apr_status_t status;
+    char *filename = "/tmp/test.png"; // make this right...
+    ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "yo: %s", filename);
 
-    if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
-        ExceptionType et;
+    // Try to read image from disk.
+    if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {
+        MagickReadImage(overlay_wand, finfo.fname);
 
-        if (image_data.data) {
-            free(image_data.data);
+    // Write to disk.
+    } else {
+        CURL *curl_handle;
+        CURLcode code;
+        dims_image_data_t image_data;
+        long response_code;
+        get_image_data(d, curl_handle, &code, overlay_url, &image_data, &response_code);
+
+        if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
+            if (image_data.data) {
+                free(image_data.data);
+            }
+
+            *err = "Unable to construct wand from image data!";
+            return DIMS_FAILURE;
         }
 
-        return DIMS_FAILURE;
+        if (open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH) != 0) {
+            chmod(filename, 0666);
+            FILE *file;
+
+            if ((file = fopen(filename, "wb+")) != NULL) {
+                fputs(image_data.data, file); // does not work
+            }
+
+            fclose(file);
+        }
     }
 
     float opacity;
