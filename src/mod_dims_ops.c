@@ -331,11 +331,11 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     char *filename = "/tmp/test.png"; // make this right...
 
     // Try to read image from disk.
-    if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "already saved...");
+    if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {
         MagickReadImage(overlay_wand, finfo.fname);
 
     // Write to disk.
-    } else {ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "writing...");
+    } else {ap_log_rerror(
         CURL *curl_handle;
         CURLcode code;
         dims_image_data_t image_data;
