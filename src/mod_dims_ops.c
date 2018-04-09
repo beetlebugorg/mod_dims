@@ -354,13 +354,15 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         int fd;
         size_t i = 0;
 
-        if ((fd = open (filename, O_CREAT | O_WRONLY, 0666)) < 0)
-            return;
+        if ((fd = open (filename, O_CREAT | O_WRONLY, 0666)) < 0) {
+            *err = "Unable to open file!";
+            return DIMS_FAILURE;
+        }
 
         while (i < image_data.used) {
 
-            if (write (fd,image_data.data + i, 1) != 1) {
-                close (fd);
+            if (write(fd,image_data.data + i, 1) != 1) {
+                close(fd);
                 return;
             }
 
