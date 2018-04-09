@@ -331,11 +331,11 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     char *filename = "/tmp/test.png"; // make this right...
 
     // Try to read image from disk.
-    if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {
+    if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "already saved...");
         MagickReadImage(overlay_wand, finfo.fname);
 
     // Write to disk.
-    } else {
+    } else {ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "writing...");
         CURL *curl_handle;
         CURLcode code;
         dims_image_data_t image_data;
@@ -351,16 +351,23 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
             return DIMS_FAILURE;
         }
 
-        if (open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH) != 0) {
-            chmod(filename, 0666);
-            FILE *file;
+        int fd;
+        size_t i = 0;
 
-            if ((file = fopen(filename, "wb+")) != NULL) {
-                fputs(image_data.data, file); // does not work
+        if ((fd = open (filename, O_CREAT | O_WRONLY, 0666)) < 0)
+            return;
+
+        while (i < image_data.used) {
+
+            if (write (fd,image_data.data + i, 1) != 1) {
+                close (fd);
+                return;
             }
 
-            fclose(file);
+            i++;
         }
+
+        close (fd);
     }
 
     float opacity;
