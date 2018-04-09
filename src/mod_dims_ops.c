@@ -328,7 +328,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
     apr_finfo_t finfo;
     apr_status_t status;
-    char *filename = strrchr(overlay_url, '/' );/
+    char *filename = strrchr(overlay_url, '/' );
     ++filename;
     filename = apr_pstrcat(d->pool, "/tmp/", filename, NULL);
 
