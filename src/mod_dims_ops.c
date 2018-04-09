@@ -329,7 +329,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     apr_finfo_t finfo;
     apr_status_t status;
     char *filename = "/tmp/test.png"; // make this right...
-    ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "yo: %s", filename);
 
     // Try to read image from disk.
     if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {
