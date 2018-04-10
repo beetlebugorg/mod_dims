@@ -449,18 +449,38 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         if (overlayWidth > overlayHeight) {
             finalHeight = finalWidth / (overlayWidth / overlayHeight);
 
-        } else {
+        } else if (overlayWidth < overlayHeight) {
             finalHeight = finalWidth / (overlayHeight / overlayWidth);
+
+        } else {
+            finalHeight = finalWidth;
         }
 
-    } else {
+    } else if (originalWidth < originalHeight) {
         finalHeight = originalHeight * size;
 
         if (overlayWidth > overlayHeight) {
             finalWidth = finalHeight / (overlayWidth / overlayHeight);
 
-        } else {
+        } else if (overlayWidth < overlayHeight) {
             finalWidth = finalHeight / (overlayHeight / overlayWidth);
+
+        } else {
+            finalWidth = finalHeight;
+        }
+
+    } else {
+        if (overlayWidth > overlayHeight) {
+            finalWidth = originalWidth * size;
+            finalHeight = finalWidth / (overlayWidth / overlayHeight);
+
+        } else if (overlayWidth < overlayHeight) {
+            finalHeight = originalHeight * size;
+            finalWidth = finalHeight / (overlayHeight / overlayWidth);
+
+        } else {
+            finalWidth = originalWidth * size;
+            finalHeight = originalHeight * size;
         }
     }
 
