@@ -334,7 +334,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         ++filename;
     }
 
-    ++filename;
     filename = apr_pstrcat(d->pool, "/tmp/", filename, NULL);
 
     // Try to read image from disk.
