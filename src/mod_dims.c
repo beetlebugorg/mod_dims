@@ -1151,19 +1151,19 @@ dims_handle_request(dims_request_rec *d)
         }
 
         // Standard signature params.
-        char *signatureParams = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, d->unparsed_commands, d->image_url, NULL);
+        char *signature_params = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, d->unparsed_commands, d->image_url, NULL);
 
         // Concatenate additional params.
         char *token;
         char *strtokstate;
         token = apr_strtok(apr_hash_get(params, "_keys", APR_HASH_KEY_STRING), ",", &strtokstate);
         while (token) {
-            signatureParams = apr_pstrcat(d->pool, signatureParams, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
+            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
             token = apr_strtok(NULL, ",", &strtokstate);
         }
 
         // Hash.
-        gen_hash = ap_md5(d->pool, (unsigned char *) signatureParams);
+        gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
         
         if(d->client_config->secret_key == NULL) {
             gen_hash[7] = '\0';
