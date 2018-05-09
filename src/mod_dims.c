@@ -1138,11 +1138,11 @@ dims_handle_request(dims_request_rec *d)
 
         if (d->r->args) {
             const size_t args_len = strlen(d->r->args) + 1;
-            char *args_copy = malloc(args_len);
-            strncpy(args_copy, d->r->args, args_len);
+            char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
             char *token;
             char *strtokstate;
-            token = apr_strtok(args_copy, "&", &strtokstate);
+
+            token = apr_strtok(args, "&", &strtokstate);
             while (token) {
                 char *param = strtok(token, "=");
                 apr_hash_set(params, param, APR_HASH_KEY_STRING, apr_pstrdup(d->r->pool, param + strlen(param) + 1));

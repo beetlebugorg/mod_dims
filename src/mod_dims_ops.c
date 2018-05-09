@@ -305,12 +305,11 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
     if (d->r->args) {
         const size_t args_len = strlen(d->r->args) + 1;
-        char *args_copy = malloc(args_len);
-        strncpy(args_copy, d->r->args, args_len);
+        char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
         char *token;
         char *strtokstate;
-        token = apr_strtok(args_copy, "&", &strtokstate);
 
+        token = apr_strtok(args, "&", &strtokstate);
         while (token) {
             if (strncmp(token, "overlay=", 4) == 0) {
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
