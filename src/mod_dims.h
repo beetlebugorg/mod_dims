@@ -60,11 +60,12 @@ typedef struct {
     char *data;
     size_t size;
     size_t used;
+    long response_code;
 } dims_image_data_t;
 
 typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, char **err);
 void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsigned long cropHeight);
-void get_image_data(dims_request_rec *d, CURL *curl_handle, CURLcode *code, char *fetch_url, dims_image_data_t *data, long *response_code);
+CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
 
 dims_operation_func 
     dims_strip_operation,

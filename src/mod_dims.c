@@ -487,9 +487,12 @@ char *url_encode(char *str) {
     return buf;
 }
 
-void
-get_image_data(dims_request_rec *d, CURL *curl_handle, CURLcode *code, char *fetch_url, dims_image_data_t *data, long *response_code)
+CURLcode
+dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data)
 {
+    CURL *curl_handle;
+    CURLcode code;
+
     dims_image_data_t image_data;
     image_data.data = NULL;
     image_data.size = 0;
@@ -528,13 +531,14 @@ get_image_data(dims_request_rec *d, CURL *curl_handle, CURLcode *code, char *fet
         curl_easy_setopt(curl_handle, CURLOPT_SHARE, locks->share);
     }
 
-    *code = curl_easy_perform(curl_handle);
+    code = curl_easy_perform(curl_handle);
+
+    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &image_data.response_code);
+    curl_easy_cleanup(curl_handle);
+
     *data = image_data;
 
-    long response;
-    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response);
-    curl_easy_cleanup(curl_handle);
-    *response_code = response;
+    return code;
 }
 
 /**
@@ -544,8 +548,6 @@ get_image_data(dims_request_rec *d, CURL *curl_handle, CURLcode *code, char *fet
 static int 
 dims_fetch_remote_image(dims_request_rec *d, const char *url)
 {
-    CURL *curl_handle;
-    CURLcode code;
     dims_image_data_t image_data;
     char *fetch_url = url ? (char *) url : d->no_image_url;
     int extra_time = 0;
@@ -582,12 +584,10 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
     } else {
-        long response_code;
-        get_image_data(d, curl_handle, &code, fetch_url, &image_data, &response_code);
+        CURLcode code = dims_get_image_data(d, fetch_url, &image_data);
 
         start_time = apr_time_now();
         if(code != 0) {
-            curl_easy_cleanup(curl_handle);
             if(image_data.data) {
                 free(image_data.data);
             }
@@ -607,15 +607,15 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
         d->download_time = (apr_time_now() - start_time) / 1000;
 
-        if(response_code != 200) {
+        if(image_data.response_code != 200) {
+            if(image_data.response_code == 404) {
+                d->status = DIMS_FILE_NOT_FOUND;
+            }
+
             if(image_data.data) {
                 free(image_data.data);
             }
             
-            if(response_code == 404) {
-                d->status = DIMS_FILE_NOT_FOUND;
-            }
-
             return 1;
         }
 
