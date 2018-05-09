@@ -431,58 +431,58 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     MagickColorizeImage(overlay_wand, pColorize, pGivenAlpha);
 
     // Size.
-    size_t originalWidth = MagickGetImageWidth(d->wand);
-    size_t originalHeight = MagickGetImageHeight(d->wand);
+    float original_width = (float) MagickGetImageWidth(d->wand);
+    float original_height = (float) MagickGetImageHeight(d->wand);
 
-    size_t overlayWidth = MagickGetImageWidth(overlay_wand);
-    size_t overlayHeight = MagickGetImageHeight(overlay_wand);
+    float overlay_width = (float) MagickGetImageWidth(overlay_wand);
+    float overlay_height = (float) MagickGetImageHeight(overlay_wand);
 
-    size_t finalWidth;
-    size_t finalHeight;
+    float final_width;
+    float final_height;
 
     // Scale based on largest dimension.
-    if (originalWidth > originalHeight) {
-        finalWidth = originalWidth * size;
+    if (original_width > original_height) {
+        final_width = original_width * size;
 
-        if (overlayWidth > overlayHeight) {
-            finalHeight = finalWidth / (overlayWidth / overlayHeight);
+        if (overlay_width > overlay_height) {
+            final_height = final_width / (overlay_width / overlay_height);
 
-        } else if (overlayWidth < overlayHeight) {
-            finalHeight = finalWidth / (overlayHeight / overlayWidth);
+        } else if (overlay_width < overlay_height) {
+            final_height = final_width / (overlay_height / overlay_width);
 
         } else {
-            finalHeight = finalWidth;
+            final_height = final_width;
         }
 
-    } else if (originalWidth < originalHeight) {
-        finalHeight = originalHeight * size;
+    } else if (original_width < original_height) {
+        final_height = original_height * size;
 
-        if (overlayWidth > overlayHeight) {
-            finalWidth = finalHeight / (overlayWidth / overlayHeight);
+        if (overlay_width > overlay_height) {
+            final_width = final_height / (overlay_width / overlay_height);
 
-        } else if (overlayWidth < overlayHeight) {
-            finalWidth = finalHeight / (overlayHeight / overlayWidth);
+        } else if (overlay_width < overlay_height) {
+            final_width = final_height / (overlay_height / overlay_width);
 
         } else {
-            finalWidth = finalHeight;
+            final_width = final_height;
         }
 
     } else {
-        if (overlayWidth > overlayHeight) {
-            finalWidth = originalWidth * size;
-            finalHeight = finalWidth / (overlayWidth / overlayHeight);
+        if (overlay_width > overlay_height) {
+            final_width = original_width * size;
+            final_height = final_width / (overlay_width / overlay_height);
 
-        } else if (overlayWidth < overlayHeight) {
-            finalHeight = originalHeight * size;
-            finalWidth = finalHeight / (overlayHeight / overlayWidth);
+        } else if (overlay_width < overlay_height) {
+            final_height = original_height * size;
+            final_width = final_height / (overlay_height / overlay_width);
 
         } else {
-            finalWidth = originalWidth * size;
-            finalHeight = originalHeight * size;
+            final_width = original_width * size;
+            final_height = original_height * size;
         }
     }
 
-    MAGICK_CHECK(MagickScaleImage(overlay_wand, finalWidth, finalHeight), d);
+    MAGICK_CHECK(MagickScaleImage(overlay_wand, final_width, final_height), d);
 
     // Apply overlay.
     MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, gravity), d);
