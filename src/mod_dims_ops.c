@@ -17,6 +17,7 @@
 #include "mod_dims.h"
 
 #include <sys/stat.h>
+#include <unistd.h>
 
 #define MAGICK_CHECK(func, rec) \
     do { \
@@ -74,7 +75,7 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
         return DIMS_FAILURE;
@@ -82,8 +83,8 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
 
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
-        double factors[3] = { 2.0, 1.0, 1.0 };
-        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
+        const double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
 
     if (d->optimize_resize) {
@@ -98,7 +99,7 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
         orig_height = MagickGetImageHeight(d->wand);
 
         if(sampleRec.width < orig_width && sampleRec.height < orig_height) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %dx%d before resizing.", sampleRec.width, sampleRec.height);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %zdx%zd before resizing.", sampleRec.width, sampleRec.height);
             MAGICK_CHECK(MagickSampleImage(d->wand, sampleRec.width, sampleRec.height), d);
         }
     }
@@ -129,7 +130,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -137,8 +138,8 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
-        double factors[3] = { 2.0, 1.0, 1.0 };
-        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
+        const double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
 
     if (d->optimize_resize) {
@@ -153,7 +154,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         orig_height = MagickGetImageHeight(d->wand);
 
         if(sampleRec.width < orig_width && sampleRec.height < orig_height) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %dx%d before resizing.", sampleRec.width, sampleRec.height);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %zdx%zd before resizing.", sampleRec.width, sampleRec.height);
             MAGICK_CHECK(MagickSampleImage(d->wand, sampleRec.width, sampleRec.height), d);
         }
     }
@@ -364,7 +365,8 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         while (i < image_data.used) {
             if (write(fd, image_data.data + i, 1) != 1) {
                 close(fd);
-                return;
+                *err = "Unable to write overylay image to cache!";
+                return DIMS_FAILURE;
             }
 
             i++;
@@ -529,7 +531,7 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     int x, y;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = ParseMetaGeometry(args, &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -537,8 +539,8 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
-        double factors[3] = { 2.0, 1.0, 1.0 };
-        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
+        const double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
 
     if(rec.width < 200 && rec.height < 200) {

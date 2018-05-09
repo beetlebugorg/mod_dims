@@ -39,6 +39,9 @@
 #include "mod_dims.h"
 #include "util_md5.h"
 #include "cmyk_icc.h"
+#include <stdio.h>
+#include <ctype.h>
+#include <strings.h>
 #include <scoreboard.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
@@ -841,15 +844,15 @@ dims_send_image(dims_request_rec *d)
     snprintf(buf, 128, "%ld", d->original_image_size);
     apr_table_set(d->r->notes, "DIMS_ORIG_BYTES", buf);
 
-    snprintf(buf, 128, "%lld", d->download_time);
+    snprintf(buf, 128, "%ld", d->download_time);
     apr_table_set(d->r->notes, "DIMS_DL_TIME", buf);
 
-    snprintf(buf, 128, "%lld", (apr_time_now() - d->start_time) / 1000);
+    snprintf(buf, 128, "%ld", (apr_time_now() - d->start_time) / 1000);
     apr_table_set(d->r->notes, "DIMS_TOTAL_TIME", buf);
 
     if(d->status != DIMS_DOWNLOAD_TIMEOUT && 
             d->status != DIMS_IMAGEMAGICK_TIMEOUT) {
-        snprintf(buf, 128, "%lld", d->imagemagick_time);
+        snprintf(buf, 128, "%ld", d->imagemagick_time);
         apr_table_set(d->r->notes, "DIMS_IM_TIME", buf);
     }
 
@@ -985,12 +988,15 @@ dims_process_image(dims_request_rec *d)
     /* Convert image to RGB from CMYK. */
     if(MagickGetImageColorspace(d->wand) == CMYKColorspace) {
         size_t number_profiles;
+        char **profiles;
 
-        char *profiles = MagickGetImageProfiles(d->wand, "icc", &number_profiles);
+        profiles = MagickGetImageProfiles(d->wand, "icc", &number_profiles);
         if (number_profiles == 0) {
             MagickProfileImage(d->wand, "ICC", cmyk_icc, sizeof(cmyk_icc));
         }
         MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
+
+        MagickRelinquishMemory((void *)profiles);
     }
 
     /*
