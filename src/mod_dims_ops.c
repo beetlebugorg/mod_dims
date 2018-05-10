@@ -364,6 +364,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
+    // TODO: Intelligently get temp dir.
     filename = apr_pstrcat(d->pool, "/tmp/dims-cache/", hex, NULL);
 
     // Try to read image from disk.
