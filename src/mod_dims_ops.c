@@ -141,6 +141,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         const double factors[3] = { 2.0, 1.0, 1.0 };
         MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
+    free(format);
 
     if (d->optimize_resize) {
         size_t orig_width;
@@ -486,6 +487,10 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
     // Apply overlay.
     MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, gravity), d);
+
+    DestroyMagickWand(overlay_wand);
+    DestroyPixelWand(pColorize);
+    DestroyPixelWand(pGivenAlpha);
 
     return DIMS_SUCCESS;
 }

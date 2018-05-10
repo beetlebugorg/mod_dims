@@ -542,6 +542,8 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
 
     *data = image_data;
 
+    free(fetch_url);
+
     return code;
 }
 
