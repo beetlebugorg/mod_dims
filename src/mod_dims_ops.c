@@ -351,29 +351,27 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
                 free(image_data.data);
             }
 
-            *err = "Unable to construct wand from image data!";
+            *err = "Unable to fetch overlay image from overlay URL!";
             return DIMS_FAILURE;
         }
 
-        int fd;
-        size_t i = 0;
+        apr_file_t *cached_file;
 
-        if ((fd = open(filename, O_CREAT | O_WRONLY, 0666)) < 0) {
-            *err = "Unable to open file!";
+        status = apr_file_open(&cached_file, filename, APR_FOPEN_CREATE | APR_FOPEN_WRITE, APR_FPROT_UREAD | APR_FPROT_UWRITE, d->pool);
+        if (status != APR_SUCCESS) {
+            *err = "Unable to open overlay cache file!";
             return DIMS_FAILURE;
         }
 
-        while (i < image_data.used) {
-            if (write(fd, image_data.data + i, 1) != 1) {
-                close(fd);
-                *err = "Unable to write overylay image to cache!";
-                return DIMS_FAILURE;
-            }
+        size_t bytes_to_write = image_data.used;
+        if (apr_file_write(cached_file, image_data.data, &bytes_to_write) != APR_SUCCESS) {
+            apr_file_close(cached_file);
 
-            i++;
+            *err = "Unable to write overylay image to cache!";
+            return DIMS_FAILURE;
         }
 
-        close(fd);
+        apr_file_close(cached_file);
     }
 
     float opacity;
