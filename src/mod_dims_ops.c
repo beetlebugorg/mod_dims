@@ -414,6 +414,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         while (gravity_ptr->name != NULL) {
             if (strcmp(token, gravity_ptr->name) == 0) {
                 gravity = gravity_ptr->gravity;
+                break;
             }
 
             gravity_ptr++;
