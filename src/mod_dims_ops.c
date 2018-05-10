@@ -351,7 +351,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
                 free(image_data.data);
             }
 
-            *err = "Unable to construct wand from image data!";
+            *err = "Unable to fetch overlay image from overlay URL!";
             return DIMS_FAILURE;
         }
 
@@ -359,7 +359,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
         status = apr_file_open(&cached_file, filename, APR_FOPEN_CREATE | APR_FOPEN_WRITE, APR_FPROT_UREAD | APR_FPROT_UWRITE, d->pool);
         if (status != APR_SUCCESS) {
-            *err = "Unable to open file!";
+            *err = "Unable to open overlay cache file!";
             return DIMS_FAILURE;
         }
 
