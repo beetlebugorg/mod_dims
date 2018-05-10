@@ -364,7 +364,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
-    filename = apr_pstrcat(d->pool, "/tmp/", hex, NULL);
+    filename = apr_pstrcat(d->pool, "/tmp/dims-cache/", hex, NULL);
 
     // Try to read image from disk.
     if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {
@@ -396,7 +396,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         if (apr_file_write(cached_file, image_data.data, &bytes_to_write) != APR_SUCCESS) {
             apr_file_close(cached_file);
 
-            *err = "Unable to write overylay image to cache!";
+            *err = "Unable to write overlay image to cache!";
             return DIMS_FAILURE;
         }
 
