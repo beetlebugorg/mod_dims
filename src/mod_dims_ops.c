@@ -364,6 +364,14 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
+    status = apr_dir_make_recursive("/tmp/dims-cache/", APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE, d->pool);
+
+    if (status != APR_SUCCESS) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "PROBLEM %s", strerror(errno));
+        *err = "Unable to create cache directory!";
+        return DIMS_FAILURE;
+    }
+
     // TODO: Intelligently get temp dir.
     filename = apr_pstrcat(d->pool, "/tmp/dims-cache/", hex, NULL);
 
