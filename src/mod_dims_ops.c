@@ -441,46 +441,27 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     float final_width;
     float final_height;
 
+    float largest_size;
+
     // Scale based on largest dimension.
     if (original_width > original_height) {
-        final_width = original_width * size;
-
-        if (overlay_width > overlay_height) {
-            final_height = final_width / (overlay_width / overlay_height);
-
-        } else if (overlay_width < overlay_height) {
-            final_height = final_width / (overlay_height / overlay_width);
-
-        } else {
-            final_height = final_width;
-        }
-
-    } else if (original_width < original_height) {
-        final_height = original_height * size;
-
-        if (overlay_width > overlay_height) {
-            final_width = final_height / (overlay_width / overlay_height);
-
-        } else if (overlay_width < overlay_height) {
-            final_width = final_height / (overlay_height / overlay_width);
-
-        } else {
-            final_width = final_height;
-        }
+        largest_size = original_width * size;
 
     } else {
-        if (overlay_width > overlay_height) {
-            final_width = original_width * size;
-            final_height = final_width / (overlay_width / overlay_height);
+        largest_size = original_height * size;
+    }
 
-        } else if (overlay_width < overlay_height) {
-            final_height = original_height * size;
-            final_width = final_height / (overlay_height / overlay_width);
+    if (overlay_width > overlay_height) {
+        final_width = largest_size;
+        final_height = largest_size / (overlay_width / overlay_height);
 
-        } else {
-            final_width = original_width * size;
-            final_height = original_height * size;
-        }
+    } else if (overlay_width < overlay_height) {
+        final_width = largest_size / (overlay_height / overlay_width);
+        final_height = largest_size;
+
+    } else {
+        final_width = largest_size;
+        final_height = largest_size;
     }
 
     MAGICK_CHECK(MagickScaleImage(overlay_wand, final_width, final_height), d);
