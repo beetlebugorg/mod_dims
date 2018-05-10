@@ -45,6 +45,7 @@
 #include <scoreboard.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
+#include <openssl/err.h>
 
 #include <curl/curl.h>
 
@@ -1320,54 +1321,52 @@ dims_sizer(dims_request_rec *d)
 
 }
 
-static char *
-base_64_decode(char *input, int *decoded_length)
+int
+aes_errors(const char *message, size_t length, void *u)
 {
-    BIO *b64, *bmem;
-    char *buffer = (char *) malloc(strlen(input) + 1);
-    memset(buffer, 0, strlen(input) + 1);
-
-    b64 = BIO_new(BIO_f_base64());
-    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-    bmem = BIO_new_mem_buf(input, strlen(input));
-    bmem = BIO_push(b64, bmem);
-
-    *decoded_length = BIO_read(bmem, buffer, strlen(input));
-    buffer[strlen(input)] = '\0';
-    BIO_free_all(bmem);
-
-    return buffer;
+    request_rec *r = (request_rec *) u;
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s", message);
 }
 
-static int
-aes_128_decrypt(unsigned char *ciphertext, unsigned char *key, unsigned char *plaintext, int length)
+static char *
+aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_text, int encrypted_length)
 {
     EVP_CIPHER_CTX *ctx;
-    int len;
-    int plaintext_len;
 
     if (!(ctx = EVP_CIPHER_CTX_new())) {
-        abort();
+        ERR_print_errors_cb(aes_errors, r);
+        return NULL;
     }
 
-    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, key, NULL)) {
-        abort();
+    if (!EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, key, NULL)) {
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
     }
 
-    if (1 != EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, length)) {
-        abort();
+    int decrypted_length;
+    int plaintext_length, out_length;
+    char *plaintext = apr_palloc(r->pool, encrypted_length * sizeof(char));
+    if (EVP_DecryptUpdate(ctx, plaintext, &out_length, encrypted_text, encrypted_length)) {
+        plaintext_length = out_length;
+
+        if (!EVP_DecryptFinal_ex(ctx, plaintext + out_length, &plaintext_length)) {
+            ERR_print_errors_cb(aes_errors, r);
+            EVP_CIPHER_CTX_free(ctx);
+            return NULL;
+        }
+
+        plaintext_length += out_length;
+        plaintext[plaintext_length] = '\0';
+    } else {
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
     }
 
-    plaintext_len = len;
-
-    if (1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) {
-        abort();
-    }
-
-    plaintext_len += len;
     EVP_CIPHER_CTX_free(ctx);
 
-    return plaintext_len;
+    return plaintext;
 }
 
 /**
@@ -1547,34 +1546,36 @@ dims_handler(request_rec *r)
 
                 } else if (strncmp(token, "eurl=", 4) == 0) {
                     eurl = apr_pstrdup(r->pool, token + 5);
-                    int decoded_length;
-                    unsigned char *decoded_url = base_64_decode(eurl, &decoded_length);
-                    unsigned char *secret = (unsigned char *) d->client_config->secret_key;
+
+                    unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
+                    int encrypted_length = apr_base64_decode(encrypted_text, eurl);
 
                     // Hash secret via SHA-1.
+                    unsigned char *secret = (unsigned char *) d->client_config->secret_key;
                     unsigned char hash[SHA_DIGEST_LENGTH];
                     SHA1(secret, sizeof(secret), hash);
 
                     // Convert to hex.
                     char hex[SHA_DIGEST_LENGTH * 2 + 1];
-
-                    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-                        sprintf(&hex[i * 2], "%02X", hash[i]);
+                    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+                        return DIMS_FAILURE;
                     }
 
                     // Use first 16 bytes.
-                    unsigned char key[256];
+                    unsigned char key[16];
                     strncpy(key, hex, 16);
                     key[16] = '\0';
 
-                    unsigned char decrypted[128];
-                    int decrypted_len = aes_128_decrypt(decoded_url, key, decrypted, decoded_length);
-                    decrypted[decrypted_len] = '\0';
+                    // Force key to uppercase
+                    char *s = key;
+                    while (*s) { *s = toupper((unsigned char) *s); s++; }
 
-                    fixed_url = (char *) decrypted;
-                    free(decoded_url);
+                    fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
+                    if (fixed_url == NULL) {
+                        return dims_cleanup(d, "URL Description Failed", DIMS_FAILURE);
+                    }
 
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "URL: %s", fixed_url);
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
                     break;
 
                 } else if (strncmp(token, "optimizeResize=", 4) == 0) {

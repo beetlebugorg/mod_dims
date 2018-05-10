@@ -22,6 +22,8 @@
 #include <apr_file_info.h>
 #include <apr_atomic.h>
 #include <apr_queue.h>
+#include <apr_base64.h>
+#include <apr_escape.h>
 
 #include <httpd.h>
 #include <http_core.h>
