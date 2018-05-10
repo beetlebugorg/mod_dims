@@ -347,7 +347,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     }
 
     apr_finfo_t finfo;
-    apr_status_t status;
     char *filename = strrchr(overlay_url, '/' );
 
     if (*filename == '/') {
@@ -364,9 +363,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
-    status = apr_dir_make_recursive("/tmp/dims-cache/", APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE, d->pool);
-
-    if (status != APR_SUCCESS) {
+    if (apr_dir_make_recursive("/tmp/dims-cache/", APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE, d->pool) != APR_SUCCESS) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "PROBLEM %s", strerror(errno));
         *err = "Unable to create cache directory!";
         return DIMS_FAILURE;
@@ -376,7 +373,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     filename = apr_pstrcat(d->pool, "/tmp/dims-cache/", hex, NULL);
 
     // Try to read image from disk.
-    if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {
+    if (apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool) == 0) {
         MagickReadImage(overlay_wand, finfo.fname);
 
     // Write to disk.
@@ -395,8 +392,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
         apr_file_t *cached_file;
 
-        status = apr_file_open(&cached_file, filename, APR_FOPEN_CREATE | APR_FOPEN_WRITE, APR_FPROT_UREAD | APR_FPROT_UWRITE, d->pool);
-        if (status != APR_SUCCESS) {
+        if (apr_file_open(&cached_file, filename, APR_FOPEN_CREATE | APR_FOPEN_WRITE, APR_FPROT_UREAD | APR_FPROT_UWRITE, d->pool) != APR_SUCCESS) {
             *err = "Unable to open overlay cache file!";
             return DIMS_FAILURE;
         }
