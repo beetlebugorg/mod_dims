@@ -19,6 +19,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <openssl/sha.h>
+#include <stdio.h>
+#include <paths.h>
 
 #define MAGICK_CHECK(func, rec) \
     do { \
@@ -363,13 +365,32 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         return DIMS_FAILURE;
     }
 
-    if (apr_dir_make_recursive("/tmp/dims-cache/", APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE, d->pool) != APR_SUCCESS) {
+    // 1. Check TMPDIR environment variable.
+    // 2. Check P_tmpdir macro from stdio.h.
+    // 3. Check _PATH_TMP macro from paths.h.
+    // 4. Use /tmp/.
+    char *tmp_dir = getenv("TMPDIR");
+
+    if (tmp_dir == NULL) {
+        #ifdef P_tmpdir
+            tmp_dir = P_tmpdir;
+        #else
+            #ifdef _PATH_TMP
+                tmp_dir = _PATH_TMP;
+            #else
+                tmp_dir = "/tmp/";
+            #endif
+        #endif
+    }
+
+    char *cache_dir = apr_pstrcat(d->pool, tmp_dir, "dims-cache/", NULL);
+
+    if (apr_dir_make_recursive(cache_dir, APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE, d->pool) != APR_SUCCESS) {
         *err = "Unable to create cache directory!";
         return DIMS_FAILURE;
     }
 
-    // TODO: Intelligently get temp dir.
-    filename = apr_pstrcat(d->pool, "/tmp/dims-cache/", hex, NULL);
+    filename = apr_pstrcat(d->pool, cache_dir, hex, NULL);
 
     // Try to read image from disk.
     if (apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool) == 0) {
