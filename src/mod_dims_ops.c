@@ -29,6 +29,24 @@
         } \
     } while(0)
 
+typedef struct DimsGravity {
+    char *name;
+    GravityType gravity;
+} DimsGravity;
+
+static DimsGravity gravities[] = {
+    {"n", NorthGravity},
+    {"ne", NorthEastGravity},
+    {"nw", NorthWestGravity},
+    {"s", SouthGravity},
+    {"se", SouthEastGravity},
+    {"sw", SouthWestGravity},
+    {"w", WestGravity},
+    {"e", EastGravity},
+    {"c", CenterGravity},
+    {NULL, CenterGravity}
+};
+
 /*
 apr_status_t
 dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
@@ -391,34 +409,14 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     }
 
     token = strtok(NULL, ",");
-
     if (token) {
-        if (strcmp(token, "nw") == 0) {
-            gravity = NorthWestGravity;
+        DimsGravity *gravity_ptr = gravities;
+        while (gravity_ptr->name != NULL) {
+            if (strcmp(token, gravity_ptr->name) == 0) {
+                gravity = gravity_ptr->gravity;
+            }
 
-        } else if (strcmp(token, "n") == 0) {
-            gravity = NorthGravity;
-
-        } else if (strcmp(token, "ne") == 0) {
-            gravity = NorthEastGravity;
-
-        } else if (strcmp(token, "w") == 0) {
-            gravity = WestGravity;
-
-        } else if (strcmp(token, "c") == 0) {
-            gravity = CenterGravity;
-
-        } else if (strcmp(token, "e") == 0) {
-            gravity = EastGravity;
-
-        } else if (strcmp(token, "sw") == 0) {
-            gravity = SouthWestGravity;
-
-        } else if (strcmp(token, "s") == 0) {
-            gravity = SouthGravity;
-
-        } else if (strcmp(token, "se") == 0) {
-            gravity = SouthEastGravity;
+            gravity_ptr++;
         }
     }
 
