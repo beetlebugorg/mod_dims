@@ -18,6 +18,7 @@
 
 #include <sys/stat.h>
 #include <unistd.h>
+#include <openssl/sha.h>
 
 #define MAGICK_CHECK(func, rec) \
     do { \
@@ -353,7 +354,17 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         ++filename;
     }
 
-    filename = apr_pstrcat(d->pool, "/tmp/", filename, NULL);
+    // Hash filename via SHA-1.
+    unsigned char hash[SHA_DIGEST_LENGTH];
+    SHA1(filename, sizeof(filename), hash);
+
+    // Convert to hex.
+    char hex[SHA_DIGEST_LENGTH * 2 + 1];
+    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+        return DIMS_FAILURE;
+    }
+
+    filename = apr_pstrcat(d->pool, "/tmp/", hex, NULL);
 
     // Try to read image from disk.
     if ((status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool)) == 0) {
