@@ -1665,16 +1665,13 @@ dims_handler(request_rec *r)
     return DECLINED;
 }
 
-static int 
+static int
 dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
 {
     dims_config_rec *config = (dims_config_rec *) 
             ap_get_module_config(s->module_config, &dims_module);
     apr_status_t status;
     apr_size_t retsize;
-
-    MagickWandGenesis();
-    curl_global_init(CURL_GLOBAL_ALL);
 
     ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
 
@@ -1788,17 +1785,20 @@ void unlock_share(CURL *handle, curl_lock_data data, void *userptr)
 }
 
 static apr_status_t
-dims_curl_cleanup(void *data) 
+dims_child_cleanup(void *data)
 {
     dims_curl_rec *locks = (dims_curl_rec *) data;
 
     curl_share_cleanup(locks->share);
+    curl_global_cleanup();
 
     apr_thread_mutex_destroy(locks->share_mutex);
     apr_thread_mutex_destroy(locks->dns_mutex);
 
-    apr_pool_userdata_set(NULL, DIMS_CURL_SHARED_KEY, NULL, 
+    apr_pool_userdata_set(NULL, DIMS_CURL_SHARED_KEY, NULL,
             locks->s->process->pool);
+
+    MagickWandTerminus();
 
     return APR_SUCCESS;
 }
@@ -1806,8 +1806,10 @@ dims_curl_cleanup(void *data)
 static void
 dims_child_init(apr_pool_t *p, server_rec *s)
 {
+    MagickWandGenesis();
     curl_global_init(CURL_GLOBAL_ALL);
-    dims_curl_rec *locks = 
+
+    dims_curl_rec *locks =
             (dims_curl_rec *) apr_pcalloc(p, sizeof(dims_curl_rec));
 
     locks->s = s;
@@ -1831,7 +1833,7 @@ dims_child_init(apr_pool_t *p, server_rec *s)
     /* Register cleanup with the 'p' pool so we can clean up the locks and
      * shared curl handle when this process dies.
      */
-    apr_pool_cleanup_register(p, locks, dims_curl_cleanup, dims_curl_cleanup);
+    apr_pool_cleanup_register(p, locks, dims_child_cleanup, dims_child_cleanup);
 }
 
 static void 
