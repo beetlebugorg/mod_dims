@@ -16,6 +16,12 @@
 
 #include "mod_dims.h"
 
+#include <sys/stat.h>
+#include <unistd.h>
+#include <openssl/sha.h>
+#include <stdio.h>
+#include <paths.h>
+
 #define MAGICK_CHECK(func, rec) \
     do { \
         apr_status_t code = func; \
@@ -25,6 +31,24 @@
             return DIMS_FAILURE; \
         } \
     } while(0)
+
+typedef struct DimsGravity {
+    char *name;
+    GravityType gravity;
+} DimsGravity;
+
+static DimsGravity gravities[] = {
+    {"n", NorthGravity},
+    {"ne", NorthEastGravity},
+    {"nw", NorthWestGravity},
+    {"s", SouthGravity},
+    {"se", SouthEastGravity},
+    {"sw", SouthWestGravity},
+    {"w", WestGravity},
+    {"e", EastGravity},
+    {"c", CenterGravity},
+    {NULL, CenterGravity}
+};
 
 /*
 apr_status_t
@@ -80,8 +104,8 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
 
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
-        double factors[3] = { 2.0, 1.0, 1.0 };
-        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
+        const double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
 
     if (d->optimize_resize) {
@@ -96,7 +120,7 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
         orig_height = MagickGetImageHeight(d->wand);
 
         if(sampleRec.width < orig_width && sampleRec.height < orig_height) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %dx%d before resizing.", sampleRec.width, sampleRec.height);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %zdx%zd before resizing.", sampleRec.width, sampleRec.height);
             MAGICK_CHECK(MagickSampleImage(d->wand, sampleRec.width, sampleRec.height), d);
         }
     }
@@ -127,7 +151,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -135,9 +159,10 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
-        double factors[3] = { 2.0, 1.0, 1.0 };
-        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
+        const double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
+    free(format);
 
     if (d->optimize_resize) {
         size_t orig_width;
@@ -151,7 +176,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         orig_height = MagickGetImageHeight(d->wand);
 
         if(sampleRec.width < orig_width && sampleRec.height < orig_height) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %dx%d before resizing.", sampleRec.width, sampleRec.height);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %zdx%zd before resizing.", sampleRec.width, sampleRec.height);
             MAGICK_CHECK(MagickSampleImage(d->wand, sampleRec.width, sampleRec.height), d);
         }
     }
@@ -290,6 +315,200 @@ dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
     return DIMS_SUCCESS;
 }
 
+/*
+ * Watermark expects (in order) opacity, size of overlay in respect to source image (percentage), and region.
+ * Eg. /watermark/.2,.5,se
+ * This would give us a watermark of 0.2 opacity, 50% of the source image's size, in the southeast region.
+ * This also expects the overlay image url as an additional query parameter.
+ */
+apr_status_t
+dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
+    MagickWand *overlay_wand = NewMagickWand();
+    char *overlay_url = NULL;
+
+    if (d->r->args) {
+        const size_t args_len = strlen(d->r->args) + 1;
+        char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
+        char *token;
+        char *strtokstate;
+
+        token = apr_strtok(args, "&", &strtokstate);
+        while (token) {
+            if (strncmp(token, "overlay=", 4) == 0) {
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
+                overlay_url = apr_pstrdup(d->r->pool, token + 8);
+                ap_unescape_url(overlay_url);
+            }
+            token = apr_strtok(NULL, "&", &strtokstate);
+        }
+    }
+
+    if (overlay_url == NULL) {
+        *err = "No overlay url!";
+        return DIMS_FAILURE;
+    }
+
+    apr_finfo_t finfo;
+    char *filename = strrchr(overlay_url, '/' );
+
+    if (*filename == '/') {
+        ++filename;
+    }
+
+    // Hash filename via SHA-1.
+    unsigned char hash[SHA_DIGEST_LENGTH];
+    SHA1(filename, sizeof(filename), hash);
+
+    // Convert to hex.
+    char hex[SHA_DIGEST_LENGTH * 2 + 1];
+    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+        return DIMS_FAILURE;
+    }
+
+    // 1. Check TMPDIR environment variable.
+    // 2. Check P_tmpdir macro from stdio.h.
+    // 3. Check _PATH_TMP macro from paths.h.
+    // 4. Use /tmp/.
+    char *tmp_dir = getenv("TMPDIR");
+
+    if (tmp_dir == NULL) {
+        #ifdef P_tmpdir
+            tmp_dir = P_tmpdir;
+        #else
+            #ifdef _PATH_TMP
+                tmp_dir = _PATH_TMP;
+            #else
+                tmp_dir = "/tmp/";
+            #endif
+        #endif
+    }
+
+    char *cache_dir = apr_pstrcat(d->pool, tmp_dir, "dims-cache/", NULL);
+
+    if (apr_dir_make_recursive(cache_dir, APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE, d->pool) != APR_SUCCESS) {
+        *err = "Unable to create cache directory!";
+        return DIMS_FAILURE;
+    }
+
+    filename = apr_pstrcat(d->pool, cache_dir, hex, NULL);
+
+    // Try to read image from disk.
+    if (apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool) == 0) {
+        MagickReadImage(overlay_wand, finfo.fname);
+
+    // Write to disk.
+    } else {
+        dims_image_data_t image_data;
+        CURLcode code = dims_get_image_data(d, overlay_url, &image_data);
+
+        if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
+            if (image_data.data) {
+                free(image_data.data);
+            }
+
+            *err = "Unable to fetch overlay image from overlay URL!";
+            return DIMS_FAILURE;
+        }
+
+        apr_file_t *cached_file;
+
+        if (apr_file_open(&cached_file, filename, APR_FOPEN_CREATE | APR_FOPEN_WRITE, APR_FPROT_UREAD | APR_FPROT_UWRITE, d->pool) != APR_SUCCESS) {
+            *err = "Unable to open overlay cache file!";
+            return DIMS_FAILURE;
+        }
+
+        size_t bytes_to_write = image_data.used;
+        if (apr_file_write(cached_file, image_data.data, &bytes_to_write) != APR_SUCCESS) {
+            apr_file_close(cached_file);
+
+            *err = "Unable to write overlay image to cache!";
+            return DIMS_FAILURE;
+        }
+
+        apr_file_close(cached_file);
+    }
+
+    float opacity;
+    double size;
+    GravityType gravity;
+
+    char *token = strtok(args, ",");
+
+    if (token) {
+        opacity = atof(token);
+    }
+
+    token = strtok(NULL, ",");
+
+    if (token) {
+        size = atof(token);
+    }
+
+    token = strtok(NULL, ",");
+    if (token) {
+        DimsGravity *gravity_ptr = gravities;
+        while (gravity_ptr->name != NULL) {
+            if (strcmp(token, gravity_ptr->name) == 0) {
+                gravity = gravity_ptr->gravity;
+                break;
+            }
+
+            gravity_ptr++;
+        }
+    }
+
+    // Opacity.
+    PixelWand *pColorize = NewPixelWand();
+    PixelWand *pGivenAlpha = NewPixelWand();
+    PixelSetColor(pColorize, "transparent");
+    PixelSetAlpha(pGivenAlpha, opacity);
+    MagickColorizeImage(overlay_wand, pColorize, pGivenAlpha);
+
+    // Size.
+    float original_width = (float) MagickGetImageWidth(d->wand);
+    float original_height = (float) MagickGetImageHeight(d->wand);
+
+    float overlay_width = (float) MagickGetImageWidth(overlay_wand);
+    float overlay_height = (float) MagickGetImageHeight(overlay_wand);
+
+    float final_width;
+    float final_height;
+
+    float largest_size;
+
+    // Scale based on largest dimension.
+    if (original_width > original_height) {
+        largest_size = original_width * size;
+
+    } else {
+        largest_size = original_height * size;
+    }
+
+    if (overlay_width > overlay_height) {
+        final_width = largest_size;
+        final_height = largest_size / (overlay_width / overlay_height);
+
+    } else if (overlay_width < overlay_height) {
+        final_width = largest_size / (overlay_height / overlay_width);
+        final_height = largest_size;
+
+    } else {
+        final_width = largest_size;
+        final_height = largest_size;
+    }
+
+    MAGICK_CHECK(MagickScaleImage(overlay_wand, final_width, final_height), d);
+
+    // Apply overlay.
+    MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, gravity), d);
+
+    DestroyMagickWand(overlay_wand);
+    DestroyPixelWand(pColorize);
+    DestroyPixelWand(pGivenAlpha);
+
+    return DIMS_SUCCESS;
+}
+
 
 /**
  * Legacy API support.
@@ -331,7 +550,7 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     int x, y;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -339,8 +558,8 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
-        double factors[3] = { 2.0, 1.0, 1.0 };
-        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, &factors), d);
+        const double factors[3] = { 2.0, 1.0, 1.0 };
+        MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
 
     if(rec.width < 200 && rec.height < 200) {

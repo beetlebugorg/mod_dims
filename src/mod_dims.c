@@ -34,12 +34,18 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.11"
+#define MODULE_VERSION "3.3.12"
 
 #include "mod_dims.h"
 #include "util_md5.h"
 #include "cmyk_icc.h"
+#include <stdio.h>
+#include <ctype.h>
+#include <strings.h>
 #include <scoreboard.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
+#include <openssl/err.h>
 
 #include <curl/curl.h>
 
@@ -63,12 +69,6 @@ typedef struct {
     apr_thread_mutex_t *share_mutex;
     apr_thread_mutex_t *dns_mutex;
 } dims_curl_rec;
-
-typedef struct {
-    char *data;
-    size_t size;
-    size_t used;
-} dims_image_data_t;
 
 typedef struct {
     dims_request_rec *d;
@@ -491,6 +491,62 @@ char *url_encode(char *str) {
     return buf;
 }
 
+CURLcode
+dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data)
+{
+    CURL *curl_handle;
+    CURLcode code;
+
+    dims_image_data_t image_data;
+    image_data.data = NULL;
+    image_data.size = 0;
+    image_data.used = 0;
+    int extra_time = 0;
+
+    /* Allow for some extra time to download the NOIMAGE image. */
+    void *s = NULL;
+
+    if (d->status == DIMS_DOWNLOAD_TIMEOUT) {
+        extra_time += 500;
+    }
+
+    apr_pool_userdata_get((void *) &s, DIMS_CURL_SHARED_KEY,
+            d->r->server->process->pool);
+
+    /* Encode the fetch URL before downloading */
+    fetch_url = url_encode(fetch_url);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
+
+    curl_handle = curl_easy_init();
+    curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
+    curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, dims_write_header_cb);
+    curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
+    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
+    curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
+    curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
+
+    /* The curl shared handle allows this process to share DNS cache
+     * and prevents the DNS cache from going away after every request.
+     */
+    if (s) {
+        dims_curl_rec *locks = (dims_curl_rec *) s;
+        curl_easy_setopt(curl_handle, CURLOPT_SHARE, locks->share);
+    }
+
+    code = curl_easy_perform(curl_handle);
+
+    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &image_data.response_code);
+    curl_easy_cleanup(curl_handle);
+
+    *data = image_data;
+
+    free(fetch_url);
+
+    return code;
+}
+
 /**
  * Fetch remote image.  If successful the MagicWand will
  * have the new image loaded.
@@ -498,8 +554,6 @@ char *url_encode(char *str) {
 static int 
 dims_fetch_remote_image(dims_request_rec *d, const char *url)
 {
-    CURL *curl_handle;
-    CURLcode code;
     dims_image_data_t image_data;
     char *fetch_url = url ? (char *) url : d->no_image_url;
     int extra_time = 0;
@@ -536,46 +590,10 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
     } else {
-        /* Allow for some extra time to download the NOIMAGE image. */
-        void *s = NULL;
-
-        if(d->status == DIMS_DOWNLOAD_TIMEOUT) {
-            extra_time += 500;
-        }
-
-        apr_pool_userdata_get((void *) &s, DIMS_CURL_SHARED_KEY, 
-                d->r->server->process->pool);
-
-        image_data.data = NULL;
-        image_data.size = 0;
-        image_data.used = 0;
-
-        /* Encode the fetch URL before downloading */
-        fetch_url = url_encode(fetch_url);
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                "Encoded URL: %s ", fetch_url);
-
-        curl_handle = curl_easy_init();
-        curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
-        curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
-        curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
-        curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, dims_write_header_cb);
-        curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
-        curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
-        curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
-        curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
-
-        /* The curl shared handle allows this process to share DNS cache
-         * and prevents the DNS cache from going away after every request.
-         */
-        if(s) {
-            dims_curl_rec *locks = (dims_curl_rec *) s;
-            curl_easy_setopt(curl_handle, CURLOPT_SHARE, locks->share);
-        } 
+        CURLcode code = dims_get_image_data(d, fetch_url, &image_data);
 
         start_time = apr_time_now();
-        if((code = curl_easy_perform(curl_handle)) != 0) {
-            curl_easy_cleanup(curl_handle);
+        if(code != 0) {
             if(image_data.data) {
                 free(image_data.data);
             }
@@ -590,28 +608,20 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
             d->download_time = (apr_time_now() - start_time) / 1000;
 
-            free(fetch_url);
-
             return 1;
         }
 
         d->download_time = (apr_time_now() - start_time) / 1000;
 
-        /* Verify we actually recieved an image. */
-        long response_code = 0;
-        curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
-        curl_easy_cleanup(curl_handle);
-        if(response_code != 200) {
+        if(image_data.response_code != 200) {
+            if(image_data.response_code == 404) {
+                d->status = DIMS_FILE_NOT_FOUND;
+            }
+
             if(image_data.data) {
                 free(image_data.data);
             }
             
-            if(response_code == 404) {
-                d->status = DIMS_FILE_NOT_FOUND;
-            }
-
-            free(fetch_url);
-
             return 1;
         }
 
@@ -628,8 +638,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                     "ImageMagick error, '%s', on request: %s ", 
                     MagickGetException(d->wand, &et), d->r->uri);
 
-            free(fetch_url);
-
             return 1;
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
@@ -641,8 +649,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
             d->original_image_size = image_data.used;
         }
-
-        free(fetch_url);
     }
 
     return 0;
@@ -841,15 +847,15 @@ dims_send_image(dims_request_rec *d)
     snprintf(buf, 128, "%ld", d->original_image_size);
     apr_table_set(d->r->notes, "DIMS_ORIG_BYTES", buf);
 
-    snprintf(buf, 128, "%lld", d->download_time);
+    snprintf(buf, 128, "%ld", d->download_time);
     apr_table_set(d->r->notes, "DIMS_DL_TIME", buf);
 
-    snprintf(buf, 128, "%lld", (apr_time_now() - d->start_time) / 1000);
+    snprintf(buf, 128, "%ld", (apr_time_now() - d->start_time) / 1000);
     apr_table_set(d->r->notes, "DIMS_TOTAL_TIME", buf);
 
     if(d->status != DIMS_DOWNLOAD_TIMEOUT && 
             d->status != DIMS_IMAGEMAGICK_TIMEOUT) {
-        snprintf(buf, 128, "%lld", d->imagemagick_time);
+        snprintf(buf, 128, "%ld", d->imagemagick_time);
         apr_table_set(d->r->notes, "DIMS_IM_TIME", buf);
     }
 
@@ -985,12 +991,15 @@ dims_process_image(dims_request_rec *d)
     /* Convert image to RGB from CMYK. */
     if(MagickGetImageColorspace(d->wand) == CMYKColorspace) {
         size_t number_profiles;
+        char **profiles;
 
-        char *profiles = MagickGetImageProfiles(d->wand, "icc", &number_profiles);
+        profiles = MagickGetImageProfiles(d->wand, "icc", &number_profiles);
         if (number_profiles == 0) {
             MagickProfileImage(d->wand, "ICC", cmyk_icc, sizeof(cmyk_icc));
         }
         MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
+
+        MagickRelinquishMemory((void *)profiles);
     }
 
     /*
@@ -1131,9 +1140,39 @@ dims_handle_request(dims_request_rec *d)
                 "Image expiry too far in the future:%s %s now=%ld",expires_str, d->r->uri,now);
             return dims_cleanup(d, "Image key too far in the future", DIMS_BAD_URL);
         }
-        gen_hash = ap_md5(d->pool,
-            (unsigned char *) apr_pstrcat(d->pool, expires_str, 
-                d->client_config->secret_key, d->unparsed_commands, d->image_url, NULL));
+
+        // Throw all query params and their values into a hash table.
+        // This is used to derive additional signature params.
+        apr_hash_t *params = apr_hash_make(d->pool);
+
+        if (d->r->args) {
+            const size_t args_len = strlen(d->r->args) + 1;
+            char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
+            char *token;
+            char *strtokstate;
+
+            token = apr_strtok(args, "&", &strtokstate);
+            while (token) {
+                char *param = strtok(token, "=");
+                apr_hash_set(params, param, APR_HASH_KEY_STRING, apr_pstrdup(d->r->pool, param + strlen(param) + 1));
+                token = apr_strtok(NULL, "&", &strtokstate);
+            }
+        }
+
+        // Standard signature params.
+        char *signature_params = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, d->unparsed_commands, d->image_url, NULL);
+
+        // Concatenate additional params.
+        char *token;
+        char *strtokstate;
+        token = apr_strtok(apr_hash_get(params, "_keys", APR_HASH_KEY_STRING), ",", &strtokstate);
+        while (token) {
+            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
+            token = apr_strtok(NULL, ",", &strtokstate);
+        }
+
+        // Hash.
+        gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
         
         if(d->client_config->secret_key == NULL) {
             gen_hash[7] = '\0';
@@ -1282,6 +1321,54 @@ dims_sizer(dims_request_rec *d)
     ap_rprintf(d->r, "{\n\t\"height\": %ld,\n\t\"width\": %ld\n}", height, width );
     return OK;
 
+}
+
+int
+aes_errors(const char *message, size_t length, void *u)
+{
+    request_rec *r = (request_rec *) u;
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s", message);
+}
+
+static char *
+aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_text, int encrypted_length)
+{
+    EVP_CIPHER_CTX *ctx;
+
+    if (!(ctx = EVP_CIPHER_CTX_new())) {
+        ERR_print_errors_cb(aes_errors, r);
+        return NULL;
+    }
+
+    if (!EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, key, NULL)) {
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
+    }
+
+    int decrypted_length;
+    int plaintext_length, out_length;
+    char *plaintext = apr_palloc(r->pool, encrypted_length * sizeof(char));
+    if (EVP_DecryptUpdate(ctx, plaintext, &out_length, encrypted_text, encrypted_length)) {
+        plaintext_length = out_length;
+
+        if (!EVP_DecryptFinal_ex(ctx, plaintext + out_length, &plaintext_length)) {
+            ERR_print_errors_cb(aes_errors, r);
+            EVP_CIPHER_CTX_free(ctx);
+            return NULL;
+        }
+
+        plaintext_length += out_length;
+        plaintext[plaintext_length] = '\0';
+    } else {
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return plaintext;
 }
 
 /**
@@ -1433,22 +1520,67 @@ dims_handler(request_rec *r)
             (r->uri && strncmp(r->uri, "/dims3/", 7) == 0) ||
             (strcmp( r->handler,"dims4") == 0 )) {
         /* Handle new-style DIMS parameters. */
-        char *p, *url = NULL, *fixed_url = NULL, *commands = NULL;
+        char *p, *url = NULL, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
         if (( strcmp( r->handler,"dims4") == 0)) {
                d->use_secret_key = 1;
         }
 
+        char *unparsed_commands = apr_pstrdup(r->pool, r->uri + 7);
+        d->client_id = ap_getword(d->pool, (const char **) &unparsed_commands, '/');
+
+        if(!(d->client_config =
+                apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
+            return dims_cleanup(d, "Application ID is not valid", DIMS_BAD_CLIENT);
+        }
+
         /* Check first if URL is passed as a query parameter. */
         if(r->args) {
+            const size_t args_len = strlen(r->args) + 1;
+            char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
             char *token;
             char *strtokstate;
-            token = apr_strtok(r->args, "&", &strtokstate);
+            token = apr_strtok(args, "&", &strtokstate);
             while (token) {
                 if(strncmp(token, "url=", 4) == 0) {
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                     fixed_url = apr_pstrdup(r->pool, token + 4);
                     ap_unescape_url(fixed_url);
-                } else if(strncmp(token, "optimizeResize=", 4) == 0) {
+
+                } else if (strncmp(token, "eurl=", 4) == 0) {
+                    eurl = apr_pstrdup(r->pool, token + 5);
+
+                    unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
+                    int encrypted_length = apr_base64_decode(encrypted_text, eurl);
+
+                    // Hash secret via SHA-1.
+                    unsigned char *secret = (unsigned char *) d->client_config->secret_key;
+                    unsigned char hash[SHA_DIGEST_LENGTH];
+                    SHA1(secret, sizeof(secret), hash);
+
+                    // Convert to hex.
+                    char hex[SHA_DIGEST_LENGTH * 2 + 1];
+                    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+                        return DIMS_FAILURE;
+                    }
+
+                    // Use first 16 bytes.
+                    unsigned char key[16];
+                    strncpy(key, hex, 16);
+                    key[16] = '\0';
+
+                    // Force key to uppercase
+                    char *s = key;
+                    while (*s) { *s = toupper((unsigned char) *s); s++; }
+
+                    fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
+                    if (fixed_url == NULL) {
+                        return dims_cleanup(d, "URL Description Failed", DIMS_FAILURE);
+                    }
+
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
+                    break;
+
+                } else if (strncmp(token, "optimizeResize=", 4) == 0) {
                     d->optimize_resize = atof(token + 15);
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Overriding optimize resize: %f", d->optimize_resize);
                 }
@@ -1533,16 +1665,13 @@ dims_handler(request_rec *r)
     return DECLINED;
 }
 
-static int 
+static int
 dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
 {
     dims_config_rec *config = (dims_config_rec *) 
             ap_get_module_config(s->module_config, &dims_module);
     apr_status_t status;
     apr_size_t retsize;
-
-    MagickWandGenesis();
-    curl_global_init(CURL_GLOBAL_ALL);
 
     ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
 
@@ -1568,6 +1697,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     apr_hash_set(ops, "autolevel", APR_HASH_KEY_STRING, dims_autolevel_operation);
     apr_hash_set(ops, "rotate", APR_HASH_KEY_STRING, dims_rotate_operation);
     apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
+    apr_hash_set(ops, "watermark", APR_HASH_KEY_STRING, dims_watermark_operation);
 
     /* Init APR's atomic functions */
     status = apr_atomic_init(p);
@@ -1655,17 +1785,20 @@ void unlock_share(CURL *handle, curl_lock_data data, void *userptr)
 }
 
 static apr_status_t
-dims_curl_cleanup(void *data) 
+dims_child_cleanup(void *data)
 {
     dims_curl_rec *locks = (dims_curl_rec *) data;
 
     curl_share_cleanup(locks->share);
+    curl_global_cleanup();
 
     apr_thread_mutex_destroy(locks->share_mutex);
     apr_thread_mutex_destroy(locks->dns_mutex);
 
-    apr_pool_userdata_set(NULL, DIMS_CURL_SHARED_KEY, NULL, 
+    apr_pool_userdata_set(NULL, DIMS_CURL_SHARED_KEY, NULL,
             locks->s->process->pool);
+
+    MagickWandTerminus();
 
     return APR_SUCCESS;
 }
@@ -1673,8 +1806,10 @@ dims_curl_cleanup(void *data)
 static void
 dims_child_init(apr_pool_t *p, server_rec *s)
 {
+    MagickWandGenesis();
     curl_global_init(CURL_GLOBAL_ALL);
-    dims_curl_rec *locks = 
+
+    dims_curl_rec *locks =
             (dims_curl_rec *) apr_pcalloc(p, sizeof(dims_curl_rec));
 
     locks->s = s;
@@ -1698,7 +1833,7 @@ dims_child_init(apr_pool_t *p, server_rec *s)
     /* Register cleanup with the 'p' pool so we can clean up the locks and
      * shared curl handle when this process dies.
      */
-    apr_pool_cleanup_register(p, locks, dims_curl_cleanup, dims_curl_cleanup);
+    apr_pool_cleanup_register(p, locks, dims_child_cleanup, dims_child_cleanup);
 }
 
 static void 

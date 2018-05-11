@@ -22,6 +22,8 @@
 #include <apr_file_info.h>
 #include <apr_atomic.h>
 #include <apr_queue.h>
+#include <apr_base64.h>
+#include <apr_escape.h>
 
 #include <httpd.h>
 #include <http_core.h>
@@ -31,6 +33,8 @@
 #include <http_protocol.h>
 
 #include <wand/magick-wand.h>
+
+#include <curl/curl.h>
 
 #define LEGACY_DIMS_RESIZE 1
 #define LEGACY_DIMS_REFORMAT 2
@@ -54,9 +58,16 @@
 typedef struct dims_request_rec dims_request_rec;
 typedef struct dims_config_rec dims_config_rec;
 typedef struct dims_client_config_rec dims_client_config_rec;
+typedef struct {
+    char *data;
+    size_t size;
+    size_t used;
+    long response_code;
+} dims_image_data_t;
 
 typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, char **err);
 void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsigned long cropHeight);
+CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
 
 dims_operation_func 
     dims_strip_operation,
@@ -75,6 +86,7 @@ dims_operation_func
     dims_autolevel_operation,
     dims_rotate_operation,
     dims_invert_operation,
+    dims_watermark_operation,
     dims_legacy_crop_operation;
 
 struct dims_config_rec {
