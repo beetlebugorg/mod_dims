@@ -1007,69 +1007,94 @@ dims_process_image(dims_request_rec *d)
      */
     MagickAutoOrientImage(d->wand);
 
-    /* Flatten images (i.e animated gif) */
+    /* Flatten images (i.e animated gif) only if there's an overlay. Otherwise, pass through. */
     ssize_t images = MagickGetNumberImages(d->wand);
+    int flatten = 1;
     if (images > 1) {
-        for (int i = 1; i <= images - 1; i++) {
-            MagickSetIteratorIndex(d->wand, i);
-            MagickRemoveImage(d->wand);
+        if (d->r->args) {
+            const size_t args_len = strlen(d->r->args) + 1;
+            char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
+            char *token;
+            char *strtokstate;
+    
+            token = apr_strtok(args, "&", &strtokstate);
+            while (token) {
+                if (strncmp(token, "overlay=", 4) == 0) {
+                    flatten = 0;
+                    break;
+                }
+                token = apr_strtok(NULL, "&", &strtokstate);
+            }
+        }
+    
+        if (flatten == 0) {
+            for (int i = 1; i <= images - 1; i++) {
+                MagickSetIteratorIndex(d->wand, i);
+                MagickRemoveImage(d->wand);
+            }
         }
     }
 
-    const char *cmds = d->unparsed_commands;
-    while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
-        char *command = ap_getword(d->pool, &cmds, '/');
-
-        if(strlen(command) > 0) {
-            char *args = ap_getword(d->pool, &cmds, '/');
-
-            /* If the NOIMAGE image is being used for some reason then
-            * we don't want to crop it.
-            */
-            if(d->use_no_image &&
-                    (strcmp(command, "crop") == 0 ||
-                    strcmp(command, "legacy_thumbnail") == 0 ||
-                    strcmp(command, "legacy_crop") == 0 ||
-                    strcmp(command, "thumbnail") == 0)) {
-                MagickStatusType flags;
-                RectangleInfo rec;
-
-                flags = ParseAbsoluteGeometry(args, &rec);
-
-                if(rec.width > 0 && rec.height == 0) {
-                    args = apr_psprintf(d->pool, "%ld", rec.width);
-                } else if(rec.height > 0 && rec.width == 0) {
-                    args = apr_psprintf(d->pool, "x%ld", rec.height);
-                } else if(rec.width > 0 && rec.height > 0) {
-                    args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
-                } else {
-                    return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
+    if (images == 1 || flatten == 0) {
+        const char *cmds = d->unparsed_commands;
+        while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
+            char *command = ap_getword(d->pool, &cmds, '/');
+    
+            if(strlen(command) > 0) {
+                char *args = ap_getword(d->pool, &cmds, '/');
+    
+                /* If the NOIMAGE image is being used for some reason then
+                * we don't want to crop it.
+                */
+                if(d->use_no_image &&
+                        (strcmp(command, "crop") == 0 ||
+                        strcmp(command, "legacy_thumbnail") == 0 ||
+                        strcmp(command, "legacy_crop") == 0 ||
+                        strcmp(command, "thumbnail") == 0)) {
+                    MagickStatusType flags;
+                    RectangleInfo rec;
+    
+                    flags = ParseAbsoluteGeometry(args, &rec);
+    
+                    if(rec.width > 0 && rec.height == 0) {
+                        args = apr_psprintf(d->pool, "%ld", rec.width);
+                    } else if(rec.height > 0 && rec.width == 0) {
+                        args = apr_psprintf(d->pool, "x%ld", rec.height);
+                    } else if(rec.width > 0 && rec.height > 0) {
+                        args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
+                    } else {
+                        return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
+                    }
+    
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                        "Rewriting command %s to 'resize' because a NOIMAGE "
+                        "image is being processed.", command);
+    
+                    command = "resize";
                 }
-
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                    "Rewriting command %s to 'resize' because a NOIMAGE "
-                    "image is being processed.", command);
-
-                command = "resize";
-            }
-
-            // Check if the command is present and set flag.
-            if(strcmp(command, "strip") == 0) {
-                exc_strip_cmd = 1;
-            }
-
-            dims_operation_func *func =
-                    apr_hash_get(ops, command, APR_HASH_KEY_STRING);
-            if(func != NULL) {
-                char *err = NULL;
-                apr_status_t code;
-
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                    "Executing command %s(%s), on request %s",
-                    command, args, d->r->uri);
-
-                if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                    return dims_cleanup(d, err, code);
+                
+                // If flattened, only utilize watermark command.
+                if (flatten != 0 || strcmp(command, "watermark") == 0) {
+                
+                    // Check if the command is present and set flag.
+                    if(strcmp(command, "strip") == 0) {
+                        exc_strip_cmd = 1;
+                    }
+        
+                    dims_operation_func *func =
+                            apr_hash_get(ops, command, APR_HASH_KEY_STRING);
+                    if(func != NULL) {
+                        char *err = NULL;
+                        apr_status_t code;
+        
+                        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                            "Executing command %s(%s), on request %s",
+                            command, args, d->r->uri);
+        
+                        if((code = func(d, args, &err)) != DIMS_SUCCESS) {
+                            return dims_cleanup(d, err, code);
+                        }
+                    }
                 }
             }
         }
