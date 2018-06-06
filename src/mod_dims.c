@@ -1010,23 +1010,18 @@ dims_process_image(dims_request_rec *d)
     /* Flatten images (i.e animated gif) only if there's an overlay. Otherwise, pass through. */
     ssize_t images = MagickGetNumberImages(d->wand);
     int flatten = 1;
+
     if (images > 1) {
-        if (d->r->args) {
-            const size_t args_len = strlen(d->r->args) + 1;
-            char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
-            char *token;
-            char *strtokstate;
-    
-            token = apr_strtok(args, "&", &strtokstate);
-            while (token) {
-                if (strncmp(token, "overlay=", 4) == 0) {
-                    flatten = 0;
-                    break;
-                }
-                token = apr_strtok(NULL, "&", &strtokstate);
+        const char *cmds = d->unparsed_commands;
+        while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
+            char *command = ap_getword(d->pool, &cmds, '/');
+
+            if (strcmp(command, "watermark") == 0) {
+                flatten = 0;
+                break;
             }
         }
-    
+
         if (flatten == 0) {
             for (int i = 1; i <= images - 1; i++) {
                 MagickSetIteratorIndex(d->wand, i);
