@@ -39,6 +39,7 @@
 #include "mod_dims.h"
 #include "util_md5.h"
 #include "cmyk_icc.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <strings.h>
@@ -1009,7 +1010,7 @@ dims_process_image(dims_request_rec *d)
 
     /* Flatten images (i.e animated gif) only if there's an overlay. Otherwise, pass through. */
     ssize_t images = MagickGetNumberImages(d->wand);
-    int flatten = 1;
+    bool should_flatten = false;
 
     if (images > 1) {
         const char *cmds = d->unparsed_commands;
@@ -1017,12 +1018,12 @@ dims_process_image(dims_request_rec *d)
             char *command = ap_getword(d->pool, &cmds, '/');
 
             if (strcmp(command, "watermark") == 0) {
-                flatten = 0;
+                should_flatten = true;
                 break;
             }
         }
 
-        if (flatten == 0) {
+        if (should_flatten) {
             for (int i = 1; i <= images - 1; i++) {
                 MagickSetIteratorIndex(d->wand, i);
                 MagickRemoveImage(d->wand);
@@ -1030,7 +1031,7 @@ dims_process_image(dims_request_rec *d)
         }
     }
 
-    if (images == 1 || flatten == 0) {
+    if (images == 1 || should_flatten) {
         const char *cmds = d->unparsed_commands;
         while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
             char *command = ap_getword(d->pool, &cmds, '/');
