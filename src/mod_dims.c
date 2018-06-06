@@ -1042,7 +1042,7 @@ dims_process_image(dims_request_rec *d)
                 /* If the NOIMAGE image is being used for some reason then
                 * we don't want to crop it.
                 */
-                if(d->use_no_image &&
+                if(d->use_no_image && 
                         (strcmp(command, "crop") == 0 ||
                         strcmp(command, "legacy_thumbnail") == 0 ||
                         strcmp(command, "legacy_crop") == 0 ||
@@ -1066,7 +1066,7 @@ dims_process_image(dims_request_rec *d)
                         "Rewriting command %s to 'resize' because a NOIMAGE "
                         "image is being processed.", command);
 
-                    command = "resize";
+                    command = "resize"; 
                 }
 
                 // Check if the command is present and set flag.
