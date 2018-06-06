@@ -1038,7 +1038,7 @@ dims_process_image(dims_request_rec *d)
     
             if(strlen(command) > 0) {
                 char *args = ap_getword(d->pool, &cmds, '/');
-    
+
                 /* If the NOIMAGE image is being used for some reason then
                 * we don't want to crop it.
                 */
@@ -1049,9 +1049,9 @@ dims_process_image(dims_request_rec *d)
                         strcmp(command, "thumbnail") == 0)) {
                     MagickStatusType flags;
                     RectangleInfo rec;
-    
+
                     flags = ParseAbsoluteGeometry(args, &rec);
-    
+
                     if(rec.width > 0 && rec.height == 0) {
                         args = apr_psprintf(d->pool, "%ld", rec.width);
                     } else if(rec.height > 0 && rec.width == 0) {
@@ -1061,11 +1061,11 @@ dims_process_image(dims_request_rec *d)
                     } else {
                         return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
                     }
-    
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
                         "Rewriting command %s to 'resize' because a NOIMAGE "
                         "image is being processed.", command);
-    
+
                     command = "resize";
                 }
 
@@ -1080,12 +1080,12 @@ dims_process_image(dims_request_rec *d)
                     char *err = NULL;
                     apr_status_t code;
 
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                        "Executing command %s(%s), on request %s",
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+                        "Executing command %s(%s), on request %s", 
                         command, args, d->r->uri);
 
                     if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                        return dims_cleanup(d, err, code);
+                        return dims_cleanup(d, err, code); 
                     }
                 }
             }
