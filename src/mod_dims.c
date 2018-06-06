@@ -1072,28 +1072,24 @@ dims_process_image(dims_request_rec *d)
     
                     command = "resize";
                 }
-                
-                // If flattened, only utilize watermark command.
-                if (flatten != 0 || strcmp(command, "watermark") == 0) {
-                
-                    // Check if the command is present and set flag.
-                    if(strcmp(command, "strip") == 0) {
-                        exc_strip_cmd = 1;
-                    }
-        
-                    dims_operation_func *func =
-                            apr_hash_get(ops, command, APR_HASH_KEY_STRING);
-                    if(func != NULL) {
-                        char *err = NULL;
-                        apr_status_t code;
-        
-                        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                            "Executing command %s(%s), on request %s",
-                            command, args, d->r->uri);
-        
-                        if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                            return dims_cleanup(d, err, code);
-                        }
+
+                // Check if the command is present and set flag.
+                if(strcmp(command, "strip") == 0) {
+                    exc_strip_cmd = 1;
+                }
+
+                dims_operation_func *func =
+                        apr_hash_get(ops, command, APR_HASH_KEY_STRING);
+                if(func != NULL) {
+                    char *err = NULL;
+                    apr_status_t code;
+
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                        "Executing command %s(%s), on request %s",
+                        command, args, d->r->uri);
+
+                    if((code = func(d, args, &err)) != DIMS_SUCCESS) {
+                        return dims_cleanup(d, err, code);
                     }
                 }
             }
