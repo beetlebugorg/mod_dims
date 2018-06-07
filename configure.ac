@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(mod_dims, 3.3.12, [jeremy.collins@beetlebug.org])
+AC_INIT(mod_dims, 3.3.13, [jeremy.collins@beetlebug.org])
 AM_INIT_AUTOMAKE([no-define])
 AC_CONFIG_SRCDIR([src/mod_dims.c])
 
