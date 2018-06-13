@@ -34,11 +34,12 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.12"
+#define MODULE_VERSION "3.3.13"
 
 #include "mod_dims.h"
 #include "util_md5.h"
 #include "cmyk_icc.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <strings.h>
@@ -625,6 +626,12 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             return 1;
         }
 
+        // Ensure SVGs have the appropriate XML header.
+        if (strncmp(image_data.data, "<svg", 4) == 0) {
+            image_data.data = apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", image_data.data, NULL);
+            image_data.used += 55;
+        }
+
         start_time = apr_time_now();
         if(MagickReadImageBlob(d->wand, image_data.data, image_data.used) 
                 == MagickFalse) {
@@ -641,10 +648,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             return 1;
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
-
-        if(image_data.data) {
-            free(image_data.data);
-        }
 
         if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
             d->original_image_size = image_data.used;
@@ -1007,13 +1010,34 @@ dims_process_image(dims_request_rec *d)
      */
     MagickAutoOrientImage(d->wand);
 
-    /* Process operations, iterating over all frames of this image. */
-    ssize_t images = MagickGetIteratorIndex(d->wand);
-    if (images == 0) {
+    /* Flatten images (i.e animated gif) only if there's an overlay. Otherwise, pass through. */
+    size_t images = MagickGetNumberImages(d->wand);
+    bool should_flatten = false;
+
+    if (images > 1) {
         const char *cmds = d->unparsed_commands;
         while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
             char *command = ap_getword(d->pool, &cmds, '/');
 
+            if (strcmp(command, "watermark") == 0) {
+                should_flatten = true;
+                break;
+            }
+        }
+
+        if (should_flatten) {
+            for (int i = 1; i <= images - 1; i++) {
+                MagickSetIteratorIndex(d->wand, i);
+                MagickRemoveImage(d->wand);
+            }
+        }
+    }
+
+    if (images == 1 || should_flatten) {
+        const char *cmds = d->unparsed_commands;
+        while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
+            char *command = ap_getword(d->pool, &cmds, '/');
+    
             if(strlen(command) > 0) {
                 char *args = ap_getword(d->pool, &cmds, '/');
 
