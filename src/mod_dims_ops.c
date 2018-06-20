@@ -151,7 +151,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -550,7 +550,7 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     int x, y;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
