@@ -652,6 +652,8 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
             d->original_image_size = image_data.used;
         }
+
+        free(image_data.data);
     }
 
     return 0;
