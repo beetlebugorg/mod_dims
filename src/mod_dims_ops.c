@@ -426,6 +426,8 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         }
 
         apr_file_close(cached_file);
+
+        free(image_data.data);
     }
 
     float opacity;
