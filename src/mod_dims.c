@@ -108,10 +108,10 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->strip_metadata = 1;
     config->optimize_resize = 0;
 
-    config->area_size = 128 * 1024 * 1024;         //  128mb max.
-    config->memory_size = 512 * 1024 * 1024;       //  512mb max.
-    config->map_size = 1024 * 1024 * 1024;         // 1024mb max.
-    config->disk_size = 2048UL * 1024UL * 1024UL;  // 2048mb max.
+    config->area_size = 128UL * 1024UL * 1024UL;         //  128mb max.
+    config->memory_size = 512UL * 1024UL * 1024UL;       //  512mb max.
+    config->map_size = 1024UL * 1024UL * 1024UL;         // 1024mb max.
+    config->disk_size = 2048UL * 1024UL * 1024UL;        // 2048mb max.
 
     config->curl_queue_size = 10;
     config->cache_dir = NULL;
@@ -1190,6 +1190,18 @@ dims_handle_request(dims_request_rec *d)
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
             "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);    
     }
+
+    // late set resource limits, as they are "globals"/singletons and would be set to defaults otherwise
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "mod_dims: resources: area=%lu, disk=%lu, memory=%lu, map=%lu",
+        (unsigned long)d->config->area_size,
+        (unsigned long)d->config->disk_size,
+        (unsigned long)d->config->memory_size,
+        (unsigned long)d->config->map_size);
+    MagickSetResourceLimit(AreaResource, d->config->area_size);
+    MagickSetResourceLimit(DiskResource, d->config->disk_size);
+    MagickSetResourceLimit(MapResource, d->config->map_size);
+    MagickSetResourceLimit(MemoryResource, d->config->memory_size);
+
 
     d->request_hash = ap_md5(d->pool,
             (unsigned char *) apr_pstrcat(d->pool, d->client_id,
