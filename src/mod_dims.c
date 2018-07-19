@@ -108,10 +108,10 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->strip_metadata = 1;
     config->optimize_resize = 0;
 
-    config->area_size = 128 * 1024 * 1024;         //  128mb max.
-    config->memory_size = 512 * 1024 * 1024;       //  512mb max.
-    config->map_size = 1024 * 1024 * 1024;         // 1024mb max.
-    config->disk_size = 2048UL * 1024UL * 1024UL;  // 2048mb max.
+    config->area_size = 512 * 1024 * 1024;         //  512mb max.
+    config->memory_size = 3072 * 1024 * 1024;       // 3072mb max.
+    config->map_size = 3072 * 1024 * 1024;          // 3072mb max.
+    config->disk_size = 20480UL * 1024UL * 1024UL;  // 20480mb max.
 
     config->curl_queue_size = 10;
     config->cache_dir = NULL;
