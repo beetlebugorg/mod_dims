@@ -228,7 +228,7 @@ dims_quality_operation (dims_request_rec *d, char *args, char **err) {
     int quality = apr_strtoi64(args, NULL, 0);
     int existing_quality = MagickGetImageCompressionQuality(d->wand);
 
-    if(quality < existing_quality) {
+    if(quality < existing_quality || existing_quality == 0) {
         MAGICK_CHECK(MagickSetImageCompressionQuality(d->wand, quality), d);
     }
     return DIMS_SUCCESS;
