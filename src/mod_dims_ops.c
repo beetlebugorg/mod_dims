@@ -107,6 +107,7 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
         const double factors[3] = { 2.0, 1.0, 1.0 };
         MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
+    MagickRelinquishMemory(format);
 
     if (d->optimize_resize) {
         size_t orig_width;
@@ -162,7 +163,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         const double factors[3] = { 2.0, 1.0, 1.0 };
         MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
-    free(format);
+    MagickRelinquishMemory(format);
 
     if (d->optimize_resize) {
         size_t orig_width;
@@ -563,6 +564,7 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         const double factors[3] = { 2.0, 1.0, 1.0 };
         MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
+    MagickRelinquishMemory(format);
 
     if(rec.width < 200 && rec.height < 200) {
         MAGICK_CHECK(MagickThumbnailImage(d->wand, rec.width, rec.height), d);
