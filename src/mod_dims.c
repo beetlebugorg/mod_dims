@@ -627,7 +627,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         }
 
         // Ensure SVGs have the appropriate XML header.
-        if (strncmp(image_data.data, "<svg", 4) == 0) {
+        if (image_data.size >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
             image_data.data = apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", image_data.data, NULL);
             image_data.used += 55;
         }
