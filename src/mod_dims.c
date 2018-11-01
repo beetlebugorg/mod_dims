@@ -1223,9 +1223,22 @@ dims_handle_request(dims_request_rec *d)
 
     if (d->image_url && *d->image_url == '/') {
         request_rec *sub_req = ap_sub_req_lookup_uri(d->image_url, d->r, NULL);
-        if (sub_req) {
+        if (sub_req && sub_req->canonical_filename) {
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Looking up image locally: %s", sub_req->canonical_filename);
             d->filename = sub_req->canonical_filename;
+        } else {
+            const char *req_server;
+            char *req_port;
+            int port;
+
+            port = ap_get_server_port(d->r);
+            req_server = ap_get_server_name_for_url(d->r);
+            req_port = ap_is_default_port(port, d->r) ? "" : apr_psprintf(d->r->pool, ":%u", port);
+
+            d->image_url = apr_psprintf(d->r->pool, "%s://%s%s%s",
+                                       (char *) ap_http_scheme(d->r), req_server, req_port, d->image_url);
+
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Expanded relative URI to fully qualified URL since no local file existed: %s", d->image_url);
         }
     }
 
