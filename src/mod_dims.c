@@ -1238,7 +1238,7 @@ dims_handle_request(dims_request_rec *d)
             d->image_url = apr_psprintf(d->r->pool, "%s://%s%s%s",
                                        (char *) ap_http_scheme(d->r), req_server, req_port, d->image_url);
 
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Expanded relative URI to since no local file existed: %s", d->image_url);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Expanded relative URI to fully qualified URL since no local file existed: %s", d->image_url);
         }
     }
 
