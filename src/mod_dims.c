@@ -1401,9 +1401,9 @@ dims_handler(request_rec *r)
 
     /* Set initial notes to be logged by mod_log_config. */
     apr_table_setn(r->notes, "DIMS_STATUS", "0");
-    apr_table_setn(r->notes, "DIMS_ORIG_BYTES", "-");
-    apr_table_setn(r->notes, "DIMS_DL_TIME", "-");
-    apr_table_setn(r->notes, "DIMS_IM_TIME", "-");
+    apr_table_setn(r->notes, "DIMS_ORIG_BYTES", "-1");
+    apr_table_setn(r->notes, "DIMS_DL_TIME", "-1");
+    apr_table_setn(r->notes, "DIMS_IM_TIME", "-1");
 
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
             "Handler %s : %s", r->handler, r->uri);
