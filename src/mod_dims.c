@@ -711,7 +711,7 @@ dims_send_image(dims_request_rec *d)
         d->r->status = HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    if(d->status == DIMS_SUCCESS && d->client_config) {
+    if(d->status == DIMS_SUCCESS && d->fetch_http_status == 200 && d->client_config) {
 
         // if the src image has a cache_control header, parse out the max-age
         if(d->cache_control) {
@@ -780,7 +780,7 @@ dims_send_image(dims_request_rec *d)
             expire_time = d->client_config->cache_control_max_age;
         }
 
-    } else if(d->status == DIMS_SUCCESS) {
+    } else if(d->status == DIMS_SUCCESS && d->fetch_http_status == 200) {
         expire_time = d->config->default_expire;
         cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
     } else {
