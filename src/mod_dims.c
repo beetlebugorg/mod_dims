@@ -603,6 +603,8 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                     "libcurl error, '%s', on request: %s ", 
                     curl_easy_strerror(code), d->r->uri);
 
+            d->status = DIMS_FAILURE;
+            d->fetch_http_status = 500;
             if(code == CURLE_OPERATION_TIMEDOUT) {
                 d->status = DIMS_DOWNLOAD_TIMEOUT;
             }
