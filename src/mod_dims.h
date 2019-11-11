@@ -174,6 +174,9 @@ struct dims_request_rec {
      */
     apr_status_t status;
 
+    /* The HTTP status code from fetching the original image */
+    apr_status_t fetch_http_status;
+
     /* Time this request started.  Used for statistics. */
     apr_time_t start_time;
     apr_time_t download_time;

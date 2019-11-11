@@ -614,6 +614,11 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
         d->download_time = (apr_time_now() - start_time) / 1000;
 
+        // Don't set the fetch_http_status if we're downloading the NOIMAGE image.
+        if (url != NULL) {
+             d->fetch_http_status = image_data.response_code;
+        }
+
         if(image_data.response_code != 200) {
             if(image_data.response_code == 404) {
                 d->status = DIMS_FILE_NOT_FOUND;
@@ -698,6 +703,8 @@ dims_send_image(dims_request_rec *d)
 
     if(d->status == DIMS_FILE_NOT_FOUND) {
         d->r->status = HTTP_NOT_FOUND;
+    } else if (d->fetch_http_status != 0) {
+        d->r->status = d->fetch_http_status;
     } else if(d->status != DIMS_SUCCESS) {
         d->r->status = HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -1447,6 +1454,7 @@ dims_handler(request_rec *r)
     d->last_modified = NULL;
     d->request_hash = NULL;
     d->status = APR_SUCCESS;
+    d->fetch_http_status = 0;
     d->start_time = apr_time_now();
     d->download_time = 0;
     d->imagemagick_time = 0;
