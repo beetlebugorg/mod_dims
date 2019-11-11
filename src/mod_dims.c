@@ -1194,8 +1194,19 @@ dims_handle_request(dims_request_rec *d)
             }
         }
 
+        // Convert %20 (space) back to '+' in commands. This is fixes an issue with "+" being encoded as %20 by some clients.
+        char *commands = apr_pstrdup(d->r->pool, d->unparsed_commands);
+        char *s = commands;
+        while (*s) {
+            if (*s == ' ') {
+                *s = '+';
+            }
+
+            s++;
+        }
+
         // Standard signature params.
-        char *signature_params = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, d->unparsed_commands, d->image_url, NULL);
+        char *signature_params = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, commands, d->image_url, NULL);
 
         // Concatenate additional params.
         char *token;
