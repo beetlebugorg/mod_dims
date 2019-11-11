@@ -603,6 +603,8 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                     "libcurl error, '%s', on request: %s ", 
                     curl_easy_strerror(code), d->r->uri);
 
+            d->status = DIMS_FAILURE;
+            d->fetch_http_status = 500;
             if(code == CURLE_OPERATION_TIMEDOUT) {
                 d->status = DIMS_DOWNLOAD_TIMEOUT;
             }
@@ -613,6 +615,11 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         }
 
         d->download_time = (apr_time_now() - start_time) / 1000;
+
+        // Don't set the fetch_http_status if we're downloading the NOIMAGE image.
+        if (url != NULL) {
+             d->fetch_http_status = image_data.response_code;
+        }
 
         if(image_data.response_code != 200) {
             if(image_data.response_code == 404) {
@@ -698,11 +705,13 @@ dims_send_image(dims_request_rec *d)
 
     if(d->status == DIMS_FILE_NOT_FOUND) {
         d->r->status = HTTP_NOT_FOUND;
+    } else if (d->fetch_http_status != 0) {
+        d->r->status = d->fetch_http_status;
     } else if(d->status != DIMS_SUCCESS) {
         d->r->status = HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    if(d->status == DIMS_SUCCESS && d->client_config) {
+    if(d->status == DIMS_SUCCESS && d->fetch_http_status == 200 && d->client_config) {
 
         // if the src image has a cache_control header, parse out the max-age
         if(d->cache_control) {
@@ -771,7 +780,7 @@ dims_send_image(dims_request_rec *d)
             expire_time = d->client_config->cache_control_max_age;
         }
 
-    } else if(d->status == DIMS_SUCCESS) {
+    } else if(d->status == DIMS_SUCCESS && d->fetch_http_status == 200) {
         expire_time = d->config->default_expire;
         cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
     } else {
@@ -1447,6 +1456,7 @@ dims_handler(request_rec *r)
     d->last_modified = NULL;
     d->request_hash = NULL;
     d->status = APR_SUCCESS;
+    d->fetch_http_status = 0;
     d->start_time = apr_time_now();
     d->download_time = 0;
     d->imagemagick_time = 0;
