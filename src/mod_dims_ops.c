@@ -205,8 +205,8 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
     ExceptionInfo ex_info;
 
-    /* Replace blank spaces with '+'. This happens when some user agents
-     * inadvertantly escape the '+' as %20 which gets converted to a blank space.
+    /* Replace spaces with '+'. This happens when some user agents inadvertantly 
+     * escape the '+' as %20 which gets converted to a space.
      * 
      * Example: 
      * 
@@ -218,9 +218,9 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     while (*s) {
         if (*s == ' ') {
             *s = '+';
-	}
+        }
 
-	s++;
+        s++;
     }
 
 
