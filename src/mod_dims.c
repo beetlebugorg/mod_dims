@@ -1194,7 +1194,7 @@ dims_handle_request(dims_request_rec *d)
             }
         }
 
-        // Convert %20 (space) back to '+' in commands. This is fixes an issue with "+" being encoded as %20 by some clients.
+        // Convert %20 (space) back to '+' in commands. This fixes an issue with "+" being encoded as %20 by some clients.
         char *commands = apr_pstrdup(d->r->pool, d->unparsed_commands);
         char *s = commands;
         while (*s) {
@@ -1228,7 +1228,7 @@ dims_handle_request(dims_request_rec *d)
         } else if (strncasecmp(hash, gen_hash, 6) != 0) {
             gen_hash[7] = '\0';
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-                "Key Mismatch: wanted %6s got %6s %s", gen_hash, hash, d->r->uri);
+                "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, hash, d->r->uri, d->image_url);
             return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
         }
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
@@ -1668,7 +1668,18 @@ dims_handler(request_rec *r)
             *p = '\0';
         }
 
-        d->image_url = fixed_url;
+        // Convert '+' in the fixed_url to ' '.
+        char *image_url = apr_pstrdup(d->r->pool, fixed_url);
+        char *s = image_url;
+        while (*s) {
+            if (*s == '+') {
+                *s = ' ';
+            }
+
+            s++;
+        }
+
+        d->image_url = image_url;
         d->unparsed_commands = commands + 6;
 
         return dims_handle_request(d);
