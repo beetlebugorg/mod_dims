@@ -1668,18 +1668,15 @@ dims_handler(request_rec *r)
             *p = '\0';
         }
 
-        // Convert '+' to ' ' in the fixed_url.
-        char *strtokstate;
-        char *token = apr_strtok(apr_pstrdup(d->pool, fixed_url), "+", &strtokstate);
-        char *image_url = NULL;
-        while (token) {
-            if (image_url == NULL) {
-                image_url = apr_pstrdup(d->pool, token);
-            } else {
-                image_url = apr_pstrcat(d->pool, image_url, " ", token, NULL);
+        // Convert '+' in the fixed_url to ' '.
+        char *image_url = apr_pstrdup(d->r->pool, fixed_url);
+        char *s = image_url;
+        while (*s) {
+            if (*s == '+') {
+                *s = ' ';
             }
 
-            token = apr_strtok(NULL, "+", &strtokstate);
+            s++;
         }
 
         d->image_url = image_url;
