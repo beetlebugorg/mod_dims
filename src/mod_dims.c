@@ -1228,7 +1228,7 @@ dims_handle_request(dims_request_rec *d)
         } else if (strncasecmp(hash, gen_hash, 6) != 0) {
             gen_hash[7] = '\0';
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-                "Key Mismatch: wanted %6s got %6s %s", gen_hash, hash, d->r->uri);
+                "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, hash, d->r->uri, d->image_url);
             return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
         }
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
