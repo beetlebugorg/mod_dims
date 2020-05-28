@@ -1194,7 +1194,7 @@ dims_handle_request(dims_request_rec *d)
             }
         }
 
-        // Convert %20 (space) back to '+' in commands. This is fixes an issue with "+" being encoded as %20 by some clients.
+        // Convert %20 (space) back to '+' in commands. This fixes an issue with "+" being encoded as %20 by some clients.
         char *commands = apr_pstrdup(d->r->pool, d->unparsed_commands);
         char *s = commands;
         while (*s) {
