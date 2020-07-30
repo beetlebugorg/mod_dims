@@ -34,7 +34,7 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.19"
+#define MODULE_VERSION "3.3.20"
 
 #include "mod_dims.h"
 #include "util_md5.h"
@@ -1102,6 +1102,8 @@ dims_process_image(dims_request_rec *d)
                     }
                 }
             }
+
+            MagickMergeImageLayers(d->wand, TrimBoundsLayer);
         }
     }
 
