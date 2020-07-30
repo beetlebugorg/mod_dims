@@ -1102,7 +1102,10 @@ dims_process_image(dims_request_rec *d)
                     }
                 }
             }
+
+            MagickMergeImageLayers(d->wand, TrimBoundsLayer);
         }
+
     }
 
     /*
