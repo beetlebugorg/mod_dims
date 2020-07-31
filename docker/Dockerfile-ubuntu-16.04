@@ -1,0 +1,15 @@
+FROM ubuntu:16.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get -y update && apt-get install -y checkinstall automake libtool autoconf git \
+    apache2 apache2-dev libcurl4-openssl-dev libfreetype6-dev \
+    libopenexr-dev imagemagick libxml2-dev libtiff5-dev liblcms2-dev \
+    pkg-config libssl-dev libpangocairo-1.0-0 libmagickcore-dev libmagickwand-dev
+
+ENV TZ=America/New_York
+ENV LSB_RELEASE=xenial
+ENV PKG_REQUIRES="imagemagick,libcurl3,libpangocairo-1.0-0"
+
+COPY entrypoint.sh /
+ENTRYPOINT /entrypoint.sh
