@@ -1,0 +1,16 @@
+FROM ubuntu:14.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get -y update && apt-get install -y checkinstall automake libtool autoconf git \
+    apache2 apache2-dev libcurl4-openssl-dev libfreetype6-dev \
+    libopenexr-dev imagemagick libxml2-dev libtiff4-dev liblcms1-dev \
+    libmagickcore-dev libmagickwand-dev
+
+ENV TZ=America/New_York
+ENV LSB_RELEASE=precise
+ENV PKG_REQUIRES="imagemagick,libcurl3"
+
+COPY entrypoint.sh /
+ENTRYPOINT /entrypoint.sh
+RUN chmod +x /entrypoint.sh
