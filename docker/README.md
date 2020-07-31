@@ -23,3 +23,26 @@ $ docker run --rm --name moddims -e DIMS_VERSION=3.3.20 -v $PWD/build:/build mod
 ```
 
 You should now have a package in your local `./build` directory.
+
+## Developing using Docker
+
+Like building packages, the first step is to build the Docker image that will be used to
+run mod-dims inside Apache. This image includes a custom build of Imagemagick 6.9.x that
+works with mod-dims.
+
+```bash
+$ docker build . -t mod-dims/dev:16.04 -f Dockerfile-dev
+```
+
+When run this image will compile mod-dims and install it. It expects mod-dims source
+code to be in `/build` so make sure to mount the source code when you run this container. 
+It will then start up Apache to test mod-dims.
+
+```bash
+$ docker run -it --rm --name moddims-dev -p 80:80 -v $PWD/../:/build mod-dims/dev:16.04
+```
+
+In a browser go to http://localhost/dims-status/ and you should see the mod-dims status page.
+
+At this point you can make changes to the mod-dims source code and restart the container to
+test your changes.
