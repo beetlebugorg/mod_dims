@@ -13,3 +13,4 @@ ENV PKG_REQUIRES="imagemagick,libcurl3,libpangocairo-1.0-0"
 
 COPY entrypoint.sh /
 ENTRYPOINT /entrypoint.sh
+RUN chmod +x /entrypoint.sh
