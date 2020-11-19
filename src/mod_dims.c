@@ -1992,7 +1992,7 @@ static const command_rec dims_commands[] =
                 "The default is 0."),
     AP_INIT_TAKE1("DimsDisableEncodedFetch",
                 dims_config_set_encoded_fetch, NULL, RSRC_CONF,
-                "Should DIMS encode image url beforing fetching it."
+                "Should DIMS encode image url before fetching it."
                 "The default is 0."),
     {NULL}
 };
