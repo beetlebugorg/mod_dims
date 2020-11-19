@@ -34,7 +34,7 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.20"
+#define MODULE_VERSION "3.3.21"
 
 #include "mod_dims.h"
 #include "util_md5.h"
@@ -106,6 +106,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
 
     config->strip_metadata = 1;
     config->optimize_resize = 0;
+    config->disable_encoded_fetch = 0;
 
     config->area_size = 128 * 1024 * 1024;         //  128mb max.
     config->memory_size = 512 * 1024 * 1024;       //  512mb max.
@@ -219,6 +220,15 @@ dims_config_set_optimize_resize(cmd_parms *cmd, void *dummy, const char *arg)
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
     config->optimize_resize = atof(arg);
+    return NULL;
+}
+
+static const char *
+dims_config_set_encoded_fetch(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->disable_encoded_fetch = atoi(arg);
     return NULL;
 }
 
@@ -515,8 +525,10 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
             d->r->server->process->pool);
 
     /* Encode the fetch URL before downloading */
-    fetch_url = url_encode(fetch_url);
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
+    if (!d->config->disable_encoded_fetch) {
+        fetch_url = url_encode(fetch_url);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
+    }
 
     curl_handle = curl_easy_init();
     curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
@@ -543,7 +555,9 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
 
     *data = image_data;
 
-    free(fetch_url);
+    if (!d->config->disable_encoded_fetch) {
+        free(fetch_url);
+    }
 
     return code;
 }
@@ -640,7 +654,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         }
 
         start_time = apr_time_now();
-        if(MagickReadImageBlob(d->wand, image_data.data, image_data.used) 
+        if(MagickReadImageBlob(d->wand, image_data.data, image_data.used)
                 == MagickFalse) {
             ExceptionType et;
 
@@ -1975,6 +1989,10 @@ static const command_rec dims_commands[] =
     AP_INIT_TAKE1("DimsOptimizeResize",
                 dims_config_set_optimize_resize, NULL, RSRC_CONF,
                 "Should DIMS optimize resize operations. This has a slight impact on image quality. 0 = disabled"
+                "The default is 0."),
+    AP_INIT_TAKE1("DimsDisableEncodedFetch",
+                dims_config_set_encoded_fetch, NULL, RSRC_CONF,
+                "Should DIMS encode image url beforing fetching it."
                 "The default is 0."),
     {NULL}
 };
