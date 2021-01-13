@@ -24,6 +24,7 @@
 #include <apr_queue.h>
 #include <apr_base64.h>
 #include <apr_escape.h>
+#include <apr_lib.h>
 
 #include <httpd.h>
 #include <http_core.h>
@@ -185,6 +186,10 @@ struct dims_request_rec {
     
     /* Use a whitelist, or use a secret key passed on the URI */
     int use_secret_key;
+
+    /* Should Content-Disposition header bet set. */
+    int send_content_disposition;
+    char *content_disposition_filename;
 };
 
 #endif

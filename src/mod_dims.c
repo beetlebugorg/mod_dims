@@ -34,7 +34,7 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.21"
+#define MODULE_VERSION "3.3.22"
 
 #include "mod_dims.h"
 #include "util_md5.h"
@@ -813,6 +813,9 @@ dims_send_image(dims_request_rec *d)
     if(d->filename && d->config->include_disposition) {
         char *disposition = apr_psprintf(d->pool, "inline; filename=\"%s\"", d->filename);
         apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
+    } else if(d->content_disposition_filename && d->send_content_disposition) {
+        char *disposition = apr_psprintf(d->pool, "attachment; filename=\"%s\"", d->content_disposition_filename);
+        apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
     }
 
     if(expire_time) {
@@ -1489,6 +1492,8 @@ dims_handler(request_rec *r)
     d->imagemagick_time = 0;
     d->use_secret_key=0;
     d->optimize_resize = d->config->optimize_resize;
+    d->send_content_disposition = 0;
+    d->content_disposition_filename = NULL;
 
     /* Set initial notes to be logged by mod_log_config. */
     apr_table_setn(r->notes, "DIMS_STATUS", "0");
@@ -1622,6 +1627,9 @@ dims_handler(request_rec *r)
                     fixed_url = apr_pstrdup(r->pool, token + 4);
                     ap_unescape_url(fixed_url);
 
+                } else if (strncmp(token, "download=1", 10) == 0) {
+                    d->send_content_disposition = 1;
+
                 } else if (strncmp(token, "eurl=", 4) == 0) {
                     eurl = apr_pstrdup(r->pool, token + 5);
 
@@ -1697,6 +1705,13 @@ dims_handler(request_rec *r)
 
         d->image_url = image_url;
         d->unparsed_commands = commands + 6;
+
+        /* Calculate image filename for use with content disposition. */
+        apr_uri_t uri;
+        if (apr_uri_parse(r->pool, d->image_url, &uri) == APR_SUCCESS) {
+            const char *path = apr_filepath_name_get(uri.path);
+            d->content_disposition_filename = apr_pstrdup(d->r->pool, path);
+        }
 
         return dims_handle_request(d);
     } else if(strcmp(r->handler, "dims-status") == 0) {
