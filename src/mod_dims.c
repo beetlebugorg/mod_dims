@@ -1639,7 +1639,7 @@ dims_handler(request_rec *r)
                     // Hash secret via SHA-1.
                     unsigned char *secret = (unsigned char *) d->client_config->secret_key;
                     unsigned char hash[SHA_DIGEST_LENGTH];
-                    SHA1(secret, sizeof(secret), hash);
+                    SHA1(secret, strlen(secret), hash);
 
                     // Convert to hex.
                     char hex[SHA_DIGEST_LENGTH * 2 + 1];
