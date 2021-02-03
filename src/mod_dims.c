@@ -1437,6 +1437,7 @@ aes_errors(const char *message, size_t length, void *u)
 {
     request_rec *r = (request_rec *) u;
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s", message);
+    return 0;
 }
 
 static char *
@@ -1458,10 +1459,10 @@ aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_tex
     int decrypted_length;
     int plaintext_length, out_length;
     char *plaintext = apr_palloc(r->pool, encrypted_length * sizeof(char));
-    if (EVP_DecryptUpdate(ctx, plaintext, &out_length, encrypted_text, encrypted_length)) {
+    if (EVP_DecryptUpdate(ctx, (unsigned char *) plaintext, &out_length, encrypted_text, encrypted_length)) {
         plaintext_length = out_length;
 
-        if (!EVP_DecryptFinal_ex(ctx, plaintext + out_length, &plaintext_length)) {
+        if (!EVP_DecryptFinal_ex(ctx, (unsigned char *) plaintext + out_length, &plaintext_length)) {
             ERR_print_errors_cb(aes_errors, r);
             EVP_CIPHER_CTX_free(ctx);
             return NULL;
@@ -1665,12 +1666,12 @@ dims_handler(request_rec *r)
                     eurl = apr_pstrdup(r->pool, token + 5);
 
                     unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
-                    int encrypted_length = apr_base64_decode(encrypted_text, eurl);
+                    int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
 
                     // Hash secret via SHA-1.
                     unsigned char *secret = (unsigned char *) d->client_config->secret_key;
                     unsigned char hash[SHA_DIGEST_LENGTH];
-                    SHA1(secret, strlen(secret), hash);
+                    SHA1(secret, strlen((char *) secret), hash);
 
                     // Convert to hex.
                     char hex[SHA_DIGEST_LENGTH * 2 + 1];
@@ -1680,7 +1681,7 @@ dims_handler(request_rec *r)
 
                     // Use first 16 bytes.
                     unsigned char key[17];
-                    strncpy(key, hex, 16);
+                    strncpy((char *) key, hex, 16);
                     key[16] = '\0';
 
                     // Force key to uppercase
