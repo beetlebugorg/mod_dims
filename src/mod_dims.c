@@ -1053,6 +1053,12 @@ dims_process_image(dims_request_rec *d)
             }
         }
 
+        char *input_format = MagickGetImageFormat(d->wand);
+
+        if (strcmp(input_format, "PSD") || strcmp(input_format, "psd")) {
+            should_flatten = true;
+        }
+
         if (should_flatten) {
             for (int i = 1; i <= images - 1; i++) {
                 MagickSetIteratorIndex(d->wand, i);
