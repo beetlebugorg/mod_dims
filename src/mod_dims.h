@@ -96,6 +96,7 @@ struct dims_config_rec {
 
     apr_table_t *whitelist;
     apr_hash_t *clients;
+    apr_table_t *ignore_default_output_format;
 
     char *no_image_url;
     long no_image_expire;

@@ -95,6 +95,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config = (dims_config_rec *) apr_pcalloc(p, sizeof(dims_config_rec));
     config->whitelist = apr_table_make(p, 5);
     config->clients = apr_hash_make(p);
+    config->ignore_default_output_format = apr_table_make(p, 3);
 
     config->download_timeout = 3000;
     config->imagemagick_timeout = 3000;
@@ -147,6 +148,24 @@ dims_config_set_whitelist(cmd_parms *cmd, void *d, int argc, char *const argv[])
         }
     }
 
+    return NULL;
+}
+
+static const char *
+dims_config_set_ignore_default_output_format(cmd_parms *cmd, void *d, int argc, char *const argv[])
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config,
+            &dims_module);
+    int i;
+
+    for(i = 0; i < argc; i++) {
+        char *format = argv[i];
+        char *s = format;
+        while (*s) { *s = toupper(*s); s++; }
+
+        apr_table_setn(config->ignore_default_output_format, format, "1");
+    }
     return NULL;
 }
 
@@ -1149,11 +1168,15 @@ dims_process_image(dims_request_rec *d)
 
         // Set output format if not provided in the request.
         if (!output_format_provided && d->config->default_output_format) {
-            char *err = NULL;
-            apr_status_t code;
+            char *input_format = MagickGetImageFormat(d->wand);
 
-            if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
-                return dims_cleanup(d, err, code);
+            if (!apr_table_get(d->config->ignore_default_output_format, input_format)) {
+                char *err = NULL;
+                apr_status_t code;
+
+                if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
+                    return dims_cleanup(d, err, code);
+                }
             }
         }
     }
@@ -1989,6 +2012,9 @@ static const command_rec dims_commands[] =
     AP_INIT_TAKE_ARGV("DimsAddClient",
                       dims_config_set_client, NULL, RSRC_CONF,
                       "Add a client with optional no image url, max-age and downstream-ttl settings."),
+    AP_INIT_TAKE_ARGV("DimsIgnoreDefaultOutputFormat",
+                      dims_config_set_ignore_default_output_format, NULL, RSRC_CONF,
+                      "Add an input format that shouldn't be converted to the default output format."),
     AP_INIT_TAKE1("DimsDefaultImageURL",
                   dims_config_set_no_image_url, NULL, RSRC_CONF,
                   "Default image if processing fails or original image doesn't exist."),
