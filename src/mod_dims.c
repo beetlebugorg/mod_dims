@@ -1653,8 +1653,8 @@ dims_handler(request_rec *r)
                     key[16] = '\0';
 
                     // Force key to uppercase
-                    char *s = key;
-                    while (*s) { *s = toupper((unsigned char) *s); s++; }
+                    unsigned char *s = key;
+                    while (*s) { *s = toupper(*s); s++; }
 
                     fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
                     if (fixed_url == NULL) {
