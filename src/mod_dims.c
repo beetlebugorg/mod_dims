@@ -1070,7 +1070,7 @@ dims_process_image(dims_request_rec *d)
      */
     MagickAutoOrientImage(d->wand);
 
-    /* Flatten images (i.e animated gif) only if there's an overlay. Otherwise, pass through. */
+    /* Flatten images (i.e animated gif) if there's an overlay or file type is `psd`. Otherwise, pass through. */
     size_t images = MagickGetNumberImages(d->wand);
     bool should_flatten = false;
 
