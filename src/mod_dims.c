@@ -1599,7 +1599,7 @@ dims_handler(request_rec *r)
         return dims_handle_request(d);
     } else if ((strcmp(r->handler, "dims3") == 0) ||
             (r->uri && strncmp(r->uri, "/dims3/", 7) == 0) ||
-            (strcmp( r->handler,"dims4") == 0 )) {
+            (strcmp(r->handler, "dims4") == 0 )) {
         /* Handle new-style DIMS parameters. */
         char *p, *url = NULL, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
         if (( strcmp( r->handler,"dims4") == 0)) {
