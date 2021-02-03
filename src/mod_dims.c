@@ -1648,7 +1648,7 @@ dims_handler(request_rec *r)
                     }
 
                     // Use first 16 bytes.
-                    unsigned char key[16];
+                    unsigned char key[17];
                     strncpy(key, hex, 16);
                     key[16] = '\0';
 
