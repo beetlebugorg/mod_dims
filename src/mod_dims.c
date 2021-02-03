@@ -238,7 +238,10 @@ dims_config_set_default_output_format(cmd_parms *cmd, void *dummy, const char *a
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->default_output_format = (char *) arg;
+    char *output_format = (char *) arg;
+    char *s = output_format;
+    while (*s) { *s = toupper(*s); s++; }
+    config->default_output_format = output_format;
     return NULL;
 }
 
