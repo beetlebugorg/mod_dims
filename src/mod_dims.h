@@ -104,6 +104,7 @@ struct dims_config_rec {
     float optimize_resize;
     int include_disposition;
     int disable_encoded_fetch;
+    char *default_output_format;
 
     MagickSizeType area_size;
     MagickSizeType memory_size;

@@ -107,6 +107,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->strip_metadata = 1;
     config->optimize_resize = 0;
     config->disable_encoded_fetch = 0;
+    config->default_output_format = NULL;
 
     config->area_size = 128 * 1024 * 1024;         //  128mb max.
     config->memory_size = 512 * 1024 * 1024;       //  512mb max.
@@ -229,6 +230,15 @@ dims_config_set_encoded_fetch(cmd_parms *cmd, void *dummy, const char *arg)
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
     config->disable_encoded_fetch = atoi(arg);
+    return NULL;
+}
+
+static const char *
+dims_config_set_default_output_format(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->default_output_format = (char *) arg;
     return NULL;
 }
 
@@ -1068,9 +1078,14 @@ dims_process_image(dims_request_rec *d)
     }
 
     if (images == 1 || should_flatten) {
+        bool output_format_provided = false;
         const char *cmds = d->unparsed_commands;
         while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
             char *command = ap_getword(d->pool, &cmds, '/');
+
+            if (strcmp(command, "format") == 0) {
+                output_format_provided = true;
+            }
     
             if(strlen(command) > 0) {
                 char *args = ap_getword(d->pool, &cmds, '/');
@@ -1127,6 +1142,16 @@ dims_process_image(dims_request_rec *d)
             }
 
             MagickMergeImageLayers(d->wand, TrimBoundsLayer);
+        }
+
+        // Set output format if not provided in the request.
+        if (!output_format_provided && d->config->default_output_format) {
+            char *err = NULL;
+            apr_status_t code;
+
+            if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
+                return dims_cleanup(d, err, code);
+            }
         }
     }
 
@@ -2015,6 +2040,9 @@ static const command_rec dims_commands[] =
                 dims_config_set_encoded_fetch, NULL, RSRC_CONF,
                 "Should DIMS encode image url before fetching it."
                 "The default is 0."),
+    AP_INIT_TAKE1("DimsDefaultOutputFormat",
+                dims_config_set_default_output_format, NULL, RSRC_CONF,
+                "Default output format if not provided in the request."),
     {NULL}
 };
 
