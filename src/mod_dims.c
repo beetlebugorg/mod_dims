@@ -2014,7 +2014,7 @@ static const command_rec dims_commands[] =
                       "Add a client with optional no image url, max-age and downstream-ttl settings."),
     AP_INIT_TAKE_ARGV("DimsIgnoreDefaultOutputFormat",
                       dims_config_set_ignore_default_output_format, NULL, RSRC_CONF,
-                      "Add an input format that shouldn't be converted to the default output format."),
+                      "Add input formats that shouldn't be converted to the default output format."),
     AP_INIT_TAKE1("DimsDefaultImageURL",
                   dims_config_set_no_image_url, NULL, RSRC_CONF,
                   "Default image if processing fails or original image doesn't exist."),
@@ -2072,7 +2072,7 @@ static const command_rec dims_commands[] =
                 "The default is 0."),
     AP_INIT_TAKE1("DimsDefaultOutputFormat",
                 dims_config_set_default_output_format, NULL, RSRC_CONF,
-                "Default output format if not provided in the request."),
+                "Default output format if 'format' command is not present in the request."),
     {NULL}
 };
 
