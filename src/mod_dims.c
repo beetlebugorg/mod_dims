@@ -1087,7 +1087,7 @@ dims_process_image(dims_request_rec *d)
 
         char *input_format = MagickGetImageFormat(d->wand);
 
-        if (strcmp(input_format, "PSD") || strcmp(input_format, "psd")) {
+        if (strcmp(input_format, "PSD") == 0 || strcmp(input_format, "psd") == 0) {
             should_flatten = true;
         }
 
