@@ -95,6 +95,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config = (dims_config_rec *) apr_pcalloc(p, sizeof(dims_config_rec));
     config->whitelist = apr_table_make(p, 5);
     config->clients = apr_hash_make(p);
+    config->ignore_default_output_format = apr_table_make(p, 3);
 
     config->download_timeout = 3000;
     config->imagemagick_timeout = 3000;
@@ -107,6 +108,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->strip_metadata = 1;
     config->optimize_resize = 0;
     config->disable_encoded_fetch = 0;
+    config->default_output_format = NULL;
 
     config->area_size = 128 * 1024 * 1024;         //  128mb max.
     config->memory_size = 512 * 1024 * 1024;       //  512mb max.
@@ -146,6 +148,24 @@ dims_config_set_whitelist(cmd_parms *cmd, void *d, int argc, char *const argv[])
         }
     }
 
+    return NULL;
+}
+
+static const char *
+dims_config_set_ignore_default_output_format(cmd_parms *cmd, void *d, int argc, char *const argv[])
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config,
+            &dims_module);
+    int i;
+
+    for(i = 0; i < argc; i++) {
+        char *format = argv[i];
+        char *s = format;
+        while (*s) { *s = toupper(*s); s++; }
+
+        apr_table_setn(config->ignore_default_output_format, format, "1");
+    }
     return NULL;
 }
 
@@ -229,6 +249,18 @@ dims_config_set_encoded_fetch(cmd_parms *cmd, void *dummy, const char *arg)
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
     config->disable_encoded_fetch = atoi(arg);
+    return NULL;
+}
+
+static const char *
+dims_config_set_default_output_format(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    char *output_format = (char *) arg;
+    char *s = output_format;
+    while (*s) { *s = toupper(*s); s++; }
+    config->default_output_format = output_format;
     return NULL;
 }
 
@@ -1038,7 +1070,7 @@ dims_process_image(dims_request_rec *d)
      */
     MagickAutoOrientImage(d->wand);
 
-    /* Flatten images (i.e animated gif) only if there's an overlay. Otherwise, pass through. */
+    /* Flatten images (i.e animated gif) if there's an overlay or file type is `psd`. Otherwise, pass through. */
     size_t images = MagickGetNumberImages(d->wand);
     bool should_flatten = false;
 
@@ -1053,6 +1085,12 @@ dims_process_image(dims_request_rec *d)
             }
         }
 
+        char *input_format = MagickGetImageFormat(d->wand);
+
+        if (strcmp(input_format, "PSD") == 0 || strcmp(input_format, "psd") == 0) {
+            should_flatten = true;
+        }
+
         if (should_flatten) {
             for (int i = 1; i <= images - 1; i++) {
                 MagickSetIteratorIndex(d->wand, i);
@@ -1062,9 +1100,14 @@ dims_process_image(dims_request_rec *d)
     }
 
     if (images == 1 || should_flatten) {
+        bool output_format_provided = false;
         const char *cmds = d->unparsed_commands;
         while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
             char *command = ap_getword(d->pool, &cmds, '/');
+
+            if (strcmp(command, "format") == 0) {
+                output_format_provided = true;
+            }
     
             if(strlen(command) > 0) {
                 char *args = ap_getword(d->pool, &cmds, '/');
@@ -1121,6 +1164,20 @@ dims_process_image(dims_request_rec *d)
             }
 
             MagickMergeImageLayers(d->wand, TrimBoundsLayer);
+        }
+
+        // Set output format if not provided in the request.
+        if (!output_format_provided && d->config->default_output_format) {
+            char *input_format = MagickGetImageFormat(d->wand);
+
+            if (!apr_table_get(d->config->ignore_default_output_format, input_format)) {
+                char *err = NULL;
+                apr_status_t code;
+
+                if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
+                    return dims_cleanup(d, err, code);
+                }
+            }
         }
     }
 
@@ -1406,6 +1463,7 @@ aes_errors(const char *message, size_t length, void *u)
 {
     request_rec *r = (request_rec *) u;
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "%s", message);
+    return 0;
 }
 
 static char *
@@ -1427,10 +1485,10 @@ aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_tex
     int decrypted_length;
     int plaintext_length, out_length;
     char *plaintext = apr_palloc(r->pool, encrypted_length * sizeof(char));
-    if (EVP_DecryptUpdate(ctx, plaintext, &out_length, encrypted_text, encrypted_length)) {
+    if (EVP_DecryptUpdate(ctx, (unsigned char *) plaintext, &out_length, encrypted_text, encrypted_length)) {
         plaintext_length = out_length;
 
-        if (!EVP_DecryptFinal_ex(ctx, plaintext + out_length, &plaintext_length)) {
+        if (!EVP_DecryptFinal_ex(ctx, (unsigned char *) plaintext + out_length, &plaintext_length)) {
             ERR_print_errors_cb(aes_errors, r);
             EVP_CIPHER_CTX_free(ctx);
             return NULL;
@@ -1599,7 +1657,7 @@ dims_handler(request_rec *r)
         return dims_handle_request(d);
     } else if ((strcmp(r->handler, "dims3") == 0) ||
             (r->uri && strncmp(r->uri, "/dims3/", 7) == 0) ||
-            (strcmp( r->handler,"dims4") == 0 )) {
+            (strcmp(r->handler, "dims4") == 0 )) {
         /* Handle new-style DIMS parameters. */
         char *p, *url = NULL, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
         if (( strcmp( r->handler,"dims4") == 0)) {
@@ -1634,12 +1692,12 @@ dims_handler(request_rec *r)
                     eurl = apr_pstrdup(r->pool, token + 5);
 
                     unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
-                    int encrypted_length = apr_base64_decode(encrypted_text, eurl);
+                    int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
 
                     // Hash secret via SHA-1.
                     unsigned char *secret = (unsigned char *) d->client_config->secret_key;
                     unsigned char hash[SHA_DIGEST_LENGTH];
-                    SHA1(secret, strlen(secret), hash);
+                    SHA1(secret, strlen((char *) secret), hash);
 
                     // Convert to hex.
                     char hex[SHA_DIGEST_LENGTH * 2 + 1];
@@ -1648,13 +1706,13 @@ dims_handler(request_rec *r)
                     }
 
                     // Use first 16 bytes.
-                    unsigned char key[16];
-                    strncpy(key, hex, 16);
+                    unsigned char key[17];
+                    strncpy((char *) key, hex, 16);
                     key[16] = '\0';
 
                     // Force key to uppercase
-                    char *s = key;
-                    while (*s) { *s = toupper((unsigned char) *s); s++; }
+                    unsigned char *s = key;
+                    while (*s) { *s = toupper(*s); s++; }
 
                     fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
                     if (fixed_url == NULL) {
@@ -1954,6 +2012,9 @@ static const command_rec dims_commands[] =
     AP_INIT_TAKE_ARGV("DimsAddClient",
                       dims_config_set_client, NULL, RSRC_CONF,
                       "Add a client with optional no image url, max-age and downstream-ttl settings."),
+    AP_INIT_TAKE_ARGV("DimsIgnoreDefaultOutputFormat",
+                      dims_config_set_ignore_default_output_format, NULL, RSRC_CONF,
+                      "Add input formats that shouldn't be converted to the default output format."),
     AP_INIT_TAKE1("DimsDefaultImageURL",
                   dims_config_set_no_image_url, NULL, RSRC_CONF,
                   "Default image if processing fails or original image doesn't exist."),
@@ -2009,6 +2070,9 @@ static const command_rec dims_commands[] =
                 dims_config_set_encoded_fetch, NULL, RSRC_CONF,
                 "Should DIMS encode image url before fetching it."
                 "The default is 0."),
+    AP_INIT_TAKE1("DimsDefaultOutputFormat",
+                dims_config_set_default_output_format, NULL, RSRC_CONF,
+                "Default output format if 'format' command is not present in the request."),
     {NULL}
 };
 
