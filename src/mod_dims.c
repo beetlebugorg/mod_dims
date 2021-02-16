@@ -679,14 +679,16 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             return 1;
         }
 
+        char *actual_image_data = image_data.data;
+
         // Ensure SVGs have the appropriate XML header.
         if (image_data.size >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
-            image_data.data = apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", image_data.data, NULL);
+            actual_image_data = apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", image_data.data, NULL);
             image_data.used += 55;
         }
 
         start_time = apr_time_now();
-        if(MagickReadImageBlob(d->wand, image_data.data, image_data.used)
+        if(MagickReadImageBlob(d->wand, actual_image_data, image_data.used)
                 == MagickFalse) {
             ExceptionType et;
 
