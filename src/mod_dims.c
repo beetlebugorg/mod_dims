@@ -1371,15 +1371,19 @@ dims_handle_request(dims_request_rec *d)
         int found = 0, done = 0;
 
         /* Check to make sure the URLs hostname is in the whitelist.  Wildcards
-            * are handled by repeatedly checking the hash for a match after removing
-            * each part of the hostname until a match is found.  If a match is found
-            * and it's value is set to "glob" the match will be accepted.
-            */
+         * are handled by repeatedly checking the hash for a match after removing
+         * each part of the hostname until a match is found.  If a match is found
+         * and it's value is set to "glob" the match will be accepted.
+         */
         if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
             return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
         }
 
         char *filename = strrchr(uri.path, '/');
+        if (!filename || !uri.hostname) {
+            return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+        }
+
         if (*filename == '/') {
             d->filename = ++filename;
         }
@@ -1688,7 +1692,7 @@ dims_handler(request_rec *r)
                     ap_unescape_url(fixed_url);
 
                     if (strcmp(fixed_url, "") == 0) {
-                        return DECLINED;
+                        return dims_cleanup(d, NULL, DIMS_BAD_URL);
                     }
                 } else if (strncmp(token, "download=1", 10) == 0) {
                     d->send_content_disposition = 1;
@@ -1707,7 +1711,7 @@ dims_handler(request_rec *r)
                     // Convert to hex.
                     char hex[SHA_DIGEST_LENGTH * 2 + 1];
                     if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-                        return DECLINED;
+                        return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
                     }
 
                     // Use first 16 bytes.
@@ -1772,6 +1776,10 @@ dims_handler(request_rec *r)
         /* Calculate image filename for use with content disposition. */
         apr_uri_t uri;
         if (apr_uri_parse(r->pool, d->image_url, &uri) == APR_SUCCESS) {
+            if (!uri.path) {
+                return dims_cleanup(d, NULL, DIMS_BAD_URL);
+            }
+
             const char *path = apr_filepath_name_get(uri.path);
             d->content_disposition_filename = apr_pstrdup(d->r->pool, path);
         }
