@@ -1687,6 +1687,9 @@ dims_handler(request_rec *r)
                     fixed_url = apr_pstrdup(r->pool, token + 4);
                     ap_unescape_url(fixed_url);
 
+                    if (strcmp(fixed_url, "") == 0) {
+                        return DECLINED;
+                    }
                 } else if (strncmp(token, "download=1", 10) == 0) {
                     d->send_content_disposition = 1;
 
@@ -1704,7 +1707,7 @@ dims_handler(request_rec *r)
                     // Convert to hex.
                     char hex[SHA_DIGEST_LENGTH * 2 + 1];
                     if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-                        return DIMS_FAILURE;
+                        return DECLINED;
                     }
 
                     // Use first 16 bytes.
