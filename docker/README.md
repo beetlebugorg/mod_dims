@@ -1,48 +1,38 @@
-# mod-dims Docker Containers
+# mod-dims Docker Container
 
-These containers can be used to build Ubuntu (deb) packages.
+# How to build this image
 
-## Building Ubuntu Debian Package
-
-The first step is to build the Docker image that will be used to generate a Debian package. This
-step only needs to happen once for each version of Ubuntu you want to build packages for.
-
-```bash
-$ docker build . -t mod-dims/ubuntu:16.04 -f Dockerfile-ubuntu-16.04
+```
+$ docker build -t mod-dims:latest -f Dockerfile ..
 ```
 
-Now we can build specific versions of mod-dims by running the image we just generated. Pass in
-`-e DIMS_VERSION=3.3.20` to build the release tagged `release/3.3.20`. Only tagged releases
-(i.e. `release/3.3.20`) are supported.
+# How to use this image
 
-The Debian packages are built in the `/build` directory inside the container. Mount this
-directory locally using `-v` to get access to the package on your build host.
+## Set DIMS_SECRET to use /dims4/ based signed URLs
 
-```bash
-$ docker run --rm --name moddims -e DIMS_VERSION=3.3.20 -v $PWD/build:/build mod-dims/ubuntu:16.04
+```shell
+$ docker run -e DIMS_SECRET=mysecret mod-dims:latest
 ```
 
-You should now have a package in your local `./build` directory.
+## Set DIMS_WHITELIST to use /dims3/ based URLs
 
-## Developing using Docker
-
-Like building packages, the first step is to build the Docker image that will be used to
-run mod-dims inside Apache. This image includes a custom build of Imagemagick 6.9.x that
-works with mod-dims.
-
-```bash
-$ docker build . -t mod-dims/dev:16.04 -f Dockerfile-dev
+```shell
+$ docker run -e DIMS_WHITELIST="images.pexels.com" mod-dims:latest
 ```
 
-When run this image will compile mod-dims and install it. It expects mod-dims source
-code to be in `/build` so make sure to mount the source code when you run this container. 
-It will then start up Apache to test mod-dims.
+# Configuration
 
-```bash
-$ docker run -it --rm --name moddims-dev -p 80:80 -v $PWD/../:/build mod-dims/dev:16.04
-```
-
-In a browser go to http://localhost/dims-status/ and you should see the mod-dims status page.
-
-At this point you can make changes to the mod-dims source code and restart the container to
-test your changes.
+| Environment Variables | Description | Default |
+|-----------------------|-------------|---------|
+| `DIMS_CLIENT` | Name of client | development |
+| `DIMS_SECRET` | Shared secret for /dims4/ signatures | "" |
+| `DIMS_DOWNLOAD_TIMEOUT` | Max time allowed for downloading source images, in milliseconds. | 60000 |
+| `DIMS_IMAGEMAGICK_TIMEOUT` | Max time allowed for Imagemagick processing, in milliseconds. | 20000 |
+| `DIMS_NO_IMAGE_URL` | URL (http(s):// or file:///) to an image displayed for errors | "http://placehold.it/350x150" |
+| `DIMS_CACHE_CONTROL_MAX_AGE` | Cache control max age header setting, in seconds | 604800 |
+| `DIMS_EDGE_CONTROL_DOWNSTREAM_TTL` | Edge control downstream TTL | 604800 |
+| `DIMS_TRUST_SOURCE` | Whether or not to trust origin cache headers | true |
+| `DIMS_MIN_SOURCE_CACHE` | Min max-age to accept from image origin, in seconds | 604800 |
+| `DIMS_MAX_SOURCE_CACHE` | Max max-age to accept from image origin, in seconds | 604800 |
+| `DIMS_CACHE_EXPIRE` | Default expire time when no cache headers are present on origin image, in seconds | 604800 |
+| `DIMS_NO_IMAGE_CACHE_EXPIRE` | Time to cache "no image" (i.e. dims failures), in seconds | 60 |
