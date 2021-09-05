@@ -9,6 +9,7 @@ config.log
 config.sub
 config.status
 configure
+compile
 aclocal.m4
 depcomp
 ltmain.sh
