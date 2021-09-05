@@ -8,6 +8,8 @@ config.guess
 config.log
 config.sub
 config.status
+config.h
+config.h.in
 configure
 compile
 aclocal.m4
@@ -17,3 +19,4 @@ libtool
 install-sh
 missing
 INSTALL
+stamp-h1
