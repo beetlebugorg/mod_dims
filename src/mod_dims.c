@@ -102,6 +102,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
 
     config->no_image_url = NULL;
     config->no_image_expire = 60;
+    config->default_image_prefix = NULL;
 
     config->default_expire = 86400;
 
@@ -347,6 +348,21 @@ dims_config_set_no_image_url(cmd_parms *cmd, void *dummy, const char *arg)
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
     config->no_image_url = (char *) arg;
+    return NULL;
+}
+
+static const char *
+dims_config_set_image_prefix(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->default_image_prefix = (char *) arg;
+
+    if (strncmp(config->default_image_prefix, "https://", 8) != 0 &&
+        strncmp(config->default_image_prefix, "http://", 7) != 0) {
+        return "DimsDefaultImagePrefix must start with 'https://' or 'http://'";
+    }
+
     return NULL;
 }
 
@@ -1321,7 +1337,10 @@ dims_handle_request(dims_request_rec *d)
 
     if (d->image_url && *d->image_url == '/') {
         request_rec *sub_req = ap_sub_req_lookup_uri(d->image_url, d->r, NULL);
-        if (sub_req && sub_req->canonical_filename) {
+
+        if (d->config->default_image_prefix != NULL) {
+            d->image_url = apr_psprintf(d->r->pool, "%s/%s", d->config->default_image_prefix, d->image_url);
+        } else if (sub_req && sub_req->canonical_filename) {
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Looking up image locally: %s", sub_req->canonical_filename);
             d->filename = sub_req->canonical_filename;
         } else {
@@ -2032,6 +2051,9 @@ static const command_rec dims_commands[] =
     AP_INIT_TAKE1("DimsDefaultImageURL",
                   dims_config_set_no_image_url, NULL, RSRC_CONF,
                   "Default image if processing fails or original image doesn't exist."),
+    AP_INIT_TAKE1("DimsDefaultImagePrefix",
+                  dims_config_set_image_prefix, NULL, RSRC_CONF,
+                  "Default image prefix if URL is relative."),
     AP_INIT_TAKE1("DimsCacheExpire",
                   dims_config_set_default_expire, NULL, RSRC_CONF,
                   "Default expire time for Cache-Control/Expires/Edge-Control headers, in seconds."
