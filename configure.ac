@@ -8,12 +8,15 @@ AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 
-# Check for ImageMagic
+# Check for ImageMagick
 PKG_CHECK_MODULES(MagickCore, MagickCore)
 PKG_CHECK_MODULES(MagickWand, MagickWand)
 PKG_CHECK_MODULES(libcurl, libcurl)
 
-AP_VERSION=2.2.4
+AC_CONFIG_MACRO_DIRS([m4])
+AC_CONFIG_HEADERS([src/config.h])
+
+AP_VERSION=2.4.0
 AP_CHECK_APACHE([$AP_VERSION], [
   LIBTOOL="`$APR_CONFIG --apr-libtool`"
   AC_SUBST([LIBTOOL])
