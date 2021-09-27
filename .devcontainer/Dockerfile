@@ -69,6 +69,6 @@ RUN apt-get install -y vim && \
     sed "s|^LogLevel warn|LogLevel debug|" /usr/local/apache2/conf/httpd.conf -i && \
     echo "Include conf/extra/dims.conf" >> /usr/local/apache2/conf/httpd.conf
 
-COPY dims.conf /usr/local/apache2/conf/extra/dims.conf
+COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
 
 ENV LC_ALL="C"
