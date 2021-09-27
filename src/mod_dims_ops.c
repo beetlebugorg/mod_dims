@@ -22,6 +22,8 @@
 #include <stdio.h>
 #include <paths.h>
 
+#include <magick/exception.h>
+
 #define MAGICK_CHECK(func, rec) \
     do { \
         apr_status_t code = func; \
@@ -203,7 +205,7 @@ apr_status_t
 dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
-    ExceptionInfo ex_info;
+    ExceptionInfo *ex_info = AcquireExceptionInfo();
 
     /* Replace spaces with '+'. This happens when some user agents inadvertantly 
      * escape the '+' as %20 which gets converted to a space.
@@ -224,11 +226,15 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     }
 
 
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, ex_info);
     if(!(flags & AllValues)) {
+        DestroyExceptionInfo(ex_info);
+
         *err = "Parsing crop geometry failed";
         return DIMS_FAILURE;
     }
+
+    DestroyExceptionInfo(ex_info);
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
     MAGICK_CHECK(MagickSetImagePage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
@@ -539,16 +545,20 @@ apr_status_t
 dims_legacy_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
-    ExceptionInfo ex_info;
+    ExceptionInfo *ex_info = AcquireExceptionInfo();
     long width, height;
     int x, y;
 
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
+    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, ex_info);
 
     if(!(flags & AllValues)) {
+        DestroyExceptionInfo(ex_info);
+
         *err = "Parsing crop geometry failed";
         return DIMS_FAILURE;
     }
+
+    DestroyExceptionInfo(ex_info);
 
     width = MagickGetImageWidth(d->wand);
     height = MagickGetImageHeight(d->wand);
