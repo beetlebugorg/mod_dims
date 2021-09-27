@@ -92,7 +92,6 @@ RUN apt-get update && \
     chown -R www-data:www-data /usr/local/apache2 && \
     sed "s|Listen 80|Listen 8000|" /usr/local/apache2/conf/httpd.conf -i && \
     sed "s|^#LoadModule authz_core_module|LoadModule authz_core_module|" /usr/local/apache2/conf/httpd.conf -i && \
-    sed "s|^LogLevel warn|LogLevel debug|" /usr/local/apache2/conf/httpd.conf -i && \
     echo "Include conf/extra/dims.conf" >> /usr/local/apache2/conf/httpd.conf
 
 USER 33
