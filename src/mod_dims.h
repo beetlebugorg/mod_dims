@@ -116,6 +116,7 @@ struct dims_config_rec {
     char *secret_key;
     long max_expiry_period;
     char *cache_dir;
+    char *default_image_prefix;
 };
 
 struct dims_client_config_rec {
