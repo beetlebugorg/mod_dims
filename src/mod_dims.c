@@ -544,6 +544,25 @@ char *url_encode(char *str) {
             *pbuf++ = *pstr;
         else
             *pbuf++ = '%', *pbuf++ = to_hex(*pstr >> 4), *pbuf++ = to_hex(*pstr & 15);
+
+        pstr++;
+    }
+    *pbuf = '\0';
+    return buf;
+}
+
+/* Returns a str after encoding a space to '%20' since libcurl doesn't encode it automatically as browsers do. */
+/* IMPORTANT: be sure to free() the returned string after use */
+char *url_encode_space_only(char *str) {
+    char *pstr = str, *buf = malloc(strlen(str) * 3 + 1), *pbuf = buf;
+    while (*pstr) {
+        if (*pstr == ' ') {
+            *pbuf++ = '%', *pbuf++ = '2', *pbuf++ = '0';
+
+        } else {
+            *pbuf++ = *pstr;
+        }
+
         pstr++;
     }
     *pbuf = '\0';
@@ -576,6 +595,9 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     if (!d->config->disable_encoded_fetch) {
         fetch_url = url_encode(fetch_url);
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
+
+    } else {
+        fetch_url = url_encode_space_only(fetch_url);
     }
 
     curl_handle = curl_easy_init();
@@ -603,9 +625,7 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
 
     *data = image_data;
 
-    if (!d->config->disable_encoded_fetch) {
-        free(fetch_url);
-    }
+    free(fetch_url);
 
     return code;
 }
