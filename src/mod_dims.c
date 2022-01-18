@@ -775,6 +775,10 @@ dims_send_image(dims_request_rec *d)
         d->r->status = HTTP_INTERNAL_SERVER_ERROR;
     }
 
+    if (blob == NULL) {
+        d->r->status = HTTP_BAD_REQUEST;
+    }
+
     if(d->status == DIMS_SUCCESS && d->fetch_http_status == 200 && d->client_config) {
 
         // if the src image has a cache_control header, parse out the max-age
@@ -897,11 +901,16 @@ dims_send_image(dims_request_rec *d)
     MagickSizeType image_size = 0;
     MagickGetImageLength(d->wand, &image_size);
 
-    char content_length[256] = "";
-    snprintf(content_length, sizeof(content_length), "%zu", (size_t)image_size);
-    apr_table_set(d->r->headers_out, "Content-Length", content_length);
+    if (blob != NULL) {
+        char content_length[256] = "";
+        snprintf(content_length, sizeof(content_length), "%zu", (size_t)image_size);
+        apr_table_set(d->r->headers_out, "Content-Length", content_length);
 
-    ap_rwrite(blob, length, d->r);
+        ap_rwrite(blob, length, d->r);
+    } else {
+        apr_table_set(d->r->headers_out, "Content-Length", "0");
+    }
+
     ap_rflush(d->r);
 
     MagickRelinquishMemory(blob);
