@@ -1,9 +1,9 @@
-ARG HTTPD_VERSION=2.4.49
+ARG HTTPD_VERSION=2.4.52
 
 FROM httpd:${HTTPD_VERSION} as build-mod-dims
 
 ARG DIMS_VERSION=3.3.26
-ARG IMAGEMAGICK_VERSION=6.9.12-23
+ARG IMAGEMAGICK_VERSION=6.9.12-34
 ARG WEBP_VERSION=1.2.1
 ARG TIFF_VERSION=4.3.0
 ARG PREFIX=/usr/local/imagemagick
@@ -84,7 +84,7 @@ RUN apt-get update && \
     apt-get -y install libcurl4 \
         libpangocairo-1.0-0 libgif7 libjpeg62-turbo libpng16-16 libgomp1 libjbig0 liblcms2-2 \
         libbz2-1.0 libfftw3-double3 libfontconfig1 libfreetype6 libheif1 \
-        liblqr-1-0 libltdl7 liblzma5 libopenjp2-7 libopenexr23 ca-certificates && \
+        liblqr-1-0 libltdl7 liblzma5 libopenjp2-7 libopenexr25 ca-certificates && \
     rm -rf /usr/local/apache2/build \
         /usr/local/apache2/cgi-bin \
         /usr/local/apache2/include \
