@@ -1348,7 +1348,7 @@ dims_handle_request(dims_request_rec *d)
         request_rec *sub_req = ap_sub_req_lookup_uri(d->image_url, d->r, NULL);
 
         if (d->config->default_image_prefix != NULL) {
-            d->image_url = apr_psprintf(d->r->pool, "%s/%s", d->config->default_image_prefix, d->image_url);
+            d->image_url = apr_pstrcat(d->r->pool, d->config->default_image_prefix, d->image_url, NULL);
         } else if (sub_req && sub_req->canonical_filename) {
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Looking up image locally: %s", sub_req->canonical_filename);
             d->filename = sub_req->canonical_filename;
