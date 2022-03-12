@@ -48,9 +48,9 @@ RUN wget http://download.osgeo.org/libtiff/tiff-${TIFF_VERSION}.tar.gz && \
     make -j4 && make install
 
 # Imagemagick
-RUN wget https://download.imagemagick.org/ImageMagick/download/releases/ImageMagick-${IMAGEMAGICK_VERSION}.tar.gz && \
+RUN wget https://download.imagemagick.org/ImageMagick/download/releases/ImageMagick-${IMAGEMAGICK_VERSION}.tar.xz && \
     export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig && \
-    tar xvf ImageMagick-${IMAGEMAGICK_VERSION}.tar.gz && \
+    tar xvf ImageMagick-${IMAGEMAGICK_VERSION}.tar.xz && \
     cd ImageMagick-${IMAGEMAGICK_VERSION} && \
     ./configure --without-x --with-quantum-depth=8 --prefix=$PREFIX && \
     make -j4 && make install
