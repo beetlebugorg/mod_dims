@@ -35,16 +35,24 @@ RUN wget http://download.osgeo.org/libtiff/tiff-${TIFF_VERSION}.tar.gz && \
     make -j4 && make install
 
 # Imagemagick
-RUN wget https://download.imagemagick.org/ImageMagick/download/releases/ImageMagick-${IMAGEMAGICK_VERSION}.tar.gz && \
+RUN wget https://download.imagemagick.org/ImageMagick/download/releases/ImageMagick-${IMAGEMAGICK_VERSION}.tar.xz && \
     export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig && \
-    tar xvf ImageMagick-${IMAGEMAGICK_VERSION}.tar.gz && \
+    tar xvf ImageMagick-${IMAGEMAGICK_VERSION}.tar.xz && \
     cd ImageMagick-${IMAGEMAGICK_VERSION} && \
     ./configure --without-x --with-quantum-depth=8 --prefix=$PREFIX && \
     make -j4 && make install
 
+# libcurl
+RUN wget https://curl.se/download/curl-7.87.0.tar.xz && \
+    export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig && \
+    tar xvf curl-7.87.0.tar.xz && \
+    cd curl-7.87.0 && \
+    ./configure --with-openssl --prefix=$PREFIX && \
+    make -j4 && make install
+
 RUN apt-get --no-install-recommends install -y apt-transport-https apt-utils \
-            automake autoconf build-essential ccache cmake ca-certificates curl git \
-            gcc g++ libc-ares-dev libc-ares2 libcurl4-openssl-dev libre2-dev \
+            automake autoconf build-essential ccache cmake ca-certificates git \
+            gcc g++ libc-ares-dev libc-ares2 libre2-dev \
             libssl-dev m4 make pkg-config tar wget zlib1g-dev
 
 ENV PKG_CONFIG_PATH=/usr/local/imagemagick/pkgconfig
@@ -81,7 +89,7 @@ COPY --from=build-mod-dims /usr/local/imagemagick /usr/local/imagemagick
 COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
 
 RUN apt-get update && \
-    apt-get -y install libcurl4 \
+    apt-get -y install \
         libpangocairo-1.0-0 libgif7 libjpeg62-turbo libpng16-16 libgomp1 libjbig0 liblcms2-2 \
         libbz2-1.0 libfftw3-double3 libfontconfig1 libfreetype6 libheif1 \
         liblqr-1-0 libltdl7 liblzma5 libopenjp2-7 libopenexr25 ca-certificates && \
