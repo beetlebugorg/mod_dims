@@ -33,9 +33,6 @@ AP_CHECK_APACHE([$AP_VERSION], [
   prefix="$AP_PREFIX"
 ], AC_MSG_ERROR([*** Apache version $AP_VERSION not found!]))
 
-AC_CHECK_LIB(curl, curl_global_init,, [AC_MSG_ERROR(curl not found.)])
-AC_CHECK_HEADER(curl/curl.h)
-
 # Checks for header files.
 AC_CHECK_HEADERS([stdlib.h sys/time.h])
 
