@@ -632,7 +632,6 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     curl_easy_setopt(curl_handle, CURLOPT_DEBUGFUNCTION, dims_curl_debug_cb);
     curl_easy_setopt(curl_handle, CURLOPT_DEBUGDATA, d);
 
-
     /* Set the user agent to dims/<version> */
     if (d->config->user_agent_override != NULL && d->config->user_agent_enabled == 1) {
         curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, d->config->user_agent_override);
