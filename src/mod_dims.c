@@ -588,6 +588,10 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
 
+    /* Set the user agent to dims/<version> */
+    char *dims_useragent = apr_psprintf(d->r->pool, "dims/%s", MODULE_VERSION);
+    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, dims_useragent);
+
     /* The curl shared handle allows this process to share DNS cache
      * and prevents the DNS cache from going away after every request.
      */
