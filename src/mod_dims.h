@@ -117,6 +117,9 @@ struct dims_config_rec {
     long max_expiry_period;
     char *cache_dir;
     char *default_image_prefix;
+
+    char *user_agent_override;
+    int user_agent_enabled;
 };
 
 struct dims_client_config_rec {
