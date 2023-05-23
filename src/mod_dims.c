@@ -34,7 +34,7 @@
  */
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.28"
+#define MODULE_VERSION "3.3.29"
 
 #include "mod_dims.h"
 #include "util_md5.h"
@@ -262,6 +262,30 @@ dims_config_set_default_output_format(cmd_parms *cmd, void *dummy, const char *a
     char *s = output_format;
     while (*s) { *s = toupper(*s); s++; }
     config->default_output_format = output_format;
+    return NULL;
+}
+
+static const char *
+dims_config_set_user_agent_override(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    char *user_agent = (char *) arg;
+    config->user_agent_override = user_agent;
+    return NULL;
+}
+
+static const char *
+dims_config_set_user_agent_enabled(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    if(strcmp(arg, "true") == 0) {
+        config->user_agent_enabled = 1;
+    }
+    else {
+        config->user_agent_enabled = 0;
+    }
     return NULL;
 }
 
@@ -550,6 +574,23 @@ char *url_encode(char *str) {
     return buf;
 }
 
+static int
+dims_curl_debug_cb(CURL *handle,
+    curl_infotype type,
+    char *data,
+    size_t size,
+    void *clientp)
+{
+    dims_request_rec *d = (dims_request_rec *) clientp;
+    switch(type) {
+        case CURLINFO_HEADER_OUT:
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Curl request header data: %s ", data);
+            break;
+        default:
+            break;
+    }
+}
+
 CURLcode
 dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data)
 {
@@ -587,6 +628,17 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
+    curl_easy_setopt(curl_handle, CURLOPT_DEBUGFUNCTION, dims_curl_debug_cb);
+    curl_easy_setopt(curl_handle, CURLOPT_DEBUGDATA, d);
+
+    /* Set the user agent to dims/<version> */
+    if (d->config->user_agent_override != NULL && d->config->user_agent_enabled == 1) {
+        curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, d->config->user_agent_override);
+    } else if (d->config->user_agent_enabled == 1) {
+        char *dims_useragent = apr_psprintf(d->r->pool, "mod_dims/%s", MODULE_VERSION);
+        curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, dims_useragent);
+    }
 
     /* The curl shared handle allows this process to share DNS cache
      * and prevents the DNS cache from going away after every request.
@@ -2118,6 +2170,14 @@ static const command_rec dims_commands[] =
     AP_INIT_TAKE1("DimsDefaultOutputFormat",
                 dims_config_set_default_output_format, NULL, RSRC_CONF,
                 "Default output format if 'format' command is not present in the request."),
+    AP_INIT_TAKE1("DimsUserAgentEnabled",
+                dims_config_set_user_agent_enabled, NULL, RSRC_CONF,
+                "Enable DIMS User-Agent header ('dims/<version>'), true OR false."
+                "The default is false."),
+    AP_INIT_TAKE1("DimsUserAgentOverride",
+                dims_config_set_user_agent_override, NULL, RSRC_CONF,
+                "Override DIMS User-Agent header"
+                "The default is 'dims/<version>."),
     {NULL}
 };
 
