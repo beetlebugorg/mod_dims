@@ -636,7 +636,7 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     if (d->config->user_agent_override != NULL && d->config->user_agent_enabled == 1) {
         curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, d->config->user_agent_override);
     } else if (d->config->user_agent_enabled == 1) {
-        char *dims_useragent = apr_psprintf(d->r->pool, "dims/%s", MODULE_VERSION);
+        char *dims_useragent = apr_psprintf(d->r->pool, "mod_dims/%s", MODULE_VERSION);
         curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, dims_useragent);
     }
 
