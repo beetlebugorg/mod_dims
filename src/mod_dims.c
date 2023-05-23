@@ -266,7 +266,7 @@ dims_config_set_default_output_format(cmd_parms *cmd, void *dummy, const char *a
 }
 
 static const char *
-dims_config_set_user_agent(cmd_parms *cmd, void *dummy, const char *arg)
+dims_config_set_user_agent_override(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
@@ -2172,11 +2172,11 @@ static const command_rec dims_commands[] =
                 "Default output format if 'format' command is not present in the request."),
     AP_INIT_TAKE1("DimsUserAgentEnabled",
                 dims_config_set_user_agent_enabled, NULL, RSRC_CONF,
-                "Set DIMS User-Agent header, true OR false."
+                "Enable DIMS User-Agent header ('dims/<version>'), true OR false."
                 "The default is false."),
     AP_INIT_TAKE1("DimsUserAgentOverride",
-                dims_config_set_user_agent, NULL, RSRC_CONF,
-                "Set a custom DIMS User-Agent header"
+                dims_config_set_user_agent_override, NULL, RSRC_CONF,
+                "Override DIMS User-Agent header"
                 "The default is 'dims/<version>."),
     {NULL}
 };
