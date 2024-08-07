@@ -119,6 +119,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->curl_queue_size = 10;
     config->cache_dir = NULL;
     config->secret_key = apr_pstrdup(p,"m0d1ms");
+    config->encryption_algorithm = "AES/ECB/PKCS5Padding";
     config->max_expiry_period= 0; // never expire
 
     return (void *) config;
@@ -250,6 +251,15 @@ dims_config_set_encoded_fetch(cmd_parms *cmd, void *dummy, const char *arg)
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
     config->disable_encoded_fetch = atoi(arg);
+    return NULL;
+}
+
+static const char *
+dims_config_set_encryption_algorithm(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->encryption_algorithm = (char *) arg;
     return NULL;
 }
 
@@ -1593,6 +1603,97 @@ aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_tex
     return plaintext;
 }
 
+static char *
+aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_encrypted_text) {
+    EVP_CIPHER_CTX *ctx;
+    int ret;
+    int plaintext_length = 0;
+    int out_length;
+    char *plaintext;
+
+    // Decode the Base64 input
+    int encrypted_length = apr_base64_decode_len((const char *)base64_encrypted_text);
+    unsigned char *encrypted_data = apr_palloc(r->pool, encrypted_length);
+    int decoded_length = apr_base64_decode((char *)encrypted_data, (const char *)base64_encrypted_text);
+
+    // Extract IV (12 bytes), ciphertext, and tag (16 bytes)
+    unsigned char *iv = encrypted_data;
+    unsigned char *encrypted_text = encrypted_data + 12; // 12-byte IV
+    int ciphertext_length = decoded_length - 12 - 16; // 16-byte tag at the end
+    unsigned char *tag = encrypted_text + ciphertext_length; // 16-byte tag
+
+    // Initialize the context
+    if (!(ctx = EVP_CIPHER_CTX_new())) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to create new EVP_CIPHER_CTX");
+        ERR_print_errors_cb(aes_errors, r);
+        return NULL;
+    }
+
+    // Initialize the decryption operation
+    if (!EVP_DecryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_DecryptInit_ex failed (1)");
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
+    }
+
+    // Set the IV length, if necessary
+    if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_CIPHER_CTX_ctrl failed to set IV length");
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
+    }
+
+    // Set the key and IV
+    if (!EVP_DecryptInit_ex(ctx, NULL, NULL, key, iv)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_DecryptInit_ex failed (2)");
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
+    }
+
+    plaintext = apr_palloc(r->pool, ciphertext_length + 1); // +1 for null terminator
+    if (!plaintext) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Memory allocation failed");
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
+    }
+
+    // Provide the message to be decrypted and obtain the plaintext output
+    if (!EVP_DecryptUpdate(ctx, (unsigned char *)plaintext, &out_length, encrypted_text, ciphertext_length)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_DecryptUpdate failed");
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
+    }
+
+    plaintext_length = out_length;
+
+    // Set expected tag value (must be done after EVP_DecryptUpdate)
+    if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_CIPHER_CTX_ctrl failed to set tag");
+        ERR_print_errors_cb(aes_errors, r);
+        EVP_CIPHER_CTX_free(ctx);
+        return NULL;
+    }
+
+    // Finalize the decryption
+    ret = EVP_DecryptFinal_ex(ctx, (unsigned char *)plaintext + plaintext_length, &out_length);
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    if (ret > 0) {
+        plaintext_length += out_length;
+        plaintext[plaintext_length] = '\0';  // Explicitly add the null terminator
+        return plaintext;
+    } else {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_DecryptFinal_ex failed");
+        ERR_print_errors_cb(aes_errors, r);
+        return NULL;
+    }
+}
+
 /**
  * The apache handler.  Apache will call this method when a request
  * for /dims/, /dims3/, /dims4/ or an image is recieved.
@@ -1780,37 +1881,67 @@ dims_handler(request_rec *r)
                 } else if (strncmp(token, "eurl=", 4) == 0) {
                     eurl = apr_pstrdup(r->pool, token + 5);
 
-                    unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
-                    int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
+                    if (d->config->encryption_algorithm != NULL &&
+                        strncmp((char *)d->config->encryption_algorithm, "AES/GCM/NoPadding", strlen("AES/GCM/NoPadding")) == 0) {
 
-                    // Hash secret via SHA-1.
-                    unsigned char *secret = (unsigned char *) d->client_config->secret_key;
-                    unsigned char hash[SHA_DIGEST_LENGTH];
-                    SHA1(secret, strlen((char *) secret), hash);
+                        // Hash secret via SHA-1
+                        unsigned char *secret = (unsigned char *)d->client_config->secret_key;
+                        unsigned char hash[SHA_DIGEST_LENGTH];
+                        SHA1(secret, strlen((char *)secret), hash);
+                        // Convert to hex
+                        char hex[SHA_DIGEST_LENGTH * 2 + 1];
+                        if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+                            return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
+                        }
+                        // Use first 16 bytes as key
+                        unsigned char key[17];
+                        strncpy((char *)key, hex, 16);
+                        key[16] = '\0';
 
-                    // Convert to hex.
-                    char hex[SHA_DIGEST_LENGTH * 2 + 1];
-                    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-                        return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
+                        // Force key to uppercase
+                        unsigned char *s = key;
+                        while (*s) { *s = toupper(*s); s++; }
+
+                        fixed_url = aes_128_gcm_decrypt(r, key, eurl);
+
+                        if (fixed_url == NULL) {
+                            return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
+                        }
+                        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
+                        break;
+                    } else {
+                        //Default is AES/ECB/PKCS5Padding
+                        unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
+                        int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
+
+                        // Hash secret via SHA-1.
+                        unsigned char *secret = (unsigned char *) d->client_config->secret_key;
+                        unsigned char hash[SHA_DIGEST_LENGTH];
+                        SHA1(secret, strlen((char *) secret), hash);
+
+                        // Convert to hex.
+                        char hex[SHA_DIGEST_LENGTH * 2 + 1];
+                        if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+                            return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
+                        }
+
+                        // Use first 16 bytes.
+                        unsigned char key[17];
+                        strncpy((char *) key, hex, 16);
+                        key[16] = '\0';
+
+                        // Force key to uppercase
+                        unsigned char *s = key;
+                        while (*s) { *s = toupper(*s); s++; }
+
+                        fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
+                        if (fixed_url == NULL) {
+                            return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
+                        }
+
+                        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
+                        break;
                     }
-
-                    // Use first 16 bytes.
-                    unsigned char key[17];
-                    strncpy((char *) key, hex, 16);
-                    key[16] = '\0';
-
-                    // Force key to uppercase
-                    unsigned char *s = key;
-                    while (*s) { *s = toupper(*s); s++; }
-
-                    fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
-                    if (fixed_url == NULL) {
-                        return dims_cleanup(d, "URL Description Failed", DIMS_FAILURE);
-                    }
-
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
-                    break;
-
                 } else if (strncmp(token, "optimizeResize=", 4) == 0) {
                     d->optimize_resize = atof(token + 15);
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Overriding optimize resize: %f", d->optimize_resize);
@@ -2167,6 +2298,10 @@ static const command_rec dims_commands[] =
                 dims_config_set_encoded_fetch, NULL, RSRC_CONF,
                 "Should DIMS encode image url before fetching it."
                 "The default is 0."),
+    AP_INIT_TAKE1("DimsEncryptionAlgorithm",
+                dims_config_set_encryption_algorithm, NULL, RSRC_CONF,
+                "What algorithm should DIMS user to decrypt the 'eurl' parameter."
+                "The default is AES/ECB/PKCS5Padding."),
     AP_INIT_TAKE1("DimsDefaultOutputFormat",
                 dims_config_set_default_output_format, NULL, RSRC_CONF,
                 "Default output format if 'format' command is not present in the request."),

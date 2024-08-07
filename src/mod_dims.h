@@ -114,6 +114,7 @@ struct dims_config_rec {
 
     int curl_queue_size;
     char *secret_key;
+    char *encryption_algorithm;
     long max_expiry_period;
     char *cache_dir;
     char *default_image_prefix;
