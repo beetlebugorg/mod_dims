@@ -824,7 +824,13 @@ dims_send_image(dims_request_rec *d)
     } else if (d->fetch_http_status != 0) {
         d->r->status = d->fetch_http_status;
     } else if(d->status != DIMS_SUCCESS) {
-        d->r->status = HTTP_INTERNAL_SERVER_ERROR;
+        if (d->status == DIMS_BAD_URL
+            || d->status == DIMS_BAD_ARGUMENTS) {
+            d->r->status = HTTP_BAD_REQUEST;
+        } else {
+            //Includes DIMS_BAD_CLIENT, DIMS_DOWNLOAD_TIMEOUT, DIMS_IMAGEMAGICK_TIMEOUT, DIMS_HOSTNAME_NOT_IN_WHITELIST
+            d->r->status = HTTP_INTERNAL_SERVER_ERROR;
+        }
     }
 
     if (blob == NULL) {
@@ -1379,7 +1385,7 @@ dims_handle_request(dims_request_rec *d)
             gen_hash[7] = '\0';
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
                 "Developer key not set for client '%s'", d->client_config->id);
-            return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_URL);
+            return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
         } else if (strncasecmp(hash, gen_hash, 6) != 0) {
             gen_hash[7] = '\0';
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
