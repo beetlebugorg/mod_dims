@@ -1881,67 +1881,42 @@ dims_handler(request_rec *r)
                 } else if (strncmp(token, "eurl=", 4) == 0) {
                     eurl = apr_pstrdup(r->pool, token + 5);
 
+                    // Hash secret via SHA-1.
+                    unsigned char *secret = (unsigned char *) d->client_config->secret_key;
+                    unsigned char hash[SHA_DIGEST_LENGTH];
+                    SHA1(secret, strlen((char *) secret), hash);
+
+                    // Convert to hex.
+                    char hex[SHA_DIGEST_LENGTH * 2 + 1];
+                    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+                        return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
+                    }
+
+                    // Use first 16 bytes.
+                    unsigned char key[17];
+                    strncpy((char *) key, hex, 16);
+                    key[16] = '\0';
+
+                    // Force key to uppercase
+                    unsigned char *s = key;
+                    while (*s) { *s = toupper(*s); s++; }
+
                     if (d->config->encryption_algorithm != NULL &&
                         strncmp((char *)d->config->encryption_algorithm, "AES/GCM/NoPadding", strlen("AES/GCM/NoPadding")) == 0) {
 
-                        // Hash secret via SHA-1
-                        unsigned char *secret = (unsigned char *)d->client_config->secret_key;
-                        unsigned char hash[SHA_DIGEST_LENGTH];
-                        SHA1(secret, strlen((char *)secret), hash);
-                        // Convert to hex
-                        char hex[SHA_DIGEST_LENGTH * 2 + 1];
-                        if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-                            return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
-                        }
-                        // Use first 16 bytes as key
-                        unsigned char key[17];
-                        strncpy((char *)key, hex, 16);
-                        key[16] = '\0';
-
-                        // Force key to uppercase
-                        unsigned char *s = key;
-                        while (*s) { *s = toupper(*s); s++; }
-
                         fixed_url = aes_128_gcm_decrypt(r, key, eurl);
-
-                        if (fixed_url == NULL) {
-                            return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
-                        }
-                        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
-                        break;
                     } else {
                         //Default is AES/ECB/PKCS5Padding
                         unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
                         int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
-
-                        // Hash secret via SHA-1.
-                        unsigned char *secret = (unsigned char *) d->client_config->secret_key;
-                        unsigned char hash[SHA_DIGEST_LENGTH];
-                        SHA1(secret, strlen((char *) secret), hash);
-
-                        // Convert to hex.
-                        char hex[SHA_DIGEST_LENGTH * 2 + 1];
-                        if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-                            return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
-                        }
-
-                        // Use first 16 bytes.
-                        unsigned char key[17];
-                        strncpy((char *) key, hex, 16);
-                        key[16] = '\0';
-
-                        // Force key to uppercase
-                        unsigned char *s = key;
-                        while (*s) { *s = toupper(*s); s++; }
-
                         fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
-                        if (fixed_url == NULL) {
-                            return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
-                        }
-
-                        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
-                        break;
                     }
+                    if (fixed_url == NULL) {
+                        return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
+                    }
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
+                    break;
+
                 } else if (strncmp(token, "optimizeResize=", 4) == 0) {
                     d->optimize_resize = atof(token + 15);
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Overriding optimize resize: %f", d->optimize_resize);
