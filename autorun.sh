@@ -42,3 +42,5 @@ done
 "$AUTORECONF" -i || exit $?
 "$AUTOMAKE" || exit $?
 "$AUTOCONF" || exit $?01
+
+./configure $@
