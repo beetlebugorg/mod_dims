@@ -28,6 +28,7 @@ stamp-h1
 *.lai
 *.o
 *.Plo
+*.Tpo
 *.a
 *~
 

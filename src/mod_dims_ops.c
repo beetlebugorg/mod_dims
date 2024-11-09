@@ -15,6 +15,8 @@
  */
 
 #include "mod_dims.h"
+#include "curl.h"
+#include "request.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -52,25 +54,7 @@ static DimsGravity gravities[] = {
     {NULL, CenterGravity}
 };
 
-/*
-apr_status_t
-dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
-    MagickStatusType flags;
-    RectangleInfo rec;
-    ExceptionInfo ex_info;
-
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
-    if(!(flags & AllValues)) {
-        *err = "Parsing crop geometry failed";
-        return DIMS_FAILURE;
-    }
-
-    // MAGICK_CHECK(MagickResizeImage(d->wand, rec.width, rec.height, UndefinedFilter, 1), d);
-    smartCrop(d->wand, 20, rec.width, rec.height);
-
-    return DIMS_SUCCESS;
-}
-*/
+CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
 
 apr_status_t
 dims_strip_operation (dims_request_rec *d, char *args, char **err) {
