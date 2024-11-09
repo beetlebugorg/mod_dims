@@ -33,7 +33,7 @@
 #include <http_log.h>
 #include <http_protocol.h>
 
-#include <wand/magick-wand.h>
+#include <MagickWand/MagickWand.h>
 
 #include <curl/curl.h>
 
