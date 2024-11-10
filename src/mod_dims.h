@@ -18,7 +18,7 @@
 #define _MOD_DIMS_H
 
 #define MODULE_RELEASE "$Revision: $"
-#define MODULE_VERSION "3.3.30"
+#define MODULE_VERSION "4.0.0alpha"
 
 #include <apr_strings.h>
 #include <apr_file_io.h>
