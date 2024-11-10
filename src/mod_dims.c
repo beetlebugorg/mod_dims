@@ -112,107 +112,78 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
             "Loading image from %s", fetch_url);
 
-    /* Allow file:/// references for NOIMAGE urls. */
-    if(url == NULL && strncmp(fetch_url, "file:///", 8) == 0) {
-        char *filename = fetch_url + 7;
-        apr_finfo_t finfo;
-        apr_status_t status;
-        apr_time_t start_time;
+    CURLcode code = dims_get_image_data(d, fetch_url, &image_data);
 
-        /* Read image from disk. */
-        start_time = apr_time_now();
-        status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool);
-        if(status != 0) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "mod_dims error, 'NOIMAGE image not found at %s', "
-                    "on request: %s ", filename, d->r->uri);
-            return 1;
+    start_time = apr_time_now();
+    if(code != 0) {
+        if(image_data.data) {
+            free(image_data.data);
         }
-        d->download_time = (apr_time_now() - start_time) / 1000;
-        d->original_image_size = finfo.size;
 
-        start_time = apr_time_now();
-        if(MagickReadImage(d->wand, filename) == MagickFalse) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "mod_dims error, 'Failed to load NOIMAGE image from %s', "
-                    "on request: %s ", filename, d->r->uri);
-            return 1;
-        }
-        d->imagemagick_time += (apr_time_now() - start_time) / 1000;
-    } else {
-        CURLcode code = dims_get_image_data(d, fetch_url, &image_data);
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+                "libcurl error, '%s', on request: %s ", 
+                curl_easy_strerror(code), d->r->uri);
 
-        start_time = apr_time_now();
-        if(code != 0) {
-            if(image_data.data) {
-                free(image_data.data);
-            }
-
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "libcurl error, '%s', on request: %s ", 
-                    curl_easy_strerror(code), d->r->uri);
-
-            d->status = DIMS_FAILURE;
-            d->fetch_http_status = 500;
-            if(code == CURLE_OPERATION_TIMEDOUT) {
-                d->status = DIMS_DOWNLOAD_TIMEOUT;
-            }
-
-            d->download_time = (apr_time_now() - start_time) / 1000;
-
-            return 1;
+        d->status = DIMS_FAILURE;
+        d->fetch_http_status = 500;
+        if(code == CURLE_OPERATION_TIMEDOUT) {
+            d->status = DIMS_DOWNLOAD_TIMEOUT;
         }
 
         d->download_time = (apr_time_now() - start_time) / 1000;
 
-        // Don't set the fetch_http_status if we're downloading the NOIMAGE image.
-        if (url != NULL) {
-             d->fetch_http_status = image_data.response_code;
-        }
-
-        if(image_data.response_code != 200) {
-            if(image_data.response_code == 404) {
-                d->status = DIMS_FILE_NOT_FOUND;
-            }
-
-            if(image_data.data) {
-                free(image_data.data);
-            }
-            
-            return 1;
-        }
-
-        char *actual_image_data = image_data.data;
-
-        // Ensure SVGs have the appropriate XML header.
-        if (image_data.size >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
-            actual_image_data = apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", image_data.data, NULL);
-            image_data.used += 55;
-        }
-
-        start_time = apr_time_now();
-        if(MagickReadImageBlob(d->wand, actual_image_data, image_data.used)
-                == MagickFalse) {
-            ExceptionType et;
-
-            if(image_data.data) {
-                free(image_data.data);
-            } 
-
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "ImageMagick error, '%s', on request: %s ", 
-                    MagickGetException(d->wand, &et), d->r->uri);
-
-            return 1;
-        }
-        d->imagemagick_time += (apr_time_now() - start_time) / 1000;
-
-        if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
-            d->original_image_size = image_data.used;
-        }
-
-        free(image_data.data);
+        return 1;
     }
+
+    d->download_time = (apr_time_now() - start_time) / 1000;
+
+    // Don't set the fetch_http_status if we're downloading the NOIMAGE image.
+    if (url != NULL) {
+            d->fetch_http_status = image_data.response_code;
+    }
+
+    if(image_data.response_code != 200) {
+        if(image_data.response_code == 404) {
+            d->status = DIMS_FILE_NOT_FOUND;
+        }
+
+        if(image_data.data) {
+            free(image_data.data);
+        }
+        
+        return 1;
+    }
+
+    char *actual_image_data = image_data.data;
+
+    // Ensure SVGs have the appropriate XML header.
+    if (image_data.size >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
+        actual_image_data = apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", image_data.data, NULL);
+        image_data.used += 55;
+    }
+
+    start_time = apr_time_now();
+    if(MagickReadImageBlob(d->wand, actual_image_data, image_data.used)
+            == MagickFalse) {
+        ExceptionType et;
+
+        if(image_data.data) {
+            free(image_data.data);
+        } 
+
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+                "ImageMagick error, '%s', on request: %s ", 
+                MagickGetException(d->wand, &et), d->r->uri);
+
+        return 1;
+    }
+    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
+
+    if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
+        d->original_image_size = image_data.used;
+    }
+
+    free(image_data.data);
 
     return 0;
 }
@@ -861,28 +832,7 @@ dims_handle_request(dims_request_rec *d)
         }
     }
 
-    if(d->filename) {
-        /* Handle local images. */
-
-        apr_finfo_t finfo;
-        apr_status_t status;
-        apr_time_t start_time;
-
-        /* Read image from disk. */
-        start_time = apr_time_now();
-        status = apr_stat(&finfo, d->filename, APR_FINFO_SIZE, d->pool);
-        if(status != 0) {
-            return dims_cleanup(d, "Unable to stat image file", DIMS_FILE_NOT_FOUND);
-        }
-        d->download_time = (apr_time_now() - start_time) / 1000;
-        d->original_image_size = finfo.size;
-
-        start_time = apr_time_now();
-        MAGICK_CHECK(MagickReadImage(d->wand, d->filename), d);
-        d->imagemagick_time += (apr_time_now() - start_time) / 1000;
-
-        return dims_process_image(d);
-    } else if(d->image_url || d->no_image_url) {
+    if(d->image_url || d->no_image_url) {
         /* Handle remote images. */
 
         char *fetch_url = NULL;
