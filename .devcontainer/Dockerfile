@@ -22,6 +22,7 @@ ENV DIMS_SECRET=""
 ENV DIMS_CACHE_EXPIRE=604800
 ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
 ENV DIMS_WHITELIST="*.com *.org *.net *.io"
+ENV PKG_CONFIG_PATH=/usr/local/imagemagick/lib/pkgconfig
 
 RUN apt-get -y update && \
     apt-get install -y --no-install-recommends \
