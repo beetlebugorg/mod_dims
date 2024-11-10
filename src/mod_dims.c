@@ -953,37 +953,6 @@ dims_handle_request(dims_request_rec *d)
 
     return dims_cleanup(d, NULL, DIMS_FAILURE);
 }
-/**
- * dims_sizer - return the size of the image (height: X\n width: X)
- */
-static apr_status_t
-dims_sizer(dims_request_rec *d)
-{
-    apr_time_t now_time;
-    
-    apr_uri_t uri;
-    long width, height;
-
-    d->wand = NewMagickWand();
-    now_time = apr_time_now();
-    if(!d->image_url ) {
-        return DECLINED;
-    }
-    if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
-        return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
-    }
-    if(dims_fetch_remote_image(d, d->image_url ) != 0) {
-        return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
-    }
- 
-    width = MagickGetImageWidth(d->wand);
-    height = MagickGetImageHeight(d->wand);
-    DestroyMagickWand(d->wand);
-    ap_set_content_type(d->r, "text/plain");
-    ap_rprintf(d->r, "{\n\t\"height\": %ld,\n\t\"width\": %ld\n}", height, width );
-    return OK;
-
-}
 
 int
 dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
