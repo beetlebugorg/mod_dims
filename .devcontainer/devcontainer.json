@@ -13,6 +13,7 @@
 		"vscode": {
 			"extensions": [
 				"ms-vscode.cpptools",
+				"ms-vscode.cpptools-extension-pack",
 				"vscodevim.vim"
 			]
 		}
