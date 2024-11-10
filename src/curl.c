@@ -1,4 +1,5 @@
 
+#include <apr.h>
 #include <MagickWand/MagickWand.h>
 
 #include "request.h"
@@ -207,4 +208,47 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     }
 
     return code;
+}
+
+static apr_status_t
+dims_curl_cleanup(void *data) {
+    dims_curl_rec *locks = (dims_curl_rec *) data;
+
+    curl_share_cleanup(locks->share);
+    curl_global_cleanup();
+
+    apr_thread_mutex_destroy(locks->share_mutex);
+    apr_thread_mutex_destroy(locks->dns_mutex);
+
+    apr_pool_userdata_set(NULL, DIMS_CURL_SHARED_KEY, NULL, locks->s->process->pool);
+}
+
+void 
+dims_curl_init(apr_pool_t *p, server_rec *s) {
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    dims_curl_rec *locks = (dims_curl_rec *) apr_pcalloc(p, sizeof(dims_curl_rec));
+
+    locks->s = s;
+    locks->share = curl_share_init(); 
+
+    apr_thread_mutex_create(&locks->share_mutex, APR_THREAD_MUTEX_DEFAULT, p);
+    apr_thread_mutex_create(&locks->dns_mutex, APR_THREAD_MUTEX_DEFAULT, p);
+
+    curl_share_setopt(locks->share, CURLSHOPT_LOCKFUNC, lock_share); 
+    curl_share_setopt(locks->share, CURLSHOPT_UNLOCKFUNC, unlock_share); 
+    curl_share_setopt(locks->share, CURLSHOPT_USERDATA, (void *) locks); 
+    curl_share_setopt(locks->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+
+    /* We have to associate our handle/locks with the process->pool otherwise
+     * we won't be able to get at it from the remote_fetch_image function.  This
+     * pool doesn't seem to go away when the child process goes away so we
+     * have to register the clean up method below.
+     */
+    apr_pool_userdata_set(locks, DIMS_CURL_SHARED_KEY, NULL, s->process->pool);
+
+    /* Register cleanup with the 'p' pool so we can clean up the locks and
+     * shared curl handle when this process dies.
+     */
+    apr_pool_cleanup_register(p, locks, dims_curl_cleanup, dims_curl_cleanup);
 }

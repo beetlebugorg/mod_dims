@@ -25,7 +25,7 @@ typedef struct {
 } dims_image_data_t;
 
 CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
-void lock_share(CURL *handle, curl_lock_data data, curl_lock_access access, void *userptr);
-void unlock_share(CURL *handle, curl_lock_data data, void *userptr);
+
+void dims_curl_init(apr_pool_t *p, server_rec *s);
 
 #endif
