@@ -65,7 +65,8 @@ int dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *s)
 void dims_child_init(apr_pool_t *p, server_rec *s);
 void dims_register_hooks(apr_pool_t *p);
 
-apr_status_t dims_handle_request(dims_request_rec *d);
+apr_status_t dims_handle_dims3(dims_request_rec *d);
+apr_status_t dims_handle_dims4(dims_request_rec *d);
 apr_status_t dims_cleanup(dims_request_rec *d, char *err_msg, int status);
 
 typedef struct {

@@ -9,6 +9,7 @@ libmod_dims_la_SOURCES = \
 	mod_dims.c mod_dims.h \
 	mod_dims_ops.c mod_dims_ops.h \
 	module.c module.h \
+	status.c status.h \
 	request.h
 libmod_dims_la_LDFLAGS = -module -avoid-version $(MagickCore_LIBS) $(MagickWand_LIBS) $(libcurl_LIBS) ${MODULE_LDFLAGS}
 libmod_dims_la_CFLAGS = -std=c99 -D_LARGEFILE64_SOURCE $(MagickCore_CFLAGS) $(MagickWand_CFLAGS) $(libcurl_CFLAGS) ${MODULE_CFLAGS}

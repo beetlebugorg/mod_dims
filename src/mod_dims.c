@@ -355,7 +355,7 @@ dims_send_image(dims_request_rec *d)
                 (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->etag, NULL));
     } else if (d->last_modified) {
         etag = ap_md5(d->pool,
-                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->last_modified, NULL));
+                      (unsigned char *)apr_pstrcat(d->pool, d->request_hash, d->last_modified, NULL));
     }
 
     if (etag) {
@@ -791,51 +791,46 @@ verify_dims3_allowlist(dims_request_rec *d) {
     return found;
 }
 
-apr_status_t
+static apr_status_t
 dims_handle_request(dims_request_rec *d)
 {
-    apr_time_t now_time = apr_time_now();
-
-    // Verify client id.
-    if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
-        return dims_cleanup(d, "Client ID is not valid", DIMS_BAD_CLIENT);
-    }
-
-    if(d->client_config && d->client_config->no_image_url) {
-        d->no_image_url = d->client_config->no_image_url;
-    }
-
-    // Verify allowlist (dims3 only).
-    if (d->use_secret_key != 0 && !verify_dims3_allowlist(d)) {
-        return dims_cleanup(d, "Source image is being served from an non-allowed host.", DIMS_HOSTNAME_NOT_IN_WHITELIST);
-    }
-
-    // Verify signature (dims4 only).
-    if (d->use_secret_key == 1 && !verify_dims4_signature(d)) {
-        return dims_cleanup(d, "Signature is invalid.", DIMS_BAD_CLIENT);
-    }
-
-    d->request_hash = ap_md5(d->pool, (unsigned char *) apr_pstrcat(d->pool, d->client_id, d->commands, d->image_url, NULL));
-  
-    dims_set_optimal_geometry(d);
-
     // Download image.
-    if(dims_fetch_remote_image(d, d->image_url) != 0) {
-        // If image failed to download replace it with the NOIMAGE image. 
-        if(dims_fetch_remote_image(d, NULL) != 0) {
-            return DECLINED;
-        }
-
-        d->use_no_image = 1;
+    int status;
+    if ((status = dims_fetch_remote_image(d, d->image_url)) != 0) {
+        return status;
     }
 
     // Execute Imagemagick commands.
-    dims_process_image(d);
+    if ((status = dims_process_image(d)) != 0) {
+        return status;
+    }
 
     // Serve the image.
-    dims_send_image(d);
+    if ((status = dims_send_image(d)) != 0) {
+        return status;
+    }
+}
 
-    return DIMS_SUCCESS;
+apr_status_t
+dims_handle_dims3(dims_request_rec *d)
+{
+    // Verify allowlist (dims3 only).
+    if (!verify_dims3_allowlist(d)) {
+        return dims_cleanup(d, "Source image is being served from an non-allowed host.", DIMS_HOSTNAME_NOT_IN_WHITELIST);
+    }
+
+    return dims_handle_request(d);
+}
+
+apr_status_t
+dims_handle_dims4(dims_request_rec *d)
+{
+    // Verify signature (dims4 only).
+    if (!verify_dims4_signature(d)) {
+        return dims_cleanup(d, "Signature is invalid.", DIMS_BAD_CLIENT);
+    }
+
+    return dims_handle_request(d);
 }
 
 int

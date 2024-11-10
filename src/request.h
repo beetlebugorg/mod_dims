@@ -69,7 +69,6 @@ struct dims_request_rec {
     apr_time_t imagemagick_time;
     
     /* Use a whitelist, or use a secret key passed on the URI */
-    int use_secret_key;
     char *signature;
     char *expiration;
 
