@@ -32,6 +32,38 @@ static void show_time(request_rec *r, apr_interval_time_t tsecs)
     ap_rprintf(r, "\n");
 }
 
+static dims_request_rec *
+dims_create_request(request_rec *r)
+{
+    dims_request_rec *request = (dims_request_rec *) apr_palloc(r->pool, sizeof(dims_request_rec));
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(r->server->module_config, &dims_module);
+
+    request->r = r;
+    request->pool = r->pool;
+    request->wand = NewMagickWand();
+    request->config = config;
+    request->client_config = NULL;
+    request->no_image_url = request->config->no_image_url;
+    request->use_no_image = 0;
+    request->image_url = NULL;
+    request->filename = NULL;
+    request->cache_control = NULL;
+    request->edge_control = NULL;
+    request->etag = NULL;
+    request->last_modified = NULL;
+    request->request_hash = NULL;
+    request->status = APR_SUCCESS;
+    request->fetch_http_status = 0;
+    request->start_time = apr_time_now();
+    request->download_time = 0;
+    request->imagemagick_time = 0;
+    request->use_secret_key=0;
+    request->optimize_resize = config->optimize_resize;
+    request->send_content_disposition = 0;
+    request->content_disposition_filename = NULL;
+
+    return request;
+}
 
 /**
  * The apache handler.  Apache will call this method when a request
@@ -50,34 +82,9 @@ static void show_time(request_rec *r, apr_interval_time_t tsecs)
  *    with the commands (r->path_info) to dims_process_image.
  */
 apr_status_t 
-dims_handler(request_rec *r)
+dims_handler(request_rec *r) 
 {
-    dims_request_rec *d = (dims_request_rec *) 
-            apr_palloc(r->pool, sizeof(dims_request_rec));
-
-    d->r = r;
-    d->pool = r->pool;
-    d->wand = NULL;
-    d->config = (dims_config_rec *) ap_get_module_config(r->server->module_config, &dims_module);
-    d->client_config = NULL;
-    d->no_image_url = d->config->no_image_url;
-    d->use_no_image = 0;
-    d->image_url = NULL;
-    d->filename = NULL;
-    d->cache_control = NULL;
-    d->edge_control = NULL;
-    d->etag = NULL;
-    d->last_modified = NULL;
-    d->request_hash = NULL;
-    d->status = APR_SUCCESS;
-    d->fetch_http_status = 0;
-    d->start_time = apr_time_now();
-    d->download_time = 0;
-    d->imagemagick_time = 0;
-    d->use_secret_key=0;
-    d->optimize_resize = d->config->optimize_resize;
-    d->send_content_disposition = 0;
-    d->content_disposition_filename = NULL;
+    dims_request_rec *d = dims_create_request(r);
 
     /* Set initial notes to be logged by mod_log_config. */
     apr_table_setn(r->notes, "DIMS_STATUS", "0");
@@ -85,12 +92,11 @@ dims_handler(request_rec *r)
     apr_table_setn(r->notes, "DIMS_DL_TIME", "-");
     apr_table_setn(r->notes, "DIMS_IM_TIME", "-");
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-            "Handler %s : %s", r->handler, r->uri);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Handler %s : %s", r->handler, r->uri);
 
     if ((strcmp(r->handler, "dims3") == 0) ||
-            (r->uri && strncmp(r->uri, "/dims3/", 7) == 0) ||
-            (strcmp(r->handler, "dims4") == 0 )) {
+            (r->uri && strncmp(r->uri, "/dims3/", 7) == 0) || (strcmp(r->handler, "dims4") == 0 )) {
+
         /* Handle new-style DIMS parameters. */
         char *p, *url = NULL, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
         if (( strcmp( r->handler,"dims4") == 0)) {
@@ -98,11 +104,23 @@ dims_handler(request_rec *r)
         }
 
         char *unparsed_commands = apr_pstrdup(r->pool, r->uri + 7);
-        d->client_id = ap_getword(d->pool, (const char **) &unparsed_commands, '/');
+        d->unparsed_commands = unparsed_commands;
 
-        if(!(d->client_config =
-                apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
-            return dims_cleanup(d, "Application ID is not valid", DIMS_BAD_CLIENT);
+        d->client_id = ap_getword(d->pool, (const char **) &unparsed_commands, '/');
+        d->signature = ap_getword(d->pool, (const char **) &unparsed_commands, '/');
+        d->expiration = ap_getword(d->pool, (const char **) &unparsed_commands, '/');
+        d->commands = apr_pstrdup(d->pool, unparsed_commands);
+        char *s = d->commands;
+        while (*s) {
+            if (*s == ' ') {
+                *s = '+';
+            }
+
+            s++;
+        }
+
+        if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
+            return dims_cleanup(d, "Client ID is not valid", DIMS_BAD_CLIENT);
         }
 
         /* Check first if URL is passed as a query parameter. */
@@ -171,29 +189,9 @@ dims_handler(request_rec *r)
             }
         }
 
-        /* Parse out URL to image.
-         * HACK: If URL has "http:/" instead of "http://", correct it. 
-         */
-        commands = apr_pstrdup(r->pool, r->uri);
-        if(fixed_url == NULL) {
-            url = strstr(r->uri, "http:/");
-            if(url && *(url + 6) != '/') {
-                fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
-            } else if(!url) {
-                return dims_cleanup(d, NULL, DIMS_BAD_URL);
-            } else {
-                fixed_url = url;
-            }
-
-            /* Strip URL off URI.  This leaves only the tranformation parameters. */
-            p = strstr(commands, "http:/");
-            if(!p) return dims_cleanup(d, NULL, DIMS_BAD_URL);
-            *p = '\0';
-        }
-
         // Convert '+' in the fixed_url to ' '.
         char *image_url = apr_pstrdup(d->r->pool, fixed_url);
-        char *s = image_url;
+        s = image_url;
         while (*s) {
             if (*s == '+') {
                 *s = ' ';

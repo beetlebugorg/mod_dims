@@ -379,7 +379,6 @@ dims_send_image(dims_request_rec *d)
 
     MagickRelinquishMemory(blob);
     MagickRelinquishMemory(format);
-    DestroyMagickWand(d->wand);
 
     /* After the image is sent record stats about this request. */
     if(d->status == DIMS_SUCCESS) {
@@ -434,7 +433,6 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
         }
 
         MagickRelinquishMemory(msg);
-        DestroyMagickWand(d->wand);
     } 
     
     if(err_msg) {
@@ -444,19 +442,16 @@ dims_cleanup(dims_request_rec *d, char *err_msg, int status)
     }
 
     if(d->no_image_url) {
-        d->wand = NewMagickWand();
         if(!dims_fetch_remote_image(d, NULL)) {
             return dims_send_image(d);
-        } 
-        DestroyMagickWand(d->wand);
+        }
     }
+
     if ( status != DIMS_SUCCESS ) {
         return HTTP_NOT_FOUND;
+    } else {
+        return DECLINED;   
     }
-    else {
-     return DECLINED;   
-    }
-     
 }
 
 /**
@@ -478,14 +473,10 @@ dims_set_optimal_geometry(dims_request_rec *d)
 {
     MagickStatusType flags;
     RectangleInfo rec;
-    const char *cmds = d->unparsed_commands;
-
-    if(!d->wand) {
-        d->wand = NewMagickWand();
-    }
+    const char *cmds = d->commands;
 
     /* Process operations. */
-    while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
+    while(cmds < d->commands + strlen(d->commands)) {
         char *command = ap_getword(d->pool, &cmds, '/');
 
         if(strcmp(command, "resize") == 0 ||
@@ -592,8 +583,8 @@ dims_process_image(dims_request_rec *d)
 
     if (images == 1 || should_flatten) {
         bool output_format_provided = false;
-        const char *cmds = d->unparsed_commands;
-        while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
+        const char *cmds = d->commands;
+        while(cmds < d->commands + strlen(d->commands)) {
             char *command = ap_getword(d->pool, &cmds, '/');
 
             if (strcmp(command, "format") == 0) {
@@ -697,211 +688,154 @@ dims_process_image(dims_request_rec *d)
      */
     SetImageProgressMonitor(GetImageFromMagickWand(d->wand), NULL, NULL);
 
-    return dims_send_image(d);
+    return DIMS_SUCCESS;
+}
+
+int
+verify_dims4_signature(dims_request_rec *d) {
+    char *gen_hash;
+
+    // Throw all query params and their values into a hash table.
+    // This is used to derive additional signature params.
+    apr_hash_t *params = apr_hash_make(d->pool);
+
+    if (d->r->args) {
+        const size_t args_len = strlen(d->r->args) + 1;
+        char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
+        char *token;
+        char *strtokstate;
+
+        token = apr_strtok(args, "&", &strtokstate);
+        while (token) {
+            char *param = strtok(token, "=");
+            apr_hash_set(params, param, APR_HASH_KEY_STRING, apr_pstrdup(d->r->pool, param + strlen(param) + 1));
+            token = apr_strtok(NULL, "&", &strtokstate);
+        }
+    }
+
+    // Standard signature params.
+    char *signature_params = apr_pstrcat(d->pool, d->expiration, d->client_config->secret_key, d->commands, d->image_url, NULL);
+
+    // Concatenate additional params.
+    char *token;
+    char *strtokstate;
+    token = apr_strtok(apr_hash_get(params, "_keys", APR_HASH_KEY_STRING), ",", &strtokstate);
+    while (token) {
+        signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
+        token = apr_strtok(NULL, ",", &strtokstate);
+    }
+
+    // Hash.
+    gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
+    
+    if(d->client_config->secret_key == NULL) {
+        gen_hash[7] = '\0';
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
+            "Developer key not set for client '%s'", d->client_config->id);
+        return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
+    } else if (strncasecmp(d->signature, gen_hash, 6) != 0) {
+        gen_hash[7] = '\0';
+
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
+            "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, d->signature, d->r->uri, d->image_url);
+        return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
+    }
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+        "secret key (%s) to validated (%s:%s)", d->signature, d->commands, d->image_url);
+
+    return 1;
+}
+
+int
+verify_dims3_allowlist(dims_request_rec *d) {
+    char *fetch_url = NULL;
+    char *hostname, *state = "exact";
+    apr_uri_t uri;
+    int found = 0, done = 0;
+
+    /* Check to make sure the URLs hostname is in the whitelist.  Wildcards
+        * are handled by repeatedly checking the hash for a match after removing
+        * each part of the hostname until a match is found.  If a match is found
+        * and it's value is set to "glob" the match will be accepted.
+        */
+    if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
+        return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+    }
+
+    char *filename = strrchr(uri.path, '/');
+    if (!filename || !uri.hostname) {
+        return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+    }
+
+    if (*filename == '/') {
+        d->filename = ++filename;
+    }
+
+    hostname = uri.hostname;
+    while(!done) {
+        char *value = (char *) apr_table_get(d->config->whitelist, hostname);
+        if(value && strcmp(value, state) == 0) {
+            done = found = 1;
+        } else {
+            hostname = strstr(hostname, ".");
+            if(!hostname) {
+                done = 1;
+            } else {
+                hostname++;
+            }
+            state = "glob";
+        }
+    }
+
+    return found;
 }
 
 apr_status_t
 dims_handle_request(dims_request_rec *d)
 {
-    apr_time_t now_time;
-    d->wand = NewMagickWand();
+    apr_time_t now_time = apr_time_now();
 
-    /* Check to make sure the client id is valid. */
-    if(*d->unparsed_commands == '/') {
-        d->unparsed_commands++;
-    }
-
-    d->client_id = ap_getword(d->pool, (const char **) &d->unparsed_commands, '/');
-
-    if(!(d->client_config = 
-            apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
-        return dims_cleanup(d, "Application ID is not valid", DIMS_BAD_CLIENT);
+    // Verify client id.
+    if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
+        return dims_cleanup(d, "Client ID is not valid", DIMS_BAD_CLIENT);
     }
 
     if(d->client_config && d->client_config->no_image_url) {
         d->no_image_url = d->client_config->no_image_url;
     }
 
-    now_time = apr_time_now();
-    if ( d->use_secret_key == 1 ) {
-        char *hash;
-        char *expires_str;
-        long expires;
-        char *gen_hash;
-        long now;
-        hash = ap_getword(d->pool, (const char**)&d->unparsed_commands,'/');
-        expires_str = ap_getword(d->pool, (const char**)&d->unparsed_commands,'/');
-        expires = atol( expires_str);
-        now = apr_time_sec(now_time);
-        if ( expires - now < 0 ) {
-            ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r, "Image expired: %s now=%ld", d->r->uri,now);
-            return dims_cleanup( d, "Image Key has expired", DIMS_BAD_URL);
-        }
-        if ( expires - now > d->config->max_expiry_period && d->config->max_expiry_period >0 ) {
-            ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r, 
-                "Image expiry too far in the future:%s %s now=%ld",expires_str, d->r->uri,now);
-            return dims_cleanup(d, "Image key too far in the future", DIMS_BAD_URL);
-        }
-
-        // Throw all query params and their values into a hash table.
-        // This is used to derive additional signature params.
-        apr_hash_t *params = apr_hash_make(d->pool);
-
-        if (d->r->args) {
-            const size_t args_len = strlen(d->r->args) + 1;
-            char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
-            char *token;
-            char *strtokstate;
-
-            token = apr_strtok(args, "&", &strtokstate);
-            while (token) {
-                char *param = strtok(token, "=");
-                apr_hash_set(params, param, APR_HASH_KEY_STRING, apr_pstrdup(d->r->pool, param + strlen(param) + 1));
-                token = apr_strtok(NULL, "&", &strtokstate);
-            }
-        }
-
-        // Convert %20 (space) back to '+' in commands. This fixes an issue with "+" being encoded as %20 by some clients.
-        char *commands = apr_pstrdup(d->r->pool, d->unparsed_commands);
-        char *s = commands;
-        while (*s) {
-            if (*s == ' ') {
-                *s = '+';
-            }
-
-            s++;
-        }
-
-        // Standard signature params.
-        char *signature_params = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, commands, d->image_url, NULL);
-
-        // Concatenate additional params.
-        char *token;
-        char *strtokstate;
-        token = apr_strtok(apr_hash_get(params, "_keys", APR_HASH_KEY_STRING), ",", &strtokstate);
-        while (token) {
-            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
-            token = apr_strtok(NULL, ",", &strtokstate);
-        }
-
-        // Hash.
-        gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
-        
-        if(d->client_config->secret_key == NULL) {
-            gen_hash[7] = '\0';
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-                "Developer key not set for client '%s'", d->client_config->id);
-            return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
-        } else if (strncasecmp(hash, gen_hash, 6) != 0) {
-            gen_hash[7] = '\0';
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-                "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, hash, d->r->uri, d->image_url);
-            return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
-        }
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-            "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);    
+    // Verify allowlist (dims3 only).
+    if (d->use_secret_key != 0 && !verify_dims3_allowlist(d)) {
+        return dims_cleanup(d, "Source image is being served from an non-allowed host.", DIMS_HOSTNAME_NOT_IN_WHITELIST);
     }
 
-    d->request_hash = ap_md5(d->pool,
-            (unsigned char *) apr_pstrcat(d->pool, d->client_id,
-                d->unparsed_commands, d->image_url, NULL));
+    // Verify signature (dims4 only).
+    if (d->use_secret_key == 1 && !verify_dims4_signature(d)) {
+        return dims_cleanup(d, "Signature is invalid.", DIMS_BAD_CLIENT);
+    }
+
+    d->request_hash = ap_md5(d->pool, (unsigned char *) apr_pstrcat(d->pool, d->client_id, d->commands, d->image_url, NULL));
   
     dims_set_optimal_geometry(d);
 
-    if (d->image_url && *d->image_url == '/') {
-        request_rec *sub_req = ap_sub_req_lookup_uri(d->image_url, d->r, NULL);
-
-        if (d->config->default_image_prefix != NULL) {
-            d->image_url = apr_pstrcat(d->r->pool, d->config->default_image_prefix, d->image_url, NULL);
-        } else if (sub_req && sub_req->canonical_filename) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Looking up image locally: %s", sub_req->canonical_filename);
-            d->filename = sub_req->canonical_filename;
-        } else {
-            const char *req_server;
-            char *req_port;
-            int port;
-
-            port = ap_get_server_port(d->r);
-            req_server = ap_get_server_name_for_url(d->r);
-            req_port = ap_is_default_port(port, d->r) ? "" : apr_psprintf(d->r->pool, ":%u", port);
-
-            d->image_url = apr_psprintf(d->r->pool, "%s://%s%s%s",
-                                       (char *) ap_http_scheme(d->r), req_server, req_port, d->image_url);
-
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Expanded relative URI to fully qualified URL since no local file existed: %s", d->image_url);
+    // Download image.
+    if(dims_fetch_remote_image(d, d->image_url) != 0) {
+        // If image failed to download replace it with the NOIMAGE image. 
+        if(dims_fetch_remote_image(d, NULL) != 0) {
+            return DECLINED;
         }
+
+        d->use_no_image = 1;
     }
 
-    if(d->image_url || d->no_image_url) {
-        /* Handle remote images. */
+    // Execute Imagemagick commands.
+    dims_process_image(d);
 
-        char *fetch_url = NULL;
+    // Serve the image.
+    dims_send_image(d);
 
-        char *hostname, *state = "exact";
-        apr_uri_t uri;
-        int found = 0, done = 0;
-
-        /* Check to make sure the URLs hostname is in the whitelist.  Wildcards
-         * are handled by repeatedly checking the hash for a match after removing
-         * each part of the hostname until a match is found.  If a match is found
-         * and it's value is set to "glob" the match will be accepted.
-         */
-        if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
-            return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
-        }
-
-        char *filename = strrchr(uri.path, '/');
-        if (!filename || !uri.hostname) {
-            return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
-        }
-
-        if (*filename == '/') {
-            d->filename = ++filename;
-        }
-
-        hostname = uri.hostname;
-        if ( d->use_secret_key == 1 ) {
-            done = found = 1;
-        }
-        while(!done) {
-            char *value = (char *) apr_table_get(d->config->whitelist, hostname);
-            if(value && strcmp(value, state) == 0) {
-                done = found = 1;
-            } else {
-                hostname = strstr(hostname, ".");
-                if(!hostname) {
-                    done = 1;
-                } else {
-                    hostname++;
-                }
-                state = "glob";
-            }
-        }
-
-        if(found) {
-            fetch_url = d->image_url;
-        } else {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "Requested URL has hostname that is not in the "
-                    "whitelist. (%s)", uri.hostname);
-            return dims_cleanup(d, NULL, DIMS_HOSTNAME_NOT_IN_WHITELIST);
-        }
-
-        /* Fetch the image into a buffer. */
-        if(fetch_url && dims_fetch_remote_image(d, fetch_url) != 0) {
-            /* If image failed to download replace it with
-             * the NOIMAGE image.
-             */
-            if(dims_fetch_remote_image(d, NULL) != 0) {
-                return DECLINED;
-            }
-            d->use_no_image = 1;
-        }
-
-        return dims_process_image(d);
-    }
-
-    return dims_cleanup(d, NULL, DIMS_FAILURE);
+    return DIMS_SUCCESS;
 }
 
 int

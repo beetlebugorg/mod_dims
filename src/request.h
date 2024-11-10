@@ -31,6 +31,9 @@ struct dims_request_rec {
     /* The unparsed commands (resize, crop, etc). */
     char *unparsed_commands;
 
+    /* The parsed commands with the signature and expiration timestamp removed. */
+    char *commands;
+
     /* The original image size in bytes. */
     long original_image_size;
 
@@ -67,6 +70,8 @@ struct dims_request_rec {
     
     /* Use a whitelist, or use a secret key passed on the URI */
     int use_secret_key;
+    char *signature;
+    char *expiration;
 
     /* Should Content-Disposition header bet set. */
     int send_content_disposition;
