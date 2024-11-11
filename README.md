@@ -1,42 +1,52 @@
-Dependencies
-============
+mod-dims
+========
 
-* Apache 2.2.x
-* Imagemagick 6.6+
-* libcurl 7.18.0+
+mod-dims is an HTTP microservice for dynamic image manipulation. It run as an Apache httpd module.
+
+Dependencies
+------------
+
+* Apache 2.4.x
+* Imagemagick 7.1.x
+* libcurl 7.x
 
 Compiling
-=========
+---------
 
-./autorun.sh --with-imagemagick=/path/to/imagemagick --with-apache=/path/to/apache
-
-The paths provided above are prefix paths used to install those dependencies. If you installed
-Imagemagick and Apache (including APR) in /usr/local you would run:
-
-./autorun.sh --with-imagemagick=/usr/local --with-apache=/usr/local
+```bash
+$ zig build 
+find zig-out/
+zig-out/
+zig-out/lib
+zig-out/lib/libmod_dims.so.4
+zig-out/lib/libmod_dims.so.4.0.0
+zig-out/lib/libmod_dims.so
+```
 
 Installation
-============
+------------
 
 Add the following to the Apache configuration:
 
+```
     <IfModule !mod_dims.c>
         LoadModule dims_module modules/mod_dims.so
     </IfModule>
 
     AddHandler dims-local .gif .jpg
 
-    <Location /dims/>
-        SetHandler dims
+    <Location /dims3/>
+        SetHandler dims3
     </Location>
 
-    <Location /dims3/>
+    <Location /dims4/>
         SetHandler dims3
     </Location>
 
     <Location /dims-status/>
         SetHandler dims-status
     </Location>
+```
 
 This assumes mod_dims.so has been installed in $HTTP_ROOT/modules.
 

@@ -873,19 +873,6 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     if (status != APR_SUCCESS)
         return HTTP_INTERNAL_SERVER_ERROR;
 
-    /* If there was a memory block already assigned, destroy it */
-    if (shm) {
-        status = apr_shm_destroy(shm);
-        if (status != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                         "mod_dims : Couldn't destroy old memory block\n");
-            return status;
-        } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
-                 "mod_dims : Old Shared memory block, destroyed.");
-        }
-    }
-
     /* Create shared memory block */
     status = apr_shm_create(&shm, sizeof(dims_stats_rec), NULL, p);
     if (status != APR_SUCCESS) {

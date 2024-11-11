@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
     libmod_dims.linkSystemLibrary("MagickWand");
     libmod_dims.addCSourceFiles(.{
         .files = &.{
+            "src/curl.c",
             "src/configuration.c",
             "src/encryption.c",
             "src/handler.c",
@@ -23,17 +24,16 @@ pub fn build(b: *std.Build) void {
             "src/mod_dims.c",
             "src/module.c",
             "src/status.c",
-        }, 
-        .flags = &.{
-        "-I/usr/local/apache2/include/",
-        "-Wall",
-        "-W",
-        "-Wstrict-prototypes",
-        "-Wwrite-strings",
-        "-Wno-missing-field-initializers",
         },
-      }
-    );
+        .flags = &.{
+            "-I/usr/local/apache2/include/",
+            "-Wall",
+            "-W",
+            "-Wstrict-prototypes",
+            "-Wwrite-strings",
+            "-Wno-missing-field-initializers",
+        },
+    });
 
     b.installArtifact(libmod_dims);
 }

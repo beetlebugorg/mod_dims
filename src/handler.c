@@ -60,7 +60,7 @@ dims_create_request(request_rec *r)
     }
 
     /* Check first if URL is passed as a query parameter. */
-    char *url = NULL, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
+    char *url = NULL, *fixed_url = NULL, *eurl = NULL;
     if(r->args) {
         const size_t args_len = strlen(r->args) + 1;
         char *args = apr_pstrndup(request->r->pool, request->r->args, args_len);
@@ -141,7 +141,6 @@ dims_create_request(request_rec *r)
     }
 
     request->image_url = image_url;
-    request->unparsed_commands = commands + 6;
     request->request_hash = ap_md5(request->pool, 
         apr_pstrcat(request->pool, request->client_id, request->commands, request->image_url, NULL));
 

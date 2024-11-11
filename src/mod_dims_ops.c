@@ -54,8 +54,6 @@ static DimsGravity gravities[] = {
     {NULL, CenterGravity}
 };
 
-CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
-
 apr_status_t
 dims_strip_operation (dims_request_rec *d, char *args, char **err) {
 
