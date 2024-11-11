@@ -34,3 +34,8 @@ stamp-h1
 
 *.dylib
 *.so
+
+.zig-out
+.zig-cache
+zig-out
+zig-cache
