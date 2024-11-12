@@ -11,8 +11,11 @@ pub fn build(b: *std.Build) void {
         .version = .{ .major = 4, .minor = 0, .patch = 0 },
     });
 
-    libmod_dims.linkSystemLibrary("curl");
+    libmod_dims.linker_allow_shlib_undefined = true;
     libmod_dims.linkSystemLibrary("apr-1");
+    libmod_dims.linkSystemLibrary("apr-util-1");
+    libmod_dims.linkSystemLibrary("curl");
+    libmod_dims.linkSystemLibrary("openssl");
     libmod_dims.linkSystemLibrary("MagickWand");
     libmod_dims.addCSourceFiles(.{
         .files = &.{
@@ -27,6 +30,7 @@ pub fn build(b: *std.Build) void {
         },
         .flags = &.{
             "-I/usr/local/apache2/include/",
+            "-I/opt/homebrew/include/httpd",
             "-Wall",
             "-W",
             "-Wstrict-prototypes",
