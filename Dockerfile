@@ -1,20 +1,21 @@
-ARG HTTPD_VERSION=2.4.62
+ARG ALPINE_VERSION=3.20
 
-FROM ghcr.io/beetlebugorg/mod-dims:builder AS mod-dims
+FROM --platform=linux/arm64 ghcr.io/beetlebugorg/mod-dims:builder AS mod-dims
+ARG PREFIX=/usr/local/dims
+ENV TARGETARCH=aarch64
 
-RUN apt-get update && \
-    apt-get -y install \
-        libpangocairo-1.0-0 libgif7 libjpeg62-turbo libpng16-16 libgomp1 libjbig0 liblcms2-2 \
-        libbz2-1.0 libfftw3-double3 libfontconfig1 libfreetype6 libheif1 \
-        liblqr-1-0 libltdl7 liblzma5 libopenjp2-7 libopenexr-3-1-30 ca-certificates pkg-config  \
-        libapr1-dev libaprutil1-dev libcurl4-openssl-dev libssl-dev
+ADD https://ziglang.org/download/0.13.0/zig-linux-${TARGETARCH}-0.13.0.tar.xz .
+
+RUN tar xf zig-linux-${TARGETARCH}-0.13.0.tar.xz
+RUN apk update && apk add openssl-dev curl-dev expat-dev
 
 COPY . /build/mod-dims
 WORKDIR /build/mod-dims
+RUN export PATH=$PATH:/build/mod-dims/zig-linux-${TARGETARCH}-0.13.0 && \ 
+    zig build --verbose && \
+    cp zig-out/lib/libmod_dims.so.4.0.0 ${PREFIX}/apache2/modules/libmod_dims.so
 
-RUN zig build
-
-FROM httpd:${HTTPD_VERSION}
+FROM alpine:${ALPINE_VERSION}
 ARG PREFIX=/usr/local/dims
 
 ENV USER=dims
@@ -33,6 +34,16 @@ ENV DIMS_MAX_SOURCE_CACHE=604800
 ENV DIMS_CACHE_EXPIRE=604800
 ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
 ENV DIMS_WHITELIST=""
+ENV PATH=${PREFIX}/apache2/bin:${PATH}
+
+COPY --from=mod-dims /build/mod-dims/zig-out/lib/libmod_dims.so.4.0.0 /usr/local/apache2/modules/libmod_dims.so
+COPY --from=mod-dims ${PREFIX}/libpng      ${PREFIX}/libpng
+COPY --from=mod-dims ${PREFIX}/libwebp     ${PREFIX}/libwebp
+COPY --from=mod-dims ${PREFIX}/libtiff     ${PREFIX}/libtiff
+COPY --from=mod-dims ${PREFIX}/imagemagick ${PREFIX}/imagemagick
+COPY --from=mod-dims ${PREFIX}/apache2     ${PREFIX}/apache2
+COPY dims.conf /usr/local/dims/apache2/conf/extra/dims.conf
+COPY httpd.conf /usr/local/dims/apache2/conf/httpd.conf
 
 RUN adduser \
     --disabled-password \
@@ -41,30 +52,11 @@ RUN adduser \
     --shell "/sbin/nologin" \
     --no-create-home \
     --uid "${UID}" \
-    "${USER}"
+    "${USER}" && \
+    chown -R ${USER}:${USER} ${PREFIX}/apache2/logs && \
+    apk update && apk add pcre libexpat libcurl libgomp libgcc gcompat
 
-COPY --from=mod-dims /build/mod-dims/zig-out/lib/libmod_dims.so.4.0.0 /usr/local/apache2/modules/libmod_dims.so
-COPY --from=mod-dims ${PREFIX}/libpng      ${PREFIX}/libpng
-COPY --from=mod-dims ${PREFIX}/libwebp     ${PREFIX}/libwebp
-COPY --from=mod-dims ${PREFIX}/libtiff     ${PREFIX}/libtiff
-COPY --from=mod-dims ${PREFIX}/imagemagick ${PREFIX}/imagemagick
-COPY dims.conf /usr/local/apache2/conf/extra/dims.conf
-
-RUN apt-get update && \
-    apt-get -y install \
-        libgif7 libjpeg62-turbo libpng16-16 libgomp1 libjbig0 liblcms2-2 \
-        libbz2-1.0 libfftw3-double3 libfontconfig1 libfreetype6 libheif1 libjpeg62-turbo \
-        liblqr-1-0 libltdl7 liblzma5 libopenjp2-7 libopenexr-3-1-30 ca-certificates && \
-    rm -rf /usr/local/apache2/build \
-        /usr/local/apache2/cgi-bin \
-        /usr/local/apache2/include \
-        /usr/local/apache2/htdocs/index.html && \
-        find /usr/local/dims | grep \.a$ | xargs rm && \
-    chown -R www-data:www-data /usr/local/apache2 && \
-    sed "s|Listen 80|Listen 8000|" /usr/local/apache2/conf/httpd.conf -i && \
-    sed "s|^#LoadModule authz_core_module|LoadModule authz_core_module|" /usr/local/apache2/conf/httpd.conf -i && \
-    sed "s|^LogLevel warn|LogLevel debug|" /usr/local/apache2/conf/httpd.conf -i && \
-    echo "Include conf/extra/dims.conf" >> /usr/local/apache2/conf/httpd.conf
-
-EXPOSE 8080
-#USER 10001:10001
+EXPOSE 80
+STOPSIGNAL SIGWINCH
+USER 10001:10001
+CMD ["httpd", "-DFOREGROUND"]

@@ -1,21 +1,13 @@
-ARG DEBIAN_VERSION=bookworm-slim
+ARG ALPINE_VERSION=3.20
 ARG HTTPD_VERSION=2.4.62
 
 # -- Alpine Base
-FROM debian:${DEBIAN_VERSION} AS debian-base
+FROM alpine:${ALPINE_VERSION} AS build-essentals
 
-RUN apt-get -y update && \
-    apt-get install -y --no-install-recommends \
-        automake libtool autoconf build-essential \
-        git ca-certificates \
-        libapr1-dev libaprutil1-dev \
-        curl \
-        libcurl4-openssl-dev libfreetype6-dev libopenexr-dev libxml2-dev \
-        libgif-dev libjpeg62-turbo-dev libpng-dev \
-        liblcms2-dev pkg-config libssl-dev wget
+RUN apk add --no-cache alpine-sdk xz zlib-dev zlib-static vim expat-dev pcre-dev
 
 # -- Build libpng
-FROM debian-base AS libpng
+FROM build-essentals AS libpng
 
 ARG PREFIX=/usr/local/dims/libpng
 ARG PNG_VERSION=1.6.43
@@ -37,7 +29,7 @@ RUN tar xvf "libpng-${PNG_VERSION}.tar.xz" && \
     make install
 
 # -- Build libwebp
-FROM debian-base AS libwebp
+FROM build-essentals AS libwebp
 
 ARG PREFIX=/usr/local/dims/libwebp
 ARG WEBP_VERSION=1.2.1
@@ -56,7 +48,7 @@ RUN tar xzvf libwebp-${WEBP_VERSION}.tar.gz && \
     make install
 
 # -- Build libtiff
-FROM debian-base AS libtiff
+FROM build-essentals AS libtiff
 
 ARG PREFIX=/usr/local/dims
 ARG TIFF_VERSION=4.3.0
@@ -79,7 +71,7 @@ RUN tar xzvf tiff-${TIFF_VERSION}.tar.gz && \
     make install
 
 # -- Build Imagemagick
-FROM debian-base AS imagemagick
+FROM build-essentals AS imagemagick
 
 ARG PREFIX=/usr/local/dims
 ARG IMAGEMAGICK_VERSION=7.1.1-29
@@ -112,28 +104,77 @@ RUN tar xvf ImageMagick-${IMAGEMAGICK_VERSION}.tar.xz && \
     rm -rf ${PREFIX}/imagemagick/etc && \
     rm -rf ${PREFIX}/imagemagick/share
 
+# -- Build Imagemagick
+FROM build-essentals AS apache2
+
+ENV PREFIX=/usr/local/dims/apache2
+ENV PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig
+ENV LD_LIBRARY_PATH=${PREFIX}/lib
+
+ENV HTTPD_VERSION=2.4.62
+ENV HTTPD_SHA256="sha256:3e2404d762a2da03560d7ada379ba1599d32f04a0d70ad6ff86f44325f2f062d"
+
+ENV APR_VERSION=1.7.5
+ENV APR_SHA256="sha256:3375fa365d67bcf945e52b52cba07abea57ef530f40b281ffbe977a9251361db"
+
+ENV APR_UTIL_VERSION=1.6.3
+ENV APR_UTIL_SHA256="sha256:2b74d8932703826862ca305b094eef2983c27b39d5c9414442e9976a9acf1983"
+
+ADD --checksum="${HTTPD_SHA256}" \
+    https://dlcdn.apache.org/httpd/httpd-${HTTPD_VERSION}.tar.gz .
+
+ADD --checksum="${APR_SHA256}" \
+    https://dlcdn.apache.org//apr/apr-${APR_VERSION}.tar.gz .
+
+ADD --checksum="${APR_UTIL_SHA256}" \
+    https://dlcdn.apache.org//apr/apr-util-${APR_UTIL_VERSION}.tar.gz .
+
+RUN tar xzvf apr-${APR_VERSION}.tar.gz && \
+    cd apr-${APR_VERSION} && \
+    ./configure --prefix=${PREFIX} && \
+    make -j"$(nproc)" && \
+    make install
+
+RUN tar xzvf apr-util-${APR_UTIL_VERSION}.tar.gz && \
+    cd apr-util-${APR_UTIL_VERSION} && \
+    ./configure --prefix=${PREFIX} --with-apr=${PREFIX} && \
+    make -j"$(nproc)" && \
+    make install
+
+RUN tar xzvf httpd-${HTTPD_VERSION}.tar.gz && \
+    cd httpd-${HTTPD_VERSION} && \
+    ./configure --prefix=${PREFIX} --with-apr=${PREFIX} --with-apr-util=${PREFIX} \
+                --enable-mods-static="few" -enable-mods-shared="log log_config" -with-mpm=event && \
+    make -j"$(nproc)" && \
+    make install && \
+    rm -rf ${PREFIX}/manual ${PREFIX}/icons htdocs/* && \
+    find ${PREFIX} -name "*.a" -exec rm -f {} \;
+
 # -- Build base
-FROM httpd:${HTTPD_VERSION}
+FROM alpine:${ALPINE_VERSION}
 
 WORKDIR /build
 
 ARG PREFIX=/usr/local/dims
 
-RUN apt-get -y update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        libcurl4 libfreetype6 libopenexr-3-1-30 libxml2 \
-        libgif7 libjpeg62-turbo wget xz-utils \
-        liblcms2-2 libpangocairo-1.0-0 && \
-    rm -rf /var/lib/apt/lists/* && \
-    wget https://ziglang.org/download/0.13.0/zig-linux-aarch64-0.13.0.tar.xz && \
-    tar xvf zig-linux-aarch64-0.13.0.tar.xz && \
-    rm zig-linux-aarch64-0.13.0.tar.xz
+RUN apk update && apk add pcre expat
+
+#RUN apt-get -y update && \
+#    apt-get install -y --no-install-recommends \
+#        ca-certificates \
+#        libcurl4 libfreetype6 libopenexr-3-1-30 libxml2 \
+#        libgif7 libjpeg62-turbo wget xz-utils \
+#        liblcms2-2 libpangocairo-1.0-0 && \
+#    rm -rf /var/lib/apt/lists/* && \
+#    wget https://ziglang.org/download/0.13.0/zig-linux-aarch64-0.13.0.tar.xz && \
+#    tar xvf zig-linux-aarch64-0.13.0.tar.xz && \
+#    rm zig-linux-aarch64-0.13.0.tar.xz
 
 COPY --from=libpng      ${PREFIX}/libpng      ${PREFIX}/libpng
 COPY --from=libwebp     ${PREFIX}/libwebp     ${PREFIX}/libwebp
 COPY --from=libtiff     ${PREFIX}/libtiff     ${PREFIX}/libtiff
 COPY --from=imagemagick ${PREFIX}/imagemagick ${PREFIX}/imagemagick
+COPY --from=apache2     ${PREFIX}/apache2     ${PREFIX}/apache2
 
 ENV PATH=/build/zig-linux-aarch64-0.13.0:$PATH
 
@@ -141,8 +182,10 @@ ENV PKG_CONFIG_PATH=${PREFIX}/libwebp/lib/pkgconfig
 ENV PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${PREFIX}/libpng/lib/pkgconfig
 ENV PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${PREFIX}/libtiff/lib/pkgconfig
 ENV PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${PREFIX}/imagemagick/lib/pkgconfig
+ENV PKG_CONFIG_PATH=$PKG_CONFIG_PATH:${PREFIX}/apache2/lib/pkgconfig
 
 ENV LD_CONFIG_PATH=${PREFIX}/libwebp/lib
 ENV LD_CONFIG_PATH=$LD_CONFIG_PATH:${PREFIX}/libpng/lib
 ENV LD_CONFIG_PATH=$LD_CONFIG_PATH:${PREFIX}/libtiff/lib
 ENV LD_CONFIG_PATH=$LD_CONFIG_PATH:${PREFIX}/imagemagick/lib
+ENV LD_CONFIG_PATH=$LD_CONFIG_PATH:${PREFIX}/apache2/lib
