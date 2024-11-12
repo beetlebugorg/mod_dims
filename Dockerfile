@@ -30,7 +30,6 @@ ENV DIMS_TRUST_SOURCE=true
 ENV DIMS_SOURCE_CACHE=604800
 ENV DIMS_MIN_SOURCE_CACHE=0
 ENV DIMS_MAX_SOURCE_CACHE=604800
-ENV DIMS_SECRET=""
 ENV DIMS_CACHE_EXPIRE=604800
 ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
 ENV DIMS_WHITELIST=""
@@ -49,7 +48,7 @@ COPY --from=mod-dims ${PREFIX}/libpng      ${PREFIX}/libpng
 COPY --from=mod-dims ${PREFIX}/libwebp     ${PREFIX}/libwebp
 COPY --from=mod-dims ${PREFIX}/libtiff     ${PREFIX}/libtiff
 COPY --from=mod-dims ${PREFIX}/imagemagick ${PREFIX}/imagemagick
-COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
+COPY dims.conf /usr/local/apache2/conf/extra/dims.conf
 
 RUN apt-get update && \
     apt-get -y install \
