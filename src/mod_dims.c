@@ -65,8 +65,8 @@ apr_hash_t *ops;
  */
 MagickBooleanType 
 dims_imagemagick_progress_cb(const char *text, 
-                             __attribute__ ((unused)) const MagickOffsetType offset,
-                             __attribute__ ((unused)) const MagickSizeType span, 
+                             const MagickOffsetType offset,
+                             const MagickSizeType span, 
                              void *client_data)
 {
     dims_progress_rec *p = (dims_progress_rec *) client_data;

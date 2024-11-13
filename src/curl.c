@@ -33,9 +33,9 @@ static char *url_encode(char *str) {
 }
 
 void 
-lock_share(__attribute__ ((unused)) CURL *handle, 
+lock_share(CURL *handle, 
            curl_lock_data data, 
-           __attribute__ ((unused)) curl_lock_access access, 
+           curl_lock_access access, 
            void *userptr)
 {
     dims_curl_rec *locks = (dims_curl_rec *) userptr;       
@@ -50,7 +50,7 @@ lock_share(__attribute__ ((unused)) CURL *handle,
 }
 
 void 
-unlock_share(__attribute__ ((unused)) CURL *handle, 
+unlock_share(CURL *handle, 
              curl_lock_data data, 
              void *userptr) 
 {
@@ -67,10 +67,10 @@ unlock_share(__attribute__ ((unused)) CURL *handle,
 
 static int
 dims_curl_debug_cb(
-    __attribute__ ((unused)) CURL *handle,
+    CURL *handle,
     curl_infotype type,
     char *data,
-    __attribute__ ((unused)) size_t size,
+    size_t size,
     void *clientp)
 {
     dims_request_rec *d = (dims_request_rec *) clientp;

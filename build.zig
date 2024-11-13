@@ -29,6 +29,7 @@ pub fn build(b: *std.Build) void {
             "src/status.c",
         },
         .flags = &.{
+            "-std=c17",
             "-I/usr/local/apache2/include/",
             "-I/opt/homebrew/include/httpd",
             "-Wall",
