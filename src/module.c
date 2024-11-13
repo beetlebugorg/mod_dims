@@ -3,6 +3,7 @@
 #include "handler.h"
 #include "directives.h"
 #include "module.h"
+#include "initialize.h"
 
 void 
 dims_register_hooks(apr_pool_t *p)

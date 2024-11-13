@@ -56,9 +56,6 @@
 #define DIMS_MISSING_SECRET 1007
 #define DIMS_DECRYPTION_FAILURE 1008
 
-int dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *s);
-void dims_child_init(apr_pool_t *p, server_rec *s);
-void dims_register_hooks(apr_pool_t *p);
 
 apr_status_t dims_handle_dims3(dims_request_rec *d);
 apr_status_t dims_handle_dims4(dims_request_rec *d);

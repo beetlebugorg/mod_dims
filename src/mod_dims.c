@@ -53,7 +53,6 @@ typedef struct {
 } dims_processed_image;
 
 dims_stats_rec *stats;
-apr_shm_t *shm;
 apr_hash_t *ops;
 
 /**
@@ -99,6 +98,9 @@ dims_download_source_image(dims_request_rec *d, const char *url)
 {
     apr_time_t start_time;
     d->source_image = apr_palloc(d->pool, sizeof(dims_image_data_t));
+    d->source_image->cache_control = NULL;
+    d->source_image->edge_control = NULL;
+    d->source_image->last_modified = NULL;
 
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Loading image from %s", url);
 
@@ -536,9 +538,9 @@ dims_process_image(dims_request_rec *d)
                     exc_strip_cmd = 1;
                 }
 
-                dims_operation_func *func =
-                        apr_hash_get(ops, command, APR_HASH_KEY_STRING);
-                if(func != NULL) {
+                dims_operation_func *func = dims_operation_lookup(command);
+                if (func != NULL)
+                {
                     char *err = NULL;
                     apr_status_t code;
 
@@ -759,100 +761,4 @@ dims_handle_dims4(dims_request_rec *d)
     }
 
     return dims_handle_request(d);
-}
-
-int
-dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
-{
-    dims_config_rec *config = (dims_config_rec *) 
-            ap_get_module_config(s->module_config, &dims_module);
-    apr_status_t status;
-    apr_size_t retsize;
-
-    ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
-
-    MagickWandGenesis();
-    MagickSetResourceLimit(AreaResource, config->area_size);
-    MagickSetResourceLimit(DiskResource, config->disk_size);
-    MagickSetResourceLimit(MemoryResource, config->memory_size);
-    MagickSetResourceLimit(MapResource, config->map_size);
-
-    ops = apr_hash_make(p);
-    apr_hash_set(ops, "strip", APR_HASH_KEY_STRING, dims_strip_operation);
-    apr_hash_set(ops, "resize", APR_HASH_KEY_STRING, dims_resize_operation);
-    apr_hash_set(ops, "crop", APR_HASH_KEY_STRING, dims_crop_operation);
-    apr_hash_set(ops, "thumbnail", APR_HASH_KEY_STRING, dims_thumbnail_operation);
-    apr_hash_set(ops, "legacy_thumbnail", APR_HASH_KEY_STRING, dims_legacy_thumbnail_operation);
-    apr_hash_set(ops, "legacy_crop", APR_HASH_KEY_STRING, dims_legacy_crop_operation);
-    apr_hash_set(ops, "quality", APR_HASH_KEY_STRING, dims_quality_operation);
-    apr_hash_set(ops, "sharpen", APR_HASH_KEY_STRING, dims_sharpen_operation);
-    apr_hash_set(ops, "format", APR_HASH_KEY_STRING, dims_format_operation);
-    apr_hash_set(ops, "brightness", APR_HASH_KEY_STRING, dims_brightness_operation);
-    apr_hash_set(ops, "flipflop", APR_HASH_KEY_STRING, dims_flipflop_operation);
-    apr_hash_set(ops, "sepia", APR_HASH_KEY_STRING, dims_sepia_operation);
-    apr_hash_set(ops, "grayscale", APR_HASH_KEY_STRING, dims_grayscale_operation);
-    apr_hash_set(ops, "autolevel", APR_HASH_KEY_STRING, dims_autolevel_operation);
-    apr_hash_set(ops, "rotate", APR_HASH_KEY_STRING, dims_rotate_operation);
-    apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
-    apr_hash_set(ops, "watermark", APR_HASH_KEY_STRING, dims_watermark_operation);
-
-    /* Init APR's atomic functions */
-    status = apr_atomic_init(p);
-    if (status != APR_SUCCESS)
-        return HTTP_INTERNAL_SERVER_ERROR;
-
-    /* Create shared memory block */
-    status = apr_shm_create(&shm, sizeof(dims_stats_rec), NULL, p);
-    if (status != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error creating shm block\n");
-        return status;
-    }
-
-    /* Check size of shared memory block */
-    retsize = apr_shm_size_get(shm);
-    if (retsize != sizeof(dims_stats_rec)) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error allocating shared memory block\n");
-        return status;
-    }
-
-    /* Init shm block */
-    stats = apr_shm_baseaddr_get(shm);
-    if (stats == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error creating status block.\n");
-        return status;
-    }
-    memset(stats, 0, retsize);
-
-    if (retsize < sizeof(dims_stats_rec)) {
-        ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, s,
-                     "mod_dims : Not enough memory allocated!! Giving up");
-        return HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    stats->success_count = 1;
-    stats->failure_count = 0;
-    stats->download_timeout_count = 0;
-    stats->imagemagick_timeout_count = 0;
-
-    return OK;
-}
-
-static apr_status_t
-dims_child_cleanup(void *data)
-{
-    MagickWandTerminus();
-
-    return APR_SUCCESS;
-}
-
-void
-dims_child_init(apr_pool_t *p, server_rec *s)
-{
-    dims_curl_init(p, s);
-
-    MagickWandGenesis();
-    apr_pool_cleanup_register(p, NULL, dims_child_cleanup, dims_child_cleanup);
 }

@@ -15,6 +15,7 @@
  */
 
 #include "mod_dims.h"
+#include "mod_dims_ops.h"
 #include "curl.h"
 #include "request.h"
 
@@ -24,7 +25,48 @@
 #include <stdio.h>
 #include <paths.h>
 
+#include <apr.h>
 #include <MagickCore/exception.h>
+
+static operations_rec ops[] = {
+    {"strip", dims_strip_operation},
+    {"resize", dims_resize_operation},
+    {"crop", dims_crop_operation},
+    {"thumbnail", dims_thumbnail_operation},
+    {"legacy_thumbnail", dims_legacy_thumbnail_operation},
+    {"legacy_crop", dims_legacy_crop_operation},
+    {"quality", dims_quality_operation},
+    {"sharpen", dims_sharpen_operation},
+    {"format", dims_format_operation},
+    {"brightness", dims_brightness_operation},
+    {"flipflop", dims_flipflop_operation},
+    {"sepia", dims_sepia_operation},
+    {"grayscale", dims_grayscale_operation},
+    {"autolevel", dims_autolevel_operation},
+    {"rotate", dims_rotate_operation},
+    {"invert", dims_invert_operation},
+    {"watermark", dims_watermark_operation},
+    {NULL, NULL}
+};
+
+dims_operation_func *
+dims_operation_lookup(char *name) {
+    operations_rec *op_ptr = ops;
+
+    if (name == NULL) {
+        return NULL;
+    }
+
+    while (op_ptr->name != NULL) {
+        if (strcmp(name, op_ptr->name) == 0) {
+            return op_ptr->func;
+        }
+
+        ++op_ptr;
+    }
+
+    return NULL;
+}
 
 #define MAGICK_CHECK(func, rec) \
     do { \

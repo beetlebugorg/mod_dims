@@ -23,6 +23,7 @@ pub fn build(b: *std.Build) void {
             "src/configuration.c",
             "src/encryption.c",
             "src/handler.c",
+            "src/initialize.c",
             "src/mod_dims_ops.c",
             "src/mod_dims.c",
             "src/module.c",

@@ -6,6 +6,11 @@
 
 typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, char **err);
 
+typedef struct {
+    char *name;
+    dims_operation_func *func;
+} operations_rec;
+
 dims_operation_func 
     dims_strip_operation,
     dims_resize_operation,
@@ -25,5 +30,7 @@ dims_operation_func
     dims_invert_operation,
     dims_watermark_operation,
     dims_legacy_crop_operation;
+
+dims_operation_func *dims_operation_lookup(char *name);
 
 #endif
