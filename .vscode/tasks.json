@@ -4,7 +4,12 @@
         {
             "label": "zig build",
             "type": "shell",
-            "command": "zig build --verbose"
+            "command": "zig build --verbose",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         }
     ]
 }

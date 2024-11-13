@@ -122,11 +122,6 @@ dims_download_source_image(dims_request_rec *d, const char *url)
 
     d->download_time = (apr_time_now() - start_time) / 1000;
 
-    // Don't set the fetch_http_status if we're downloading the NOIMAGE image.
-    if (url != NULL) {
-        d->fetch_http_status = d->source_image->response_code;
-    }
-
     if(d->source_image->response_code != 200) {
         if(d->source_image->response_code == 404) {
             d->status = DIMS_FILE_NOT_FOUND;
@@ -177,9 +172,9 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
 
     if(d->status == DIMS_FILE_NOT_FOUND) {
         d->r->status = HTTP_NOT_FOUND;
-    } else if (d->fetch_http_status != 0) {
-        d->r->status = d->fetch_http_status;
-    } else if(d->status != DIMS_SUCCESS) {
+    } else if (d->source_image->response_code != 0) {
+        d->r->status = d->source_image->response_code;
+    } else if (d->status != DIMS_SUCCESS) {
         if (d->status == DIMS_BAD_URL
             || d->status == DIMS_BAD_ARGUMENTS) {
             d->r->status = HTTP_BAD_REQUEST;
@@ -193,13 +188,13 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
         d->r->status = HTTP_BAD_REQUEST;
     }
 
-    if(d->status == DIMS_SUCCESS && d->fetch_http_status == 200 && d->client_config) {
+    if(d->status == DIMS_SUCCESS && d->source_image->response_code == 200 && d->client_config) {
 
         // if the src image has a cache_control header, parse out the max-age
-        if(d->cache_control) {
+        if(d->source_image->cache_control) {
 
             // Ex. max-age=3600
-            src_header = d->cache_control;
+            src_header = d->source_image->cache_control;
             src_start = src_header;
             src_len = strlen(src_header);
 
@@ -262,7 +257,7 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
             expire_time = d->client_config->cache_control_max_age;
         }
 
-    } else if(d->status == DIMS_SUCCESS && d->fetch_http_status == 200) {
+    } else if(d->status == DIMS_SUCCESS && d->source_image->response_code == 200) {
         expire_time = d->config->default_expire;
         cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
     } else {
@@ -278,10 +273,7 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
         apr_table_set(d->r->headers_out, "Edge-Control", edge_control);
     }
 
-    if(d->filename && d->config->include_disposition) {
-        char *disposition = apr_psprintf(d->pool, "inline; filename=\"%s\"", d->filename);
-        apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
-    } else if(d->content_disposition_filename && d->send_content_disposition) {
+    if(d->content_disposition_filename && d->send_content_disposition) {
         char *disposition = apr_psprintf(d->pool, "attachment; filename=\"%s\"", d->content_disposition_filename);
         apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
     }
@@ -300,12 +292,12 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     }
 
     char *etag = NULL;
-    if (d->etag) {
+    if (d->source_image->etag) {
         etag = ap_md5(d->pool,
-                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->etag, NULL));
-    } else if (d->last_modified) {
+            (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->source_image->etag, NULL));
+    } else if (d->source_image->last_modified) {
         etag = ap_md5(d->pool,
-                      (unsigned char *)apr_pstrcat(d->pool, d->request_hash, d->last_modified, NULL));
+            (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->source_image->last_modified, NULL));
     }
 
     if (etag) {
@@ -341,7 +333,7 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     snprintf(buf, 128, "%d", d->status);
     apr_table_set(d->r->notes, "DIMS_STATUS", buf);
 
-    snprintf(buf, 128, "%ld", d->original_image_size);
+    snprintf(buf, 128, "%ld", d->source_image->used);
     apr_table_set(d->r->notes, "DIMS_ORIG_BYTES", buf);
 
     snprintf(buf, 128, "%ld", d->download_time);
@@ -434,10 +426,6 @@ dims_process_image(dims_request_rec *d)
         return NULL;
     }
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
-
-    if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
-        d->original_image_size = d->source_image->used;
-    }
 
     dims_processed_image *image = (dims_processed_image *) apr_palloc(d->pool, sizeof(dims_processed_image)); 
 
@@ -704,10 +692,6 @@ verify_dims3_allowlist(dims_request_rec *d) {
     char *filename = strrchr(uri.path, '/');
     if (!filename || !uri.hostname) {
         return DIMS_BAD_URL;
-    }
-
-    if (*filename == '/') {
-        d->filename = ++filename;
     }
 
     hostname = uri.hostname;

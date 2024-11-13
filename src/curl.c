@@ -130,13 +130,13 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
     }
 
     if(key && value && strcmp(key, "Cache-Control") == 0) {
-        d->cache_control = value;
+        d->source_image->cache_control = value;
     } else if(key && value && strcmp(key, "Edge-Control") == 0) {
-        d->edge_control = value;
+        d->source_image->edge_control = value;
     } else if(key && value && strcmp(key, "Last-Modified") == 0) {
-        d->last_modified = value;
+        d->source_image->last_modified = value;
     } else if(key && value && strcmp(key, "ETag") == 0) {
-        d->etag = value;
+        d->source_image->etag = value;
     }
 
     return realsize;

@@ -28,14 +28,8 @@ dims_create_request(request_rec *r)
     request->no_image_url = request->config->no_image_url;
     request->use_no_image = 0;
     request->image_url = NULL;
-    request->filename = NULL;
-    request->cache_control = NULL;
-    request->edge_control = NULL;
-    request->etag = NULL;
-    request->last_modified = NULL;
     request->request_hash = NULL;
     request->status = DIMS_SUCCESS;
-    request->fetch_http_status = 0;
     request->start_time = apr_time_now();
     request->download_time = 0;
     request->imagemagick_time = 0;
