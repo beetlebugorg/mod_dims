@@ -204,20 +204,6 @@ dims_config_set_user_agent_override(cmd_parms *cmd, void *dummy, const char *arg
 }
 
 const char *
-dims_config_set_user_agent_enabled(cmd_parms *cmd, void *dummy, const char *arg)
-{
-    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-            cmd->server->module_config, &dims_module);
-    if(strcmp(arg, "true") == 0) {
-        config->user_agent_enabled = 1;
-    }
-    else {
-        config->user_agent_enabled = 0;
-    }
-    return NULL;
-}
-
-const char *
 dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(

@@ -409,7 +409,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     // Write to disk.
     } else {
         dims_image_data_t image_data;
-        CURLcode code = dims_get_image_data(d, overlay_url, &image_data);
+        CURLcode code = dims_curl(d, overlay_url, &image_data);
 
         if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
             if (image_data.data) {

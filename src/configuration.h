@@ -23,7 +23,6 @@ const char *dims_config_set_encoded_fetch(cmd_parms *cmd, void *dummy, const cha
 const char *dims_config_set_encryption_algorithm(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_default_output_format(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_user_agent_override(cmd_parms *cmd, void *dummy, const char *arg);
-const char *dims_config_set_user_agent_enabled(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[]);
 const char *dims_config_set_no_image_url(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_image_prefix(cmd_parms *cmd, void *dummy, const char *arg);
@@ -63,7 +62,6 @@ struct dims_config_rec {
     char *default_image_prefix;
 
     char *user_agent_override;
-    int user_agent_enabled;
 };
 
 struct dims_client_config_rec {

@@ -95,16 +95,14 @@ dims_imagemagick_progress_cb(const char *text,
  * have the new image loaded.
  */
 static apr_status_t
-dims_fetch_remote_image(dims_request_rec *d, const char *url)
+dims_download_source_image(dims_request_rec *d, const char *url)
 {
-    char *fetch_url = url ? (char *) url : d->no_image_url;
     apr_time_t start_time;
     d->source_image = apr_palloc(d->pool, sizeof(dims_image_data_t));
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-            "Loading image from %s", fetch_url);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Loading image from %s", url);
 
-    CURLcode code = dims_get_image_data(d, fetch_url, d->source_image);
+    CURLcode code = dims_curl(d, url, d->source_image);
 
     start_time = apr_time_now();
     if(code != 0) {
@@ -112,8 +110,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 "libcurl error, '%s', on request: %s ", 
                 curl_easy_strerror(code), d->r->uri);
 
-        d->status = DIMS_FAILURE;
-        d->fetch_http_status = 500;
+
         if(code == CURLE_OPERATION_TIMEDOUT) {
             d->status = DIMS_DOWNLOAD_TIMEOUT;
         }
@@ -736,7 +733,7 @@ static apr_status_t
 dims_handle_request(dims_request_rec *d)
 {
     // Download image.
-    apr_status_t status = dims_fetch_remote_image(d, d->image_url);
+    apr_status_t status = dims_download_source_image(d, d->image_url);
     if (status != DIMS_SUCCESS) {
         return status;
     }

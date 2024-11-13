@@ -8,7 +8,7 @@
             "program": "/usr/local/apache2/bin/httpd",
             "args": ["-X"],
             "stopAtEntry": false,
-            "cwd": "${fileDirname}",
+            "cwd": ".",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",

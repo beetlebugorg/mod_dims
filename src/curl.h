@@ -17,7 +17,7 @@ typedef struct {
     apr_thread_mutex_t *dns_mutex;
 } dims_curl_rec;
 
-CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
+CURLcode dims_curl(dims_request_rec *d, const char *url, dims_image_data_t *data);
 
 void dims_curl_init(apr_pool_t *p, server_rec *s);
 

@@ -72,10 +72,6 @@ static const command_rec dims_directives[] =
                 dims_config_set_optimize_resize, NULL, RSRC_CONF,
                 "Should DIMS optimize resize operations. This has a slight impact on image quality. 0 = disabled"
                 "The default is 0."),
-    AP_INIT_TAKE1("DimsDisableEncodedFetch",
-                dims_config_set_encoded_fetch, NULL, RSRC_CONF,
-                "Should DIMS encode image url before fetching it."
-                "The default is 0."),
     AP_INIT_TAKE1("DimsEncryptionAlgorithm",
                 dims_config_set_encryption_algorithm, NULL, RSRC_CONF,
                 "What algorithm should DIMS user to decrypt the 'eurl' parameter."
@@ -83,10 +79,6 @@ static const command_rec dims_directives[] =
     AP_INIT_TAKE1("DimsDefaultOutputFormat",
                 dims_config_set_default_output_format, NULL, RSRC_CONF,
                 "Default output format if 'format' command is not present in the request."),
-    AP_INIT_TAKE1("DimsUserAgentEnabled",
-                dims_config_set_user_agent_enabled, NULL, RSRC_CONF,
-                "Enable DIMS User-Agent header ('dims/<version>'), true OR false."
-                "The default is false."),
     AP_INIT_TAKE1("DimsUserAgentOverride",
                 dims_config_set_user_agent_override, NULL, RSRC_CONF,
                 "Override DIMS User-Agent header"

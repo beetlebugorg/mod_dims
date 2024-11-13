@@ -143,7 +143,7 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
 }
 
 CURLcode
-dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *source_image)
+dims_curl(dims_request_rec *d, const char *url, dims_image_data_t *source_image)
 {
     CURL *curl_handle;
     CURLcode code;
@@ -152,31 +152,14 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *sou
     image_data.data = NULL;
     image_data.size = 0;
     image_data.used = 0;
-    int extra_time = 0;
-
-    /* Allow for some extra time to download the NOIMAGE image. */
-    void *s = NULL;
-
-    if (d->status == DIMS_DOWNLOAD_TIMEOUT) {
-        extra_time += 500;
-    }
-
-    apr_pool_userdata_get((void *) &s, DIMS_CURL_SHARED_KEY,
-            d->r->server->process->pool);
-
-    /* Encode the fetch URL before downloading */
-    if (!d->config->disable_encoded_fetch) {
-        fetch_url = url_encode(fetch_url);
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
-    }
 
     curl_handle = curl_easy_init();
-    curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
+    curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
     curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, dims_write_header_cb);
     curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
-    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
+    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout);
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
@@ -184,9 +167,9 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *sou
     curl_easy_setopt(curl_handle, CURLOPT_DEBUGDATA, d);
 
     /* Set the user agent to dims/<version> */
-    if (d->config->user_agent_override != NULL && d->config->user_agent_enabled == 1) {
+    if (d->config->user_agent_override != NULL) {
         curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, d->config->user_agent_override);
-    } else if (d->config->user_agent_enabled == 1) {
+    } else {
         char *dims_useragent = apr_psprintf(d->r->pool, "mod_dims/%s", MODULE_VERSION);
         curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, dims_useragent);
     }
@@ -194,8 +177,10 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *sou
     /* The curl shared handle allows this process to share DNS cache
      * and prevents the DNS cache from going away after every request.
      */
-    if (s) {
-        dims_curl_rec *locks = (dims_curl_rec *) s;
+    void *shared_locks = NULL;
+    apr_pool_userdata_get((void *) &shared_locks, DIMS_CURL_SHARED_KEY, d->r->server->process->pool);
+    if (shared_locks) {
+        dims_curl_rec *locks = (dims_curl_rec *) shared_locks;
         curl_easy_setopt(curl_handle, CURLOPT_SHARE, locks->share);
     }
 
@@ -203,10 +188,6 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *sou
 
     curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &source_image->response_code);
     curl_easy_cleanup(curl_handle);
-
-    if (!d->config->disable_encoded_fetch) {
-        free(fetch_url);
-    }
 
     if (source_image->response_code == 200) {
         source_image->data = apr_pmemdup(d->pool, image_data.data, image_data.used);
