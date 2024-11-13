@@ -13,17 +13,16 @@ ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
 ENV PREFIX=/usr/local/apache2
 ENV PATH=${PREFIX}/bin:${PATH}
 
-COPY . /build/mod-dims
-WORKDIR /build/mod-dims
-
 RUN apk update && \
     apk add vim gdb zig apr-dev apr-util-dev imagemagick-dev curl-dev \
     imagemagick-jpeg imagemagick-webp imagemagick-tiff && \
-    zig build || true; \
-    ln -sf /build/mod-dims/zig-out/lib/libmod_dims.so.4.0.0 ${PREFIX}/modules/libmod_dims.so || true
+    zig build --verbose || true; \
+    ln -sf /workspaces/mod_dims/zig-out/lib/libmod_dims.so.4.0.0 ${PREFIX}/modules/libmod_dims.so
 
 COPY dims.conf /usr/local/apache2/conf/httpd.conf
 
 ENV DIMS_CLIENT=development
-ENV DIMS_NO_IMAGE_URL="http://placehold.it/350x150"
-ENV DIMS_DEFAULT_IMAGE_URL="http://placehold.it/350x150"
+ENV DIMS_SECRET=devmode
+ENV DIMS_WHITELIST="*.com *.net *.org *.io"
+ENV DIMS_NO_IMAGE_URL="http://192.168.65.1:8081/mod-dims_00001_.jpg"
+ENV DIMS_DEFAULT_IMAGE_URL="http://192.168.65.1:8081/mod-dims_00001_.jpg"
