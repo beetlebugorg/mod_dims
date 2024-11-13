@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) void {
             "src/status.c",
         },
         .flags = &.{
-            "-I/usr/local/dims/apache2/include/",
+            "-I/usr/local/apache2/include/",
             "-I/opt/homebrew/include/httpd",
             "-Wall",
             "-W",

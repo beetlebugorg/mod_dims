@@ -1,39 +1,29 @@
 ARG HTTPD_VERSION=2.4.62
 
-FROM ghcr.io/beetlebugorg/mod-dims:builder
+FROM httpd:${HTTPD_VERSION}-alpine
 
-RUN apt-get update && \
-    apt-get -y install \
-        libpangocairo-1.0-0 libgif7 libjpeg62-turbo libpng16-16 libgomp1 libjbig0 liblcms2-2 \
-        libbz2-1.0 libfftw3-double3 libfontconfig1 libfreetype6 libheif1 \
-        liblqr-1-0 libltdl7 liblzma5 libopenjp2-7 libopenexr-3-1-30 ca-certificates pkg-config  \
-        libapr1-dev libaprutil1-dev libcurl4-openssl-dev libssl-dev && \
-    chown -R www-data:www-data /usr/local/apache2 && \
-    sed "s|Listen 80|Listen 8000|" /usr/local/apache2/conf/httpd.conf -i && \
-    sed "s|^#LoadModule authz_core_module|LoadModule authz_core_module|" /usr/local/apache2/conf/httpd.conf -i && \
-    sed "s|^LogLevel warn|LogLevel debug|" /usr/local/apache2/conf/httpd.conf -i && \
-    echo "Include conf/extra/dims.conf" >> /usr/local/apache2/conf/httpd.conf
+ENV DIMS_DOWNLOAD_TIMEOUT=60000
+ENV DIMS_IMAGEMAGICK_TIMEOUT=20000
+ENV DIMS_CACHE_CONTROL_MAX_AGE=604800
+ENV DIMS_EDGE_CONTROL_DOWNSTREAM_TTL=604800
+ENV DIMS_TRUST_SOURCE=true
+ENV DIMS_MAX_SOURCE_CACHE=604800
+ENV DIMS_CACHE_EXPIRE=604800
+ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
+ENV PREFIX=/usr/local/apache2
+ENV PATH=${PREFIX}/bin:${PATH}
 
 COPY . /build/mod-dims
 WORKDIR /build/mod-dims
 
-RUN zig build
+RUN apk update && \
+    apk add vim gdb zig apr-dev apr-util-dev imagemagick-dev curl-dev \
+    imagemagick-jpeg imagemagick-webp imagemagick-tiff && \
+    zig build || true; \
+    ln -sf /build/mod-dims/zig-out/lib/libmod_dims.so.4.0.0 ${PREFIX}/modules/libmod_dims.so || true
 
-ENV DIMS_DOWNLOAD_TIMEOUT=60000
-ENV DIMS_IMAGEMAGICK_TIMEOUT=20000
+COPY dims.conf /usr/local/apache2/conf/httpd.conf
+
 ENV DIMS_CLIENT=development
 ENV DIMS_NO_IMAGE_URL="http://placehold.it/350x150"
 ENV DIMS_DEFAULT_IMAGE_URL="http://placehold.it/350x150"
-ENV DIMS_CACHE_CONTROL_MAX_AGE=604800
-ENV DIMS_EDGE_CONTROL_DOWNSTREAM_TTL=604800
-ENV DIMS_TRUST_SOURCE=true
-ENV DIMS_SOURCE_CACHE=604800
-ENV DIMS_MIN_SOURCE_CACHE=0
-ENV DIMS_MAX_SOURCE_CACHE=604800
-ENV DIMS_CACHE_EXPIRE=604800
-ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
-ENV DIMS_WHITELIST=""
-
-COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
-
-EXPOSE 8000
