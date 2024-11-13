@@ -717,12 +717,14 @@ verify_dims4_signature(dims_request_rec *d) {
     char *signature_params = apr_pstrcat(d->pool, d->expiration, d->client_config->secret_key, d->commands, d->image_url, NULL);
 
     // Concatenate additional params.
-    char *token;
-    char *strtokstate;
-    token = apr_strtok(apr_hash_get(params, "_keys", APR_HASH_KEY_STRING), ",", &strtokstate);
-    while (token) {
-        signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
-        token = apr_strtok(NULL, ",", &strtokstate);
+    char *strtokstate = NULL;
+    char *keys = apr_hash_get(params, "_keys", APR_HASH_KEY_STRING);
+    if (keys != NULL) {
+        char *token = apr_strtok(keys, ",", &strtokstate);
+        while (token) {
+            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
+            token = apr_strtok(NULL, ",", &strtokstate);
+        }
     }
 
     // Hash.
