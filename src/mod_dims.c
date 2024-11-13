@@ -1,24 +1,8 @@
 /**
  * mod_dims - Dynamic Image Manipulation Service
  *
- * This module provides a webservice for dynamically manipulating
- * images.  Currently cropping, resizing, reformatting and
- * thumbnail creation are supported.
- *
- * Code Flow Logic:
- *
- *  dims_handler - called by apache, determines if request should be processed
- *    \            and does initial request setup.  
- *     dims_handle_request - validates against whitelist, client list and loads image.
- *       \
- *        dims_process_image - parses operations (resize, etc) and executes them
- *          \                  using imagemagick api. 
- *           dims_send_image - sends image to connection w/appropriate headers
- *
- * Any errors during processing will call 'dims_cleanup' which will free
- * any memory and return the 'no image' image to the connection.
- * 
  * Copyright 2009 AOL LLC 
+ * Copyright 2024 Jeremy Collins
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -51,9 +35,9 @@
 #define MAGICK_CHECK(func, d) \
     do {\
         if(func == MagickFalse) \
-            return dims_cleanup(d, NULL, DIMS_FAILURE); \
+            return DIMS_FAILURE; \
         if(d->status == DIMS_IMAGEMAGICK_TIMEOUT) \
-            return dims_cleanup(d, NULL, d->status); \
+            return d->status; \
     } while(0); 
 
 typedef struct {
@@ -151,7 +135,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             free(image_data.data);
         }
         
-        return 1;
+        return image_data.response_code;
     }
 
     char *actual_image_data = image_data.data;
@@ -163,8 +147,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
     }
 
     start_time = apr_time_now();
-    if(MagickReadImageBlob(d->wand, actual_image_data, image_data.used)
-            == MagickFalse) {
+    if(MagickReadImageBlob(d->wand, actual_image_data, image_data.used) == MagickFalse) {
         ExceptionType et;
 
         if(image_data.data) {
@@ -175,7 +158,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 "ImageMagick error, '%s', on request: %s ", 
                 MagickGetException(d->wand, &et), d->r->uri);
 
-        return 1;
+        return HTTP_INTERNAL_SERVER_ERROR;
     }
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
@@ -185,7 +168,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
     free(image_data.data);
 
-    return 0;
+    return HTTP_OK;
 }
 
 static apr_status_t
@@ -415,45 +398,6 @@ dims_send_image(dims_request_rec *d)
     return OK;
 }
 
-apr_status_t 
-dims_cleanup(dims_request_rec *d, char *err_msg, int status)
-{
-    if(status != DIMS_IGNORE) {
-        d->status = status;
-    }
-
-    if(d->wand) {
-        ExceptionType type;
-        char *msg = MagickGetException(d->wand, &type);
-
-        if(type != UndefinedException && msg) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "Imagemagick error, '%s', on request: %s ", 
-                    msg, d->r->uri);
-        }
-
-        MagickRelinquishMemory(msg);
-    } 
-    
-    if(err_msg) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                "mod_dims error, '%s', on request: %s ", 
-                err_msg, d->r->uri);
-    }
-
-    if(d->no_image_url) {
-        if(!dims_fetch_remote_image(d, NULL)) {
-            return dims_send_image(d);
-        }
-    }
-
-    if ( status != DIMS_SUCCESS ) {
-        return HTTP_NOT_FOUND;
-    } else {
-        return DECLINED;   
-    }
-}
-
 /**
  * Parse through the requested commands and set
  * the optimal image size on the MagicWand.
@@ -614,7 +558,7 @@ dims_process_image(dims_request_rec *d)
                     } else if(rec.width > 0 && rec.height > 0) {
                         args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
                     } else {
-                        return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
+                        return DIMS_BAD_ARGUMENTS;
                     }
 
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
@@ -640,7 +584,7 @@ dims_process_image(dims_request_rec *d)
                         command, args, d->r->uri);
 
                     if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                        return dims_cleanup(d, err, code); 
+                        return code;
                     }
                 }
             }
@@ -657,7 +601,7 @@ dims_process_image(dims_request_rec *d)
                 apr_status_t code;
 
                 if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
-                    return dims_cleanup(d, err, code);
+                    return code;
                 }
             }
         }
@@ -676,7 +620,7 @@ dims_process_image(dims_request_rec *d)
                 "Executing default strip command, on request %s", d->r->uri);
 
             if((code = strip_func(d, NULL, &err)) != DIMS_SUCCESS) {
-                return dims_cleanup(d, err, code);
+                return code;
             }
         }        
     }
@@ -732,21 +676,24 @@ verify_dims4_signature(dims_request_rec *d) {
     
     if(d->client_config->secret_key == NULL) {
         gen_hash[7] = '\0';
+
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-            "Developer key not set for client '%s'", d->client_config->id);
-        return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
+            "Secret key not set for client '%s'", d->client_config->id);
+
+        return DIMS_MISSING_SECRET;
     } else if (strncasecmp(d->signature, gen_hash, 6) != 0) {
         gen_hash[7] = '\0';
 
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-            "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, d->signature, d->r->uri, d->image_url);
-        return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
+            "Signature invalid: wanted %6s got %6s [%s?url=%s]", gen_hash, d->signature, d->r->uri, d->image_url);
+
+        return DIMS_INVALID_SIGNATURE;
     }
 
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "secret key (%s) to validated (%s:%s)", d->signature, d->commands, d->image_url);
+        "Signature valid: '%s' (%s:%s)", d->signature, d->commands, d->image_url);
 
-    return 1;
+    return OK;
 }
 
 int
@@ -762,12 +709,12 @@ verify_dims3_allowlist(dims_request_rec *d) {
         * and it's value is set to "glob" the match will be accepted.
         */
     if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
-        return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+        return DIMS_BAD_URL;
     }
 
     char *filename = strrchr(uri.path, '/');
     if (!filename || !uri.hostname) {
-        return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+        return DIMS_BAD_URL;
     }
 
     if (*filename == '/') {
@@ -797,28 +744,32 @@ static apr_status_t
 dims_handle_request(dims_request_rec *d)
 {
     // Download image.
-    int status;
-    if ((status = dims_fetch_remote_image(d, d->image_url)) != 0) {
+    int status = dims_fetch_remote_image(d, d->image_url);
+    if (status != DIMS_SUCCESS) { 
         return status;
     }
 
     // Execute Imagemagick commands.
-    if ((status = dims_process_image(d)) != 0) {
+    status = dims_process_image(d);
+    if (status != DIMS_SUCCESS) {
         return status;
     }
 
     // Serve the image.
-    if ((status = dims_send_image(d)) != 0) {
+    status = dims_send_image(d);
+    if (status != DIMS_SUCCESS) {
         return status;
     }
+
+    return HTTP_OK;
 }
 
 apr_status_t
 dims_handle_dims3(dims_request_rec *d)
 {
     // Verify allowlist (dims3 only).
-    if (!verify_dims3_allowlist(d)) {
-        return dims_cleanup(d, "Source image is being served from an non-allowed host.", DIMS_HOSTNAME_NOT_IN_WHITELIST);
+    if (verify_dims3_allowlist(d)) {
+        return HTTP_UNAUTHORIZED;
     }
 
     return dims_handle_request(d);
@@ -828,8 +779,8 @@ apr_status_t
 dims_handle_dims4(dims_request_rec *d)
 {
     // Verify signature (dims4 only).
-    if (!verify_dims4_signature(d)) {
-        return dims_cleanup(d, "Signature is invalid.", DIMS_BAD_CLIENT);
+    if (verify_dims4_signature(d)) {
+        return HTTP_UNAUTHORIZED;
     }
 
     return dims_handle_request(d);

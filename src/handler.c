@@ -42,7 +42,15 @@ dims_create_request(request_rec *r)
     request->optimize_resize = config->optimize_resize;
     request->send_content_disposition = 0;
     request->content_disposition_filename = NULL;
-    
+
+    return request;
+}
+
+static apr_status_t
+dims_request_parse(dims_request_rec *request)
+{
+    request_rec *r = request->r;
+
     char *unparsed_commands = apr_pstrdup(r->pool, r->uri + 7);
     request->unparsed_commands = unparsed_commands;
 
@@ -60,7 +68,7 @@ dims_create_request(request_rec *r)
     }
 
     /* Check first if URL is passed as a query parameter. */
-    char *url = NULL, *fixed_url = NULL, *eurl = NULL;
+    char *fixed_url = NULL, *eurl = NULL;
     if(r->args) {
         const size_t args_len = strlen(r->args) + 1;
         char *args = apr_pstrndup(request->r->pool, request->r->args, args_len);
@@ -74,8 +82,7 @@ dims_create_request(request_rec *r)
                 ap_unescape_url(fixed_url);
 
                 if (strcmp(fixed_url, "") == 0) {
-                    //return dims_cleanup(request, NULL, DIMS_BAD_URL);
-                    return NULL;
+                    return DIMS_BAD_URL;
                 }
             } else if (strncmp(token, "download=1", 10) == 0) {
                 request->send_content_disposition = 1;
@@ -91,8 +98,7 @@ dims_create_request(request_rec *r)
                 // Convert to hex.
                 char hex[SHA_DIGEST_LENGTH * 2 + 1];
                 if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-                    //return dims_cleanup(request, "URL Decryption Failed", DIMS_FAILURE);
-                    return NULL;
+                    return DIMS_DECRYPTION_FAILURE;
                 }
 
                 // Use first 16 bytes.
@@ -114,11 +120,13 @@ dims_create_request(request_rec *r)
                     int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
                     fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
                 }
+
                 if (fixed_url == NULL) {
-                    //return dims_cleanup(request, "URL Decryption Failed", DIMS_FAILURE);
-                    return NULL;
+                    return DIMS_DECRYPTION_FAILURE;
                 }
+
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, request->r, "Decrypted URL: %s", fixed_url);
+
                 break;
 
             } else if (strncmp(token, "optimizeResize=", 4) == 0) {
@@ -148,15 +156,14 @@ dims_create_request(request_rec *r)
     apr_uri_t uri;
     if (apr_uri_parse(r->pool, request->image_url, &uri) == APR_SUCCESS) {
         if (!uri.path) {
-            //return dims_cleanup(request, NULL, DIMS_BAD_URL);
-            return NULL;
+            return DIMS_BAD_URL;
         }
 
         const char *path = apr_filepath_name_get(uri.path);
         request->content_disposition_filename = apr_pstrdup(request->r->pool, path);
     }
 
-    return request;
+    return DIMS_SUCCESS;
 }
 
 /**
@@ -189,8 +196,9 @@ dims_handler(request_rec *r)
     }
 
     dims_request_rec *d = dims_create_request(r);
-    if (d == NULL) {
-        return HTTP_INTERNAL_SERVER_ERROR;
+    int status = dims_request_parse(d);
+    if (status != DIMS_SUCCESS) {
+        return status;
     }
 
     /* Set initial notes to be logged by mod_log_config. */
@@ -200,7 +208,7 @@ dims_handler(request_rec *r)
     apr_table_setn(r->notes, "DIMS_IM_TIME", "-");
 
     if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
-        return dims_cleanup(d, "Client ID is not valid", DIMS_BAD_CLIENT);
+        return DIMS_BAD_CLIENT;
     }
 
     if(d->client_config && d->client_config->no_image_url) {

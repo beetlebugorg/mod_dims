@@ -42,24 +42,19 @@
 
 #include "request.h"
 
-#define LEGACY_DIMS_RESIZE 1
-#define LEGACY_DIMS_REFORMAT 2
-#define LEGACY_DIMS_CROP 4
-#define LEGACY_DIMS_SHARPEN 8
-#define LEGACY_DIMS_JPG 256
-#define LEGACY_DIMS_GIF 512
-#define LEGACY_DIMS_PNG 1024
-
 #define DIMS_IGNORE -1
-#define DIMS_SUCCESS 0
-#define DIMS_FAILURE 1
-#define DIMS_DOWNLOAD_TIMEOUT 2
-#define DIMS_IMAGEMAGICK_TIMEOUT 4
-#define DIMS_BAD_CLIENT 8
-#define DIMS_BAD_URL 16
-#define DIMS_BAD_ARGUMENTS 32
-#define DIMS_HOSTNAME_NOT_IN_WHITELIST 64
-#define DIMS_FILE_NOT_FOUND 128
+#define DIMS_SUCCESS 200 
+#define DIMS_FAILURE 500 
+#define DIMS_FILE_NOT_FOUND 404
+#define DIMS_DOWNLOAD_TIMEOUT 1000
+#define DIMS_IMAGEMAGICK_TIMEOUT 1001
+#define DIMS_BAD_CLIENT 1002
+#define DIMS_BAD_URL 1003 
+#define DIMS_BAD_ARGUMENTS 1004
+#define DIMS_HOSTNAME_NOT_IN_WHITELIST 1005
+#define DIMS_INVALID_SIGNATURE 1006
+#define DIMS_MISSING_SECRET 1007
+#define DIMS_DECRYPTION_FAILURE 1008
 
 int dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *s);
 void dims_child_init(apr_pool_t *p, server_rec *s);
@@ -67,7 +62,6 @@ void dims_register_hooks(apr_pool_t *p);
 
 apr_status_t dims_handle_dims3(dims_request_rec *d);
 apr_status_t dims_handle_dims4(dims_request_rec *d);
-apr_status_t dims_cleanup(dims_request_rec *d, char *err_msg, int status);
 
 typedef struct {
     apr_uint32_t success_count;
