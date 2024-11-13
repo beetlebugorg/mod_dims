@@ -33,8 +33,10 @@ static char *url_encode(char *str) {
 }
 
 void 
-lock_share(CURL *handle, curl_lock_data data, 
-              curl_lock_access access, void *userptr)
+lock_share(__attribute__ ((unused)) CURL *handle, 
+           curl_lock_data data, 
+           __attribute__ ((unused)) curl_lock_access access, 
+           void *userptr)
 {
     dims_curl_rec *locks = (dims_curl_rec *) userptr;       
 
@@ -48,7 +50,9 @@ lock_share(CURL *handle, curl_lock_data data,
 }
 
 void 
-unlock_share(CURL *handle, curl_lock_data data, void *userptr) 
+unlock_share(__attribute__ ((unused)) CURL *handle, 
+             curl_lock_data data, 
+             void *userptr) 
 {
     dims_curl_rec *locks = (dims_curl_rec *) userptr;       
 
@@ -62,10 +66,11 @@ unlock_share(CURL *handle, curl_lock_data data, void *userptr)
 }
 
 static int
-dims_curl_debug_cb(CURL *handle,
+dims_curl_debug_cb(
+    __attribute__ ((unused)) CURL *handle,
     curl_infotype type,
     char *data,
-    size_t size,
+    __attribute__ ((unused)) size_t size,
     void *clientp)
 {
     dims_request_rec *d = (dims_request_rec *) clientp;
@@ -76,30 +81,28 @@ dims_curl_debug_cb(CURL *handle,
         default:
             break;
     }
+
+    return 0;
 }
 
 /**
- * This callback is called by the libcurl API to write data into
- * memory as it's being downloaded.
- *
- * The memory allocated here must be freed manually as it's not
- * allocated into an apache memory pool.
+ * This callback is called by the libcurl API to write data into memory as it's being downloaded.
  */
 size_t
-dims_write_image_cb(void *ptr, size_t size, size_t nmemb, void *data)
+dims_write_image_cb(void *new_data, size_t size, size_t nmemb, void *data)
 {
-    dims_image_data_t *mem = (dims_image_data_t *) data;
+    dims_image_data_t *image = (dims_image_data_t *) data;
     size_t realsize = size * nmemb;
 
     /* Allocate more memory if needed. */
-    if(mem->size - mem->used <= realsize) {
-        mem->size = mem->size == 0 ? realsize : (mem->size + realsize) * 1.25;
-        mem->data = (char *) realloc(mem->data, mem->size);
+    if(image->size - image->used <= realsize) {
+        image->size = image->size == 0 ? realsize : (image->size + realsize) * 1.25;
+        image->data = (char *) realloc(image->data, image->size);
     }
 
-    if (mem->data) {
-        memcpy(&(mem->data[mem->used]), ptr, realsize);
-        mem->used += realsize;
+    if (image->data) {
+        memcpy(&(image->data[image->used]), new_data, realsize);
+        image->used += realsize;
     }
 
     return realsize;
@@ -140,7 +143,7 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
 }
 
 CURLcode
-dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data)
+dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *source_image)
 {
     CURL *curl_handle;
     CURLcode code;
@@ -198,14 +201,20 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
 
     code = curl_easy_perform(curl_handle);
 
-    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &image_data.response_code);
+    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &source_image->response_code);
     curl_easy_cleanup(curl_handle);
-
-    *data = image_data;
 
     if (!d->config->disable_encoded_fetch) {
         free(fetch_url);
     }
+
+    if (source_image->response_code == 200) {
+        source_image->data = apr_pmemdup(d->pool, image_data.data, image_data.used);
+        source_image->size = image_data.used;
+        source_image->used = image_data.used;
+    }
+
+    free(image_data.data);
 
     return code;
 }

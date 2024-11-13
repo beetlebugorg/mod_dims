@@ -1,8 +1,0 @@
-{
-    "files.associations": {
-        "*.templ": "templ",
-        "mod_dims.h": "c",
-        "scoreboard.h": "c"
-    },
-    "C_Cpp.default.compilerPath": "/usr/bin/gcc"
-}

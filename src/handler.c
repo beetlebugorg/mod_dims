@@ -22,7 +22,7 @@ dims_create_request(request_rec *r)
 
     request->r = r;
     request->pool = r->pool;
-    request->wand = NewMagickWand();
+    request->wand = NULL;
     request->config = config;
     request->client_config = NULL;
     request->no_image_url = request->config->no_image_url;
@@ -34,7 +34,7 @@ dims_create_request(request_rec *r)
     request->etag = NULL;
     request->last_modified = NULL;
     request->request_hash = NULL;
-    request->status = APR_SUCCESS;
+    request->status = DIMS_SUCCESS;
     request->fetch_http_status = 0;
     request->start_time = apr_time_now();
     request->download_time = 0;
@@ -214,7 +214,6 @@ dims_handler(request_rec *r)
     if(d->client_config && d->client_config->no_image_url) {
         d->no_image_url = d->client_config->no_image_url;
     }
-
 
     if ((strcmp(r->handler, "dims3") == 0)) {
         return dims_handle_dims3(d);

@@ -6,9 +6,15 @@
 
 #include "configuration.h"
 
-typedef struct dims_request_rec dims_request_rec;
+typedef struct {
+    char *data;
+    size_t size;
+    size_t used;
+    long response_code;
+    apr_pool_t *pool;
+} dims_image_data_t;
 
-struct dims_request_rec {
+typedef struct {
     request_rec *r;
 
     apr_pool_t *pool;
@@ -36,6 +42,7 @@ struct dims_request_rec {
 
     /* The original image size in bytes. */
     long original_image_size;
+    dims_image_data_t *source_image;
 
     /* The sample factor for optimizing resizing. */
     float optimize_resize;
@@ -75,6 +82,6 @@ struct dims_request_rec {
     /* Should Content-Disposition header bet set. */
     int send_content_disposition;
     char *content_disposition_filename;
-};
+} dims_request_rec;
 
 #endif

@@ -24,9 +24,9 @@
 #include "curl.h"
 #include "request.h"
 #include "module.h"
-#include "util_md5.h"
 #include "cmyk_icc.h"
 
+#include <util_md5.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -45,6 +45,13 @@ typedef struct {
     apr_time_t start_time;
 } dims_progress_rec;
 
+typedef struct {
+    size_t length;
+    unsigned char *bytes;
+    char *format;
+    apr_status_t error;
+} dims_processed_image;
+
 dims_stats_rec *stats;
 apr_shm_t *shm;
 apr_hash_t *ops;
@@ -57,8 +64,10 @@ apr_hash_t *ops;
  * ImageMagick is busy loading up the pixel cache.
  */
 MagickBooleanType 
-dims_imagemagick_progress_cb(const char *text, const MagickOffsetType offset,
-                             const MagickSizeType span, void *client_data)
+dims_imagemagick_progress_cb(const char *text, 
+                             __attribute__ ((unused)) const MagickOffsetType offset,
+                             __attribute__ ((unused)) const MagickSizeType span, 
+                             void *client_data)
 {
     dims_progress_rec *p = (dims_progress_rec *) client_data;
 
@@ -85,25 +94,20 @@ dims_imagemagick_progress_cb(const char *text, const MagickOffsetType offset,
  * Fetch remote image.  If successful the MagicWand will
  * have the new image loaded.
  */
-static int 
+static apr_status_t
 dims_fetch_remote_image(dims_request_rec *d, const char *url)
 {
-    dims_image_data_t image_data;
     char *fetch_url = url ? (char *) url : d->no_image_url;
-    int extra_time = 0;
     apr_time_t start_time;
+    d->source_image = apr_palloc(d->pool, sizeof(dims_image_data_t));
 
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
             "Loading image from %s", fetch_url);
 
-    CURLcode code = dims_get_image_data(d, fetch_url, &image_data);
+    CURLcode code = dims_get_image_data(d, fetch_url, d->source_image);
 
     start_time = apr_time_now();
     if(code != 0) {
-        if(image_data.data) {
-            free(image_data.data);
-        }
-
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
                 "libcurl error, '%s', on request: %s ", 
                 curl_easy_strerror(code), d->r->uri);
@@ -116,70 +120,40 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
         d->download_time = (apr_time_now() - start_time) / 1000;
 
-        return 1;
+        return DIMS_FAILURE;
     }
 
     d->download_time = (apr_time_now() - start_time) / 1000;
 
     // Don't set the fetch_http_status if we're downloading the NOIMAGE image.
     if (url != NULL) {
-            d->fetch_http_status = image_data.response_code;
+        d->fetch_http_status = d->source_image->response_code;
     }
 
-    if(image_data.response_code != 200) {
-        if(image_data.response_code == 404) {
+    if(d->source_image->response_code != 200) {
+        if(d->source_image->response_code == 404) {
             d->status = DIMS_FILE_NOT_FOUND;
         }
 
-        if(image_data.data) {
-            free(image_data.data);
-        }
-        
-        return image_data.response_code;
+        return DIMS_FAILURE;
     }
-
-    char *actual_image_data = image_data.data;
 
     // Ensure SVGs have the appropriate XML header.
-    if (image_data.size >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
-        actual_image_data = apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", image_data.data, NULL);
-        image_data.used += 55;
+    if (d->source_image->size >= 4 && strncmp(d->source_image->data, "<svg", 4) == 0) {
+        d->source_image->data =
+            apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", 
+                        d->source_image->data, NULL);
+        d->source_image->used += 55;
     }
 
-    start_time = apr_time_now();
-    if(MagickReadImageBlob(d->wand, actual_image_data, image_data.used) == MagickFalse) {
-        ExceptionType et;
-
-        if(image_data.data) {
-            free(image_data.data);
-        } 
-
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                "ImageMagick error, '%s', on request: %s ", 
-                MagickGetException(d->wand, &et), d->r->uri);
-
-        return HTTP_INTERNAL_SERVER_ERROR;
-    }
-    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
-
-    if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
-        d->original_image_size = image_data.used;
-    }
-
-    free(image_data.data);
-
-    return HTTP_OK;
+    return DIMS_SUCCESS;
 }
 
 static apr_status_t
-dims_send_image(dims_request_rec *d) 
+dims_send_image(dims_request_rec *d, dims_processed_image *image)
 {
     char buf[128];
-    unsigned char *blob;
-    char *format;
     char *content_type;
-    size_t length;
-    apr_time_t start_time;
     int expire_time = 0;
 
     char *cache_control = NULL,
@@ -195,13 +169,9 @@ dims_send_image(dims_request_rec *d)
 
     int trust_src_img = 0;
 
-    format = MagickGetImageFormat(d->wand);
-
-    MagickResetIterator(d->wand);
-
-    start_time = apr_time_now();
-    blob = MagickGetImagesBlob(d->wand, &length);
-    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
+    char *format = image->format;
+    unsigned char *blob = image->bytes;
+    size_t length = image->length;
 
     /* Set the Content-Type based on the image format. */
     content_type = apr_psprintf(d->pool, "image/%s", format);
@@ -345,12 +315,9 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->headers_out, "ETag", etag);
     }
 
-    MagickSizeType image_size = 0;
-    MagickGetImageLength(d->wand, &image_size);
-
     if (blob != NULL) {
         char content_length[256] = "";
-        snprintf(content_length, sizeof(content_length), "%zu", (size_t)image_size);
+        snprintf(content_length, sizeof(content_length), "%zu", (size_t) image->length);
         apr_table_set(d->r->headers_out, "Content-Length", content_length);
 
         ap_rwrite(blob, length, d->r);
@@ -359,9 +326,6 @@ dims_send_image(dims_request_rec *d)
     }
 
     ap_rflush(d->r);
-
-    MagickRelinquishMemory(blob);
-    MagickRelinquishMemory(format);
 
     /* After the image is sent record stats about this request. */
     if(d->status == DIMS_SUCCESS) {
@@ -456,24 +420,37 @@ dims_set_optimal_geometry(dims_request_rec *d)
  * set the quality of the image to 70 before writing the image
  * to the connection.
  */
-static apr_status_t
+static dims_processed_image *
 dims_process_image(dims_request_rec *d) 
 {
     apr_time_t start_time = apr_time_now();
 
-    /* Hook in the progress monitor.  It gets passed a 
-     * dims_progress_rec which keeps track of the start time.
-     */
-    dims_progress_rec *progress_rec = (dims_progress_rec *) apr_palloc(
-            d->pool, sizeof(dims_progress_rec));
+    d->wand = NewMagickWand();
+
+    if(MagickReadImageBlob(d->wand, d->source_image->data, d->source_image->used) == MagickFalse) {
+        ExceptionType et;
+
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+            "ImageMagick error, '%s', on request: %s ", 
+            MagickGetException(d->wand, &et), d->r->uri);
+
+        return NULL;
+    }
+    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
+
+    if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
+        d->original_image_size = d->source_image->used;
+    }
+
+    dims_processed_image *image = (dims_processed_image *) apr_palloc(d->pool, sizeof(dims_processed_image)); 
+
+    /* Hook in the progress monitor.  It gets passed a dims_progress_rec which keeps track of the start time.  */
+    dims_progress_rec *progress_rec = (dims_progress_rec *) apr_palloc(d->pool, sizeof(dims_progress_rec));
     progress_rec->d = d;
     progress_rec->start_time = apr_time_now();
 
-    /* Setting the progress monitor from the MagickWand API does not
-     * seem to work.  The monitor never gets called.
-     */
-    SetImageProgressMonitor(GetImageFromMagickWand(d->wand), dims_imagemagick_progress_cb, 
-            (void *) progress_rec);
+    /* Setting the progress monitor from the MagickWand API does not seem to work.  The monitor never gets called.  */
+    SetImageProgressMonitor(GetImageFromMagickWand(d->wand), dims_imagemagick_progress_cb, (void *) progress_rec);
 
     int exc_strip_cmd = 0;
 
@@ -518,7 +495,7 @@ dims_process_image(dims_request_rec *d)
         }
 
         if (should_flatten) {
-            for (int i = 1; i <= images - 1; i++) {
+            for (size_t i = 1; i <= images - 1; i++) {
                 MagickSetIteratorIndex(d->wand, i);
                 MagickRemoveImage(d->wand);
             }
@@ -546,10 +523,9 @@ dims_process_image(dims_request_rec *d)
                         strcmp(command, "legacy_thumbnail") == 0 ||
                         strcmp(command, "legacy_crop") == 0 ||
                         strcmp(command, "thumbnail") == 0)) {
-                    MagickStatusType flags;
                     RectangleInfo rec;
 
-                    flags = ParseAbsoluteGeometry(args, &rec);
+                    ParseAbsoluteGeometry(args, &rec);
 
                     if(rec.width > 0 && rec.height == 0) {
                         args = apr_psprintf(d->pool, "%ld", rec.width);
@@ -558,14 +534,16 @@ dims_process_image(dims_request_rec *d)
                     } else if(rec.width > 0 && rec.height > 0) {
                         args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
                     } else {
-                        return DIMS_BAD_ARGUMENTS;
+                        DestroyMagickWand(d->wand);
+                        image->error = DIMS_BAD_ARGUMENTS;
+                        return image;
                     }
 
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
                         "Rewriting command %s to 'resize' because a NOIMAGE "
                         "image is being processed.", command);
 
-                    command = "resize"; 
+                    command = apr_psprintf(d->pool, "%s", "resize");
                 }
 
                 // Check if the command is present and set flag.
@@ -584,7 +562,10 @@ dims_process_image(dims_request_rec *d)
                         command, args, d->r->uri);
 
                     if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                        return code;
+                        DestroyMagickWand(d->wand);
+                        image->error = code;
+                        return image;
+                        ;
                     }
                 }
             }
@@ -601,7 +582,9 @@ dims_process_image(dims_request_rec *d)
                 apr_status_t code;
 
                 if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
-                    return code;
+                    DestroyMagickWand(d->wand);
+                    image->error = code;
+                    return image;
                 }
             }
         }
@@ -620,7 +603,9 @@ dims_process_image(dims_request_rec *d)
                 "Executing default strip command, on request %s", d->r->uri);
 
             if((code = strip_func(d, NULL, &err)) != DIMS_SUCCESS) {
-                return code;
+                DestroyMagickWand(d->wand);
+                image->error = code;
+                return image;
             }
         }        
     }
@@ -632,7 +617,15 @@ dims_process_image(dims_request_rec *d)
      */
     SetImageProgressMonitor(GetImageFromMagickWand(d->wand), NULL, NULL);
 
-    return DIMS_SUCCESS;
+    MagickResetIterator(d->wand);
+
+    image->error = DIMS_SUCCESS;
+    image->format = MagickGetImageFormat(d->wand);
+    image->bytes = MagickGetImagesBlob(d->wand, &image->length);
+
+    DestroyMagickWand(d->wand);
+
+    return image;
 }
 
 int
@@ -698,8 +691,7 @@ verify_dims4_signature(dims_request_rec *d) {
 
 int
 verify_dims3_allowlist(dims_request_rec *d) {
-    char *fetch_url = NULL;
-    char *hostname, *state = "exact";
+    char *hostname, *state = apr_pstrdup(d->pool, "exact");
     apr_uri_t uri;
     int found = 0, done = 0;
 
@@ -733,7 +725,7 @@ verify_dims3_allowlist(dims_request_rec *d) {
             } else {
                 hostname++;
             }
-            state = "glob";
+            state = apr_pstrdup(d->pool, "glob");
         }
     }
 
@@ -744,19 +736,21 @@ static apr_status_t
 dims_handle_request(dims_request_rec *d)
 {
     // Download image.
-    int status = dims_fetch_remote_image(d, d->image_url);
-    if (status != DIMS_SUCCESS) { 
-        return status;
-    }
-
-    // Execute Imagemagick commands.
-    status = dims_process_image(d);
+    apr_status_t status = dims_fetch_remote_image(d, d->image_url);
     if (status != DIMS_SUCCESS) {
         return status;
     }
 
+    // Execute Imagemagick commands.
+    dims_processed_image *image = dims_process_image(d);
+    if (image != NULL && image->error != DIMS_SUCCESS) {
+        return image->error;
+    } else if (image == NULL) {
+        return DIMS_FAILURE;
+    }
+
     // Serve the image.
-    status = dims_send_image(d);
+    status = dims_send_image(d, image);
     if (status != DIMS_SUCCESS) {
         return status;
     }

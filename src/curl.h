@@ -1,5 +1,5 @@
 #ifndef _CURL_H_
-#define _CURL_H
+#define _CURL_H_
 
 #include <stddef.h>
 #include <curl/curl.h>
@@ -16,13 +16,6 @@ typedef struct {
     apr_thread_mutex_t *share_mutex;
     apr_thread_mutex_t *dns_mutex;
 } dims_curl_rec;
-
-typedef struct {
-    char *data;
-    size_t size;
-    size_t used;
-    long response_code;
-} dims_image_data_t;
 
 CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
 

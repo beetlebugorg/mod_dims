@@ -4,9 +4,14 @@
             "name": "Linux",
             "includePath": [
                 "${default}",
-                "/usr/local/imagemagick/include/ImageMagick-7/",
                 "/usr/local/apache2/include",
-                "/usr/include/apr-1.0"
+                "/usr/lib/zig/libc/include",
+                "/usr/lib/zig/libcxx/include",
+                "/usr/lib/zig/libc/include/generic-musl",
+                "/usr/include",
+                "/usr/include/apr-1/",
+                "/usr/include/ImageMagick-7/",
+                "/usr/lib/zig/libc/include/aarch64-linux-musl"
             ],
             "defines": [],
             "cStandard": "c17",
