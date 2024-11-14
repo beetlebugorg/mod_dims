@@ -19,7 +19,6 @@ const char *dims_config_set_imagemagick_timeout(cmd_parms *cmd, void *dummy, con
 const char *dims_config_set_strip_metadata(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_include_disposition(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_optimize_resize(cmd_parms *cmd, void *dummy, const char *arg);
-const char *dims_config_set_encoded_fetch(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_encryption_algorithm(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_default_output_format(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_user_agent_override(cmd_parms *cmd, void *dummy, const char *arg);
@@ -46,7 +45,6 @@ struct dims_config_rec {
     int strip_metadata;
     float optimize_resize;
     int include_disposition;
-    int disable_encoded_fetch;
     char *default_output_format;
 
     MagickSizeType area_size;
