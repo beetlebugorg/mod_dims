@@ -43,6 +43,7 @@ typedef struct {
 
     /* The parsed commands with the signature and expiration timestamp removed. */
     char *commands;
+    apr_hash_t *query_params;
 
     /* The source image. */
     dims_image_data_t *source_image;

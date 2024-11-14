@@ -40,19 +40,12 @@ dims_create_request(request_rec *r)
     return request;
 }
 
-static apr_status_t
-dims_request_parse(dims_request_rec *request)
+static char * 
+dims_encode_spaces(apr_pool_t *pool, char *str)
 {
-    request_rec *r = request->r;
+    char *copy = apr_pstrdup(pool, str);
 
-    char *unparsed_commands = apr_pstrdup(r->pool, r->uri + 7);
-    request->unparsed_commands = unparsed_commands;
-
-    request->client_id = ap_getword(request->pool, (const char **) &unparsed_commands, '/');
-    request->signature = ap_getword(request->pool, (const char **) &unparsed_commands, '/');
-    request->expiration = ap_getword(request->pool, (const char **) &unparsed_commands, '/');
-    request->commands = apr_pstrdup(request->pool, unparsed_commands);
-    char *s = request->commands;
+    char *s = copy;
     while (*s) {
         if (*s == ' ') {
             *s = '+';
@@ -61,92 +54,104 @@ dims_request_parse(dims_request_rec *request)
         s++;
     }
 
-    /* Check first if URL is passed as a query parameter. */
-    char *fixed_url = NULL, *eurl = NULL;
-    if(r->args) {
-        const size_t args_len = strlen(r->args) + 1;
-        char *args = apr_pstrndup(request->r->pool, request->r->args, args_len);
-        char *token;
-        char *strtokstate;
-        token = apr_strtok(args, "&", &strtokstate);
-        while (token) {
-            if(strncmp(token, "url=", 4) == 0) {
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, request->r, "ARG: %s", token);
-                fixed_url = apr_pstrdup(r->pool, token + 4);
-                ap_unescape_url(fixed_url);
+    return copy;
+}
 
-                if (strcmp(fixed_url, "") == 0) {
-                    return DIMS_BAD_URL;
-                }
-            } else if (strncmp(token, "download=1", 10) == 0) {
-                request->send_content_disposition = 1;
+static apr_hash_t *
+dims_parse_args(request_rec *r)
+{
+    apr_hash_t *query_params = apr_hash_make(r->pool);
 
-            } else if (strncmp(token, "eurl=", 4) == 0) {
-                eurl = apr_pstrdup(r->pool, token + 5);
+    const size_t args_len = strlen(r->args) + 1;
+    char *args = apr_pstrndup(r->pool, r->args, args_len);
+    char *token;
+    char *strtokstate;
 
-                // Hash secret via SHA-1.
-                unsigned char *secret = (unsigned char *) request->client_config->secret_key;
-                unsigned char hash[SHA_DIGEST_LENGTH];
-                SHA1(secret, strlen((char *) secret), hash);
-
-                // Convert to hex.
-                char hex[SHA_DIGEST_LENGTH * 2 + 1];
-                if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-                    return DIMS_DECRYPTION_FAILURE;
-                }
-
-                // Use first 16 bytes.
-                unsigned char key[17];
-                strncpy((char *) key, hex, 16);
-                key[16] = '\0';
-
-                // Force key to uppercase
-                unsigned char *s = key;
-                while (*s) { *s = toupper(*s); s++; }
-
-                if (request->config->encryption_algorithm != NULL &&
-                    strncmp((char *)request->config->encryption_algorithm, "AES/GCM/NoPadding", strlen("AES/GCM/NoPadding")) == 0) {
-
-                    fixed_url = aes_128_gcm_decrypt(r, key, eurl);
-                } else {
-                    //Default is AES/ECB/PKCS5Padding
-                    unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
-                    int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
-                    fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
-                }
-
-                if (fixed_url == NULL) {
-                    return DIMS_DECRYPTION_FAILURE;
-                }
-
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, request->r, "Decrypted URL: %s", fixed_url);
-
-                break;
-
-            } else if (strncmp(token, "optimizeResize=", 4) == 0) {
-                request->optimize_resize = atof(token + 15);
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, request->r, "Overriding optimize resize: %f", request->optimize_resize);
-            }
-            token = apr_strtok(NULL, "&", &strtokstate);
-        }
+    token = apr_strtok(args, "&", &strtokstate);
+    while (token) {
+        char *param = strtok(token, "=");
+        apr_hash_set(query_params, param, APR_HASH_KEY_STRING, apr_pstrdup(r->pool, param + strlen(param) + 1));
+        token = apr_strtok(NULL, "&", &strtokstate);
     }
 
-    // Convert '+' in the fixed_url to ' '.
-    char *image_url = apr_pstrdup(request->r->pool, fixed_url);
-    s = image_url;
-    while (*s) {
-        if (*s == '+') {
-            *s = ' ';
-        }
+    return query_params;
+}
 
-        s++;
+static char *
+dims_decrypt_eurl(request_rec *r, unsigned char *secret_key, char *eurl)
+{
+    // Hash secret via SHA-1.
+    unsigned char hash[SHA_DIGEST_LENGTH];
+    SHA1(secret_key, strlen((char *) secret_key), hash);
+
+    // Convert to hex.
+    char hex[SHA_DIGEST_LENGTH * 2 + 1];
+    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+        return NULL;
     }
 
-    request->image_url = image_url;
-    request->request_hash = ap_md5(request->pool, 
-        apr_pstrcat(request->pool, request->client_id, request->commands, request->image_url, NULL));
+    // Use first 16 bytes.
+    unsigned char key[17];
+    strncpy((char *) key, hex, 16);
+    key[16] = '\0';
 
-    /* Calculate image filename for use with content disposition. */
+    // Force key to uppercase
+    unsigned char *s = key;
+    while (*s) { *s = toupper(*s); s++; }
+
+    return aes_128_gcm_decrypt(r, key, eurl);
+}
+
+static apr_status_t
+dims_request_parse(dims_request_rec *request)
+{
+    request_rec *r = request->r;
+
+    char *unparsed_commands = apr_pstrdup(r->pool, r->uri + 7);
+    request->unparsed_commands = unparsed_commands;
+
+    request->client_id = ap_getword(r->pool, (const char **) &unparsed_commands, '/');
+    request->signature = ap_getword(r->pool, (const char **) &unparsed_commands, '/');
+    request->expiration = ap_getword(r->pool, (const char **) &unparsed_commands, '/');
+    request->commands = dims_encode_spaces(r->pool, unparsed_commands);
+    request->query_params = dims_parse_args(r);
+
+    char *download = apr_hash_get(request->query_params, "download", APR_HASH_KEY_STRING);
+    if (download != NULL && *download == '1') {
+        request->send_content_disposition = 1;
+    }
+
+    // Determine the source image URL.
+    char *url = apr_hash_get(request->query_params, "url", APR_HASH_KEY_STRING);
+    char *eurl = apr_hash_get(request->query_params, "eurl", APR_HASH_KEY_STRING);
+    if (eurl != NULL) {
+        request->image_url = dims_decrypt_eurl(r, request->config->secret_key, eurl);
+
+        if (request->image_url == NULL) {
+            return DIMS_DECRYPTION_FAILURE;
+        }
+    } else if (url != NULL) {
+        request->image_url = dims_encode_spaces(r->pool, url);
+    } else {
+        return DIMS_BAD_URL;
+    }
+
+    // Check for optimizeResize parameter.
+    char *optimize_resize = apr_hash_get(request->query_params, "optimizeResize", APR_HASH_KEY_STRING);
+    if (optimize_resize != NULL) {
+        request->optimize_resize = atof(optimize_resize);
+
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Overriding optimize resize: %f", request->optimize_resize);
+    }
+
+    request->request_hash = ap_md5(r->pool, 
+        apr_pstrcat(r->pool, 
+                    request->client_id, 
+                    request->commands, 
+                    request->image_url, 
+                    NULL));
+
+    // Calculate image filename for use with content disposition.
     apr_uri_t uri;
     if (apr_uri_parse(r->pool, request->image_url, &uri) == APR_SUCCESS) {
         if (!uri.path) {
@@ -154,7 +159,7 @@ dims_request_parse(dims_request_rec *request)
         }
 
         const char *path = apr_filepath_name_get(uri.path);
-        request->content_disposition_filename = apr_pstrdup(request->r->pool, path);
+        request->content_disposition_filename = apr_pstrdup(r->pool, path);
     }
 
     return DIMS_SUCCESS;

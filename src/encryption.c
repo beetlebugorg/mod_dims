@@ -16,47 +16,6 @@ aes_errors(const char *message, size_t length, void *u)
 }
 
 char *
-aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_text, int encrypted_length)
-{
-    EVP_CIPHER_CTX *ctx;
-
-    if (!(ctx = EVP_CIPHER_CTX_new())) {
-        ERR_print_errors_cb(aes_errors, r);
-        return NULL;
-    }
-
-    if (!EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, key, NULL)) {
-        ERR_print_errors_cb(aes_errors, r);
-        EVP_CIPHER_CTX_free(ctx);
-        return NULL;
-    }
-
-    int decrypted_length;
-    int plaintext_length, out_length;
-    char *plaintext = apr_palloc(r->pool, encrypted_length * sizeof(char));
-    if (EVP_DecryptUpdate(ctx, (unsigned char *) plaintext, &out_length, encrypted_text, encrypted_length)) {
-        plaintext_length = out_length;
-
-        if (!EVP_DecryptFinal_ex(ctx, (unsigned char *) plaintext + out_length, &plaintext_length)) {
-            ERR_print_errors_cb(aes_errors, r);
-            EVP_CIPHER_CTX_free(ctx);
-            return NULL;
-        }
-
-        plaintext_length += out_length;
-        plaintext[plaintext_length] = '\0';
-    } else {
-        ERR_print_errors_cb(aes_errors, r);
-        EVP_CIPHER_CTX_free(ctx);
-        return NULL;
-    }
-
-    EVP_CIPHER_CTX_free(ctx);
-
-    return plaintext;
-}
-
-char *
 aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_encrypted_text) {
     EVP_CIPHER_CTX *ctx;
     int ret;

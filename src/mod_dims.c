@@ -617,61 +617,42 @@ dims_process_image(dims_request_rec *d)
 
 int
 verify_dims4_signature(dims_request_rec *d) {
-    char *gen_hash;
-
-    // Throw all query params and their values into a hash table.
-    // This is used to derive additional signature params.
-    apr_hash_t *params = apr_hash_make(d->pool);
-
-    if (d->r->args) {
-        const size_t args_len = strlen(d->r->args) + 1;
-        char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
-        char *token;
-        char *strtokstate;
-
-        token = apr_strtok(args, "&", &strtokstate);
-        while (token) {
-            char *param = strtok(token, "=");
-            apr_hash_set(params, param, APR_HASH_KEY_STRING, apr_pstrdup(d->r->pool, param + strlen(param) + 1));
-            token = apr_strtok(NULL, "&", &strtokstate);
-        }
-    }
-
-    // Standard signature params.
-    char *signature_params = apr_pstrcat(d->pool, d->expiration, d->client_config->secret_key, d->commands, d->image_url, NULL);
-
-    // Concatenate additional params.
-    char *strtokstate = NULL;
-    char *keys = apr_hash_get(params, "_keys", APR_HASH_KEY_STRING);
-    if (keys != NULL) {
-        char *token = apr_strtok(keys, ",", &strtokstate);
-        while (token) {
-            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
-            token = apr_strtok(NULL, ",", &strtokstate);
-        }
-    }
-
-    // Hash.
-    gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
-    
     if(d->client_config->secret_key == NULL) {
-        gen_hash[7] = '\0';
-
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
             "Secret key not set for client '%s'", d->client_config->id);
 
         return DIMS_MISSING_SECRET;
-    } else if (strncasecmp(d->signature, gen_hash, 6) != 0) {
-        gen_hash[7] = '\0';
+    }
+
+    // Standard signature params.
+    char *signature_params = apr_pstrcat(d->pool, 
+        d->expiration, 
+        d->client_config->secret_key, 
+        d->commands, 
+        d->image_url, 
+        NULL);
+
+    // Concatenate additional params.
+    char *strtokstate = NULL;
+    char *keys = apr_hash_get(d->query_params, "_keys", APR_HASH_KEY_STRING);
+    if (keys != NULL) {
+        char *token = apr_strtok(keys, ",", &strtokstate);
+        while (token) {
+            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(d->query_params, token, APR_HASH_KEY_STRING), NULL);
+            token = apr_strtok(NULL, ",", &strtokstate);
+        }
+    }
+
+    // Calculate the signature.
+    char *signature = ap_md5(d->pool, (unsigned char *) signature_params);
+    if (strncasecmp(d->signature, signature, 6) != 0) {
+        signature[7] = '\0';
 
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-            "Signature invalid: wanted %6s got %6s [%s?url=%s]", gen_hash, d->signature, d->r->uri, d->image_url);
+            "Signature invalid: wanted %6s got %6s [%s?url=%s]", signature, d->signature, d->r->uri, d->image_url);
 
         return DIMS_INVALID_SIGNATURE;
     }
-
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "Signature valid: '%s' (%s:%s)", d->signature, d->commands, d->image_url);
 
     return OK;
 }
