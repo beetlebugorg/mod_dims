@@ -40,8 +40,6 @@
 
 #include <curl/curl.h>
 
-#include "request.h"
-
 #define DIMS_IGNORE -1
 #define DIMS_SUCCESS 200 
 #define DIMS_FAILURE 500 
@@ -56,7 +54,7 @@
 #define DIMS_MISSING_SECRET 1007
 #define DIMS_DECRYPTION_FAILURE 1008
 
-apr_status_t dims_handle_dims3(dims_request_rec *d);
-apr_status_t dims_handle_dims4(dims_request_rec *d);
+apr_status_t dims_handle_dims3(request_rec *d);
+apr_status_t dims_handle_dims4(request_rec *d);
 
 #endif
