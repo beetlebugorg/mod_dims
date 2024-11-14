@@ -21,6 +21,11 @@ typedef struct {
 } dims_image_data_t;
 
 typedef struct {
+    char *name;
+    char *arg;
+} dims_command_t;
+
+typedef struct {
     request_rec *r;
 
     apr_pool_t *pool;
@@ -38,12 +43,10 @@ typedef struct {
     /* The URL to the NOIMAGE image in case of failures. */
     char *no_image_url;
 
-    /* The unparsed commands (resize, crop, etc). */
-    char *unparsed_commands;
-
     /* The parsed commands with the signature and expiration timestamp removed. */
     char *commands;
     apr_hash_t *query_params;
+    apr_array_header_t *commands_list;
 
     /* The source image. */
     dims_image_data_t *source_image;

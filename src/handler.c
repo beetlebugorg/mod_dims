@@ -36,6 +36,7 @@ dims_create_request(request_rec *r)
     request->optimize_resize = config->optimize_resize;
     request->send_content_disposition = 0;
     request->content_disposition_filename = NULL;
+    request->commands_list = apr_array_make(r->pool, 10, sizeof(dims_command_t));
 
     return request;
 }
@@ -102,19 +103,39 @@ dims_decrypt_eurl(request_rec *r, unsigned char *secret_key, char *eurl)
     return aes_128_gcm_decrypt(r, key, eurl);
 }
 
+static apr_array_header_t *
+dims_parse_commands(dims_request_rec *request, char *commands) {
+    apr_array_header_t *commands_list = apr_array_make(request->pool, 10, sizeof(dims_command_t));
+
+    const char *cmds = commands;
+    while(cmds < commands + strlen(commands)) {
+        char *command = ap_getword(request->pool, &cmds, '/'); 
+
+        if(strlen(command) > 0) {
+            char *args = ap_getword(request->pool, &cmds, '/');
+            dims_command_t *cmd = (dims_command_t *) apr_palloc(request->pool, sizeof(dims_command_t)); 
+            cmd->name = command;
+            cmd->arg = dims_encode_spaces(request->pool, args);
+
+            APR_ARRAY_PUSH(commands_list, dims_command_t) = *cmd;
+        }
+    }
+
+    return commands_list;
+}
+
 static apr_status_t
 dims_request_parse(dims_request_rec *request)
 {
     request_rec *r = request->r;
 
     char *unparsed_commands = apr_pstrdup(r->pool, r->uri + 7);
-    request->unparsed_commands = unparsed_commands;
-
     request->client_id = ap_getword(r->pool, (const char **) &unparsed_commands, '/');
     request->signature = ap_getword(r->pool, (const char **) &unparsed_commands, '/');
     request->expiration = ap_getword(r->pool, (const char **) &unparsed_commands, '/');
     request->commands = dims_encode_spaces(r->pool, unparsed_commands);
     request->query_params = dims_parse_args(r);
+    request->commands_list = dims_parse_commands(request, request->commands);
 
     char *download = apr_hash_get(request->query_params, "download", APR_HASH_KEY_STRING);
     if (download != NULL && *download == '1') {

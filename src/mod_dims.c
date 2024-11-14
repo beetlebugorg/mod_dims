@@ -356,25 +356,19 @@ dims_set_optimal_geometry(dims_request_rec *d)
 {
     MagickStatusType flags;
     RectangleInfo rec;
-    const char *cmds = d->commands;
 
     /* Process operations. */
-    while(cmds < d->commands + strlen(d->commands)) {
-        char *command = ap_getword(d->pool, &cmds, '/');
+    for (int i = 0; i < d->commands_list->nelts; i++) {
+        dims_command_t *cmd = &APR_ARRAY_IDX(d->commands_list, i, dims_command_t);
 
-        if(strcmp(command, "resize") == 0 ||
-            strcmp(command, "legacy_thumbnail") == 0 ||
-            strcmp(command, "thumbnail") == 0) {
-            char *args = ap_getword(d->pool, &cmds, '/');
+        if(strcmp(cmd->name, "resize") == 0 ||
+            strcmp(cmd->name, "legacy_thumbnail") == 0 ||
+            strcmp(cmd->name, "thumbnail") == 0) {
 
-            flags = ParseAbsoluteGeometry(args, &rec);
+            flags = ParseAbsoluteGeometry(cmd->arg, &rec);
             if(flags & WidthValue && flags & HeightValue && !(flags & PercentValue)) {
                 MagickSetSize(d->wand, rec.width, rec.height);
                 return;
-            }
-        } else {
-            if(strcmp(command, "") != 0) {
-                ap_getword(d->pool, &cmds, '/');
             }
         }
     }
@@ -449,11 +443,10 @@ dims_process_image(dims_request_rec *d)
     bool should_flatten = false;
 
     if (images > 1) {
-        const char *cmds = d->unparsed_commands;
-        while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
-            char *command = ap_getword(d->pool, &cmds, '/');
+        for (int i = 0; i < d->commands_list->nelts; i++) {
+            dims_command_t *cmd = &APR_ARRAY_IDX(d->commands_list, i, dims_command_t);
 
-            if (strcmp(command, "watermark") == 0) {
+            if (strcmp(cmd->name, "watermark") == 0) {
                 should_flatten = true;
                 break;
             }
@@ -475,69 +468,30 @@ dims_process_image(dims_request_rec *d)
 
     if (images == 1 || should_flatten) {
         bool output_format_provided = false;
-        const char *cmds = d->commands;
-        while(cmds < d->commands + strlen(d->commands)) {
-            char *command = ap_getword(d->pool, &cmds, '/');
 
-            if (strcmp(command, "format") == 0) {
+        for (int i = 0; i < d->commands_list->nelts; i++) {
+            dims_command_t *cmd = &APR_ARRAY_IDX(d->commands_list, i, dims_command_t);
+
+            if (strcmp(cmd->name, "format") == 0) {
                 output_format_provided = true;
             }
-    
-            if(strlen(command) > 0) {
-                char *args = ap_getword(d->pool, &cmds, '/');
 
-                /* If the NOIMAGE image is being used for some reason then
-                * we don't want to crop it.
-                */
-                if(d->use_no_image && 
-                        (strcmp(command, "crop") == 0 ||
-                        strcmp(command, "legacy_thumbnail") == 0 ||
-                        strcmp(command, "legacy_crop") == 0 ||
-                        strcmp(command, "thumbnail") == 0)) {
-                    RectangleInfo rec;
+            if(strcmp(cmd->name, "strip") == 0) {
+                exc_strip_cmd = 1;
+            }
 
-                    ParseAbsoluteGeometry(args, &rec);
+            dims_operation_func *func = dims_operation_lookup(cmd->name);
+            if (func != NULL) {
+                char *err = NULL;
+                apr_status_t code;
 
-                    if(rec.width > 0 && rec.height == 0) {
-                        args = apr_psprintf(d->pool, "%ld", rec.width);
-                    } else if(rec.height > 0 && rec.width == 0) {
-                        args = apr_psprintf(d->pool, "x%ld", rec.height);
-                    } else if(rec.width > 0 && rec.height > 0) {
-                        args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
-                    } else {
-                        DestroyMagickWand(d->wand);
-                        image->error = DIMS_BAD_ARGUMENTS;
-                        return image;
-                    }
+                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+                    "Executing command %s(%s), on request %s", cmd->name, cmd->arg, d->r->uri);
 
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-                        "Rewriting command %s to 'resize' because a NOIMAGE "
-                        "image is being processed.", command);
-
-                    command = apr_psprintf(d->pool, "%s", "resize");
-                }
-
-                // Check if the command is present and set flag.
-                if(strcmp(command, "strip") == 0) {
-                    exc_strip_cmd = 1;
-                }
-
-                dims_operation_func *func = dims_operation_lookup(command);
-                if (func != NULL)
-                {
-                    char *err = NULL;
-                    apr_status_t code;
-
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-                        "Executing command %s(%s), on request %s", 
-                        command, args, d->r->uri);
-
-                    if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                        DestroyMagickWand(d->wand);
-                        image->error = code;
-                        return image;
-                        ;
-                    }
+                if ((code = func(d, cmd->arg, &err)) != DIMS_SUCCESS) {
+                    DestroyMagickWand(d->wand);
+                    image->error = code;
+                    return image;
                 }
             }
 

@@ -233,25 +233,6 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
     ExceptionInfo *ex_info = AcquireExceptionInfo();
 
-    /* Replace spaces with '+'. This happens when some user agents inadvertantly 
-     * escape the '+' as %20 which gets converted to a space.
-     * 
-     * Example: 
-     * 
-     * 900x900%20350%200 is '900x900 350 0' which is an invalid, the following code
-     * coverts this to '900x900+350+0'.
-     *
-     */
-    char *s = args;
-    while (*s) {
-        if (*s == ' ') {
-            *s = '+';
-        }
-
-        s++;
-    }
-
-
     flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, ex_info);
     if(!(flags & AllValues)) {
         DestroyExceptionInfo(ex_info);
