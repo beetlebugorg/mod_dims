@@ -52,8 +52,6 @@ typedef struct {
     apr_status_t error;
 } dims_processed_image;
 
-apr_hash_t *ops;
-
 /**
  * This callback is called by the MagicWand API during transformation
  * operations.  How often it's called is dependent on the operation 
@@ -567,7 +565,7 @@ dims_process_image(dims_request_rec *d)
      * If the strip command was not executed from the loop, call it anyway with NULL args
      */
     if(!exc_strip_cmd) {
-        dims_operation_func *strip_func = apr_hash_get(ops, "strip", APR_HASH_KEY_STRING);
+        dims_operation_func *strip_func = dims_operation_lookup("strip");
         if(strip_func != NULL) {
             char *err = NULL;
             apr_status_t code;
