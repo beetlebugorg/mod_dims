@@ -56,17 +56,7 @@
 #define DIMS_MISSING_SECRET 1007
 #define DIMS_DECRYPTION_FAILURE 1008
 
-
 apr_status_t dims_handle_dims3(dims_request_rec *d);
 apr_status_t dims_handle_dims4(dims_request_rec *d);
-
-typedef struct {
-    apr_uint32_t success_count;
-    apr_uint32_t failure_count;
-    apr_uint32_t download_timeout_count;
-    apr_uint32_t imagemagick_timeout_count;
-} dims_stats_rec;
-
-extern dims_stats_rec *stats;
 
 #endif

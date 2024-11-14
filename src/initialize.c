@@ -7,8 +7,6 @@
 #include "curl.h"
 #include "module.h"
 
-apr_shm_t *shm;
-
 typedef struct operations {
     char *name;
     dims_operation_func *func;
@@ -38,9 +36,7 @@ static operations ops[] = {
 int
 dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
 {
-    dims_config_rec *config = (dims_config_rec *) 
-            ap_get_module_config(s->module_config, &dims_module);
-    apr_status_t status;
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(s->module_config, &dims_module);
     apr_size_t retsize;
 
     ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
@@ -50,47 +46,6 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     MagickSetResourceLimit(DiskResource, config->disk_size);
     MagickSetResourceLimit(MemoryResource, config->memory_size);
     MagickSetResourceLimit(MapResource, config->map_size);
-
-    /* Init APR's atomic functions */
-    status = apr_atomic_init(p);
-    if (status != APR_SUCCESS)
-        return HTTP_INTERNAL_SERVER_ERROR;
-
-    /* Create shared memory block */
-    status = apr_shm_create(&shm, sizeof(dims_stats_rec), NULL, p);
-    if (status != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error creating shm block\n");
-        return status;
-    }
-
-    /* Check size of shared memory block */
-    retsize = apr_shm_size_get(shm);
-    if (retsize != sizeof(dims_stats_rec)) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error allocating shared memory block\n");
-        return status;
-    }
-
-    /* Init shm block */
-    stats = apr_shm_baseaddr_get(shm);
-    if (stats == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error creating status block.\n");
-        return status;
-    }
-    memset(stats, 0, retsize);
-
-    if (retsize < sizeof(dims_stats_rec)) {
-        ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, s,
-                     "mod_dims : Not enough memory allocated!! Giving up");
-        return HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    stats->success_count = 1;
-    stats->failure_count = 0;
-    stats->download_timeout_count = 0;
-    stats->imagemagick_timeout_count = 0;
 
     return OK;
 }

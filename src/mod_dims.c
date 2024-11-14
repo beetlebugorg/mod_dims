@@ -52,7 +52,6 @@ typedef struct {
     apr_status_t error;
 } dims_processed_image;
 
-dims_stats_rec *stats;
 apr_hash_t *ops;
 
 /**
@@ -317,19 +316,6 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     }
 
     ap_rflush(d->r);
-
-    /* After the image is sent record stats about this request. */
-    if(d->status == DIMS_SUCCESS) {
-        apr_atomic_inc32(&stats->success_count);
-    } else {
-        apr_atomic_inc32(&stats->failure_count);
-    }
-
-    if(d->status == DIMS_DOWNLOAD_TIMEOUT) {
-        apr_atomic_inc32(&stats->download_timeout_count);
-    } else if(d->status == DIMS_IMAGEMAGICK_TIMEOUT) {
-        apr_atomic_inc32(&stats->imagemagick_timeout_count);
-    }
 
     /* Record metrics for logging. */
     snprintf(buf, 128, "%d", d->status);

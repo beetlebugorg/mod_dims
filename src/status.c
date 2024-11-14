@@ -47,17 +47,6 @@ status_handler(request_rec *r) {
     ap_rprintf(r, "ImageMagick version: %s\n", GetMagickVersion(NULL));
     ap_rprintf(r, "libcurl version: %s\n", curl_version());
 
-    ap_rprintf(r, "\nDetails\n-------\n");
-    
-    ap_rprintf(r, "Successful requests: %d\n", 
-            apr_atomic_read32(&stats->success_count));
-    ap_rprintf(r, "Failed requests: %d\n\n", 
-            apr_atomic_read32(&stats->failure_count));
-    ap_rprintf(r, "Download timeouts: %d\n", 
-            apr_atomic_read32(&stats->download_timeout_count));
-    ap_rprintf(r, "Imagemagick Timeouts: %d\n", 
-            apr_atomic_read32(&stats->imagemagick_timeout_count));
-
     ap_rflush(r);
 
     return OK;
