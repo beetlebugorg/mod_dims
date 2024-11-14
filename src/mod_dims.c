@@ -41,12 +41,12 @@
             return d->status; \
     } while(0); 
 
-typedef struct {
+typedef struct dims_progress_rec {
     dims_request_rec *d;
     apr_time_t start_time;
 } dims_progress_rec;
 
-typedef struct {
+typedef struct dims_processed_image {
     size_t length;
     unsigned char *bytes;
     char *format;

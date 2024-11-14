@@ -6,7 +6,7 @@
 
 #include "configuration.h"
 
-typedef struct {
+typedef struct dims_image_data_t {
     char *data;
     size_t size;
     size_t used;
@@ -17,15 +17,14 @@ typedef struct {
     char *edge_control;
     char *last_modified;
     char *etag;
-    apr_pool_t *pool;
 } dims_image_data_t;
 
-typedef struct {
+typedef struct dims_command_t {
     char *name;
     char *arg;
 } dims_command_t;
 
-typedef struct {
+typedef struct dims_request_rec {
     request_rec *r;
 
     apr_pool_t *pool;
