@@ -131,6 +131,23 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
 
     if(key && value && strcmp(key, "Cache-Control") == 0) {
         d->source_image->cache_control = value;
+
+        char *src_header = value;
+        char *src_start = src_header;
+        int src_len = strlen(src_header);
+
+        // Ex. max-age=3600
+        while(src_header < (src_start + src_len)) {
+            if(*src_header == '=') {
+                src_header++;
+                while(*src_header == ' ') {
+                    src_header++;
+                }
+
+                d->source_image->max_age = atoi(src_header);
+            }
+            src_header++;
+        }
     } else if(key && value && strcmp(key, "Edge-Control") == 0) {
         d->source_image->edge_control = value;
     } else if(key && value && strcmp(key, "Last-Modified") == 0) {

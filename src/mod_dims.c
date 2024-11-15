@@ -141,135 +141,63 @@ dims_download_source_image(dims_request_rec *d, const char *url)
     return DIMS_SUCCESS;
 }
 
+static apr_status_t 
+dims_status_to_http_code(dims_request_rec *d)
+{
+    if(d->status == DIMS_FILE_NOT_FOUND) {
+        return HTTP_NOT_FOUND;
+    } else if (d->source_image->response_code != 0) {
+        return d->source_image->response_code;
+    } else if (d->status != DIMS_SUCCESS) {
+        if (d->status == DIMS_BAD_URL || d->status == DIMS_BAD_ARGUMENTS) {
+            return HTTP_BAD_REQUEST;
+        } else {
+            //Includes DIMS_BAD_CLIENT, DIMS_DOWNLOAD_TIMEOUT, DIMS_IMAGEMAGICK_TIMEOUT, DIMS_HOSTNAME_NOT_IN_WHITELIST
+            return HTTP_INTERNAL_SERVER_ERROR;
+        }
+    }
+
+    return OK;
+}
+
 static apr_status_t
 dims_send_image(dims_request_rec *d, dims_processed_image *image)
 {
-    char buf[128];
-    char *content_type;
-    int expire_time = 0;
+    request_rec *r = d->r;
 
+    // Set the Content-Type based on the image format.
+    char *format = image->format;
+    char *content_type = apr_psprintf(r->pool, "image/%s", format);
+    ap_content_type_tolower(content_type);
+    ap_set_content_type(r, content_type);
+
+    // Calculate the cache control headers.
+    int max_age = d->client_config->cache_control_max_age;
+    int expire_time = d->client_config->cache_control_max_age;
+    int downstream_ttl = d->client_config->edge_control_downstream_ttl;
     char *cache_control = NULL,
          *edge_control = NULL;
 
-    // variables referring to the src image
-    char *src_header;
-    char *src_start;
-    int src_len;
-
-    char *src_max_age_str;
-    int src_max_age = 0;
-
+    // Use 'max-age' from the source image only if the client trusts the source,
+    // and the source image has a 'max-age' that falls within the configured min and max values.
     int trust_src_img = 0;
+    if (d->client_config->trust_src && d->source_image->max_age > 0) {
+        int min = d->client_config->min_src_cache_control;
+        int max = d->client_config->max_src_cache_control;
 
-    char *format = image->format;
-    unsigned char *blob = image->bytes;
-    size_t length = image->length;
-
-    /* Set the Content-Type based on the image format. */
-    content_type = apr_psprintf(d->pool, "image/%s", format);
-    ap_content_type_tolower(content_type);
-    ap_set_content_type(d->r, content_type);
-
-    if(d->status == DIMS_FILE_NOT_FOUND) {
-        d->r->status = HTTP_NOT_FOUND;
-    } else if (d->source_image->response_code != 0) {
-        d->r->status = d->source_image->response_code;
-    } else if (d->status != DIMS_SUCCESS) {
-        if (d->status == DIMS_BAD_URL
-            || d->status == DIMS_BAD_ARGUMENTS) {
-            d->r->status = HTTP_BAD_REQUEST;
-        } else {
-            //Includes DIMS_BAD_CLIENT, DIMS_DOWNLOAD_TIMEOUT, DIMS_IMAGEMAGICK_TIMEOUT, DIMS_HOSTNAME_NOT_IN_WHITELIST
-            d->r->status = HTTP_INTERNAL_SERVER_ERROR;
+        if((min == -1 || d->source_image->max_age >= d->client_config->min_src_cache_control) && 
+           (max == -1 || d->source_image->max_age <= d->client_config->max_src_cache_control)) {
+            max_age = d->source_image->max_age;
+            expire_time = d->source_image->max_age;
+            downstream_ttl = d->source_image->max_age;
         }
-    }
+    } 
 
-    if (blob == NULL) {
-        d->r->status = HTTP_BAD_REQUEST;
-    }
+    cache_control = apr_psprintf(d->pool, "max-age=%d, public", max_age);
+    apr_table_set(d->r->headers_out, "Cache-Control", cache_control);
 
-    if(d->status == DIMS_SUCCESS && d->source_image->response_code == 200 && d->client_config) {
-
-        // if the src image has a cache_control header, parse out the max-age
-        if(d->source_image->cache_control) {
-
-            // Ex. max-age=3600
-            src_header = d->source_image->cache_control;
-            src_start = src_header;
-            src_len = strlen(src_header);
-
-            while(src_header < (src_start + src_len)) {
-                if(*src_header == '=') {
-                    src_header++;
-                    while(*src_header == ' ') {
-                        src_header++;
-                    }
-                    src_max_age_str = apr_pstrdup(d->pool, src_header);
-                    src_max_age = atoi(src_max_age_str);
-                }
-                src_header++;
-            }
-        }
-
-        // if we trust the src image and were able to parse its cache header
-        if(d->client_config->trust_src && src_max_age > 0) {
-
-            // if the min and max config values were valid
-            if(d->client_config->min_src_cache_control >= -1 &&
-                    d->client_config->max_src_cache_control >= -1) {
-
-                // if the max-age value is between the min and max, use the src value
-                if( (d->client_config->min_src_cache_control == -1 ||
-                        src_max_age >= d->client_config->min_src_cache_control) && 
-                        (d->client_config->max_src_cache_control == -1 ||
-                        src_max_age <= d->client_config->max_src_cache_control)) {
-
-                    trust_src_img = 1;
-                }
-                else { // use the client configred default
-                    trust_src_img = 0;
-                }
-            }
-            else { // invalid max/min, use defaults
-                trust_src_img = 0;
-            }
-        }
-        else { // don't trust src, and use client configured default
-            trust_src_img = 0;
-        }
-
-
-        if(trust_src_img) {
-            cache_control = apr_psprintf(d->pool, "max-age=%d, public", src_max_age);
-            if(d->client_config->edge_control_downstream_ttl != -1) {
-                edge_control = apr_psprintf(d->pool, "downstream-ttl=%d", src_max_age);
-            }
-            expire_time = src_max_age;
-        }
-        else {
-            cache_control = apr_psprintf(d->pool, "max-age=%d, public",
-                    d->client_config->cache_control_max_age);
-
-            if(d->client_config->edge_control_downstream_ttl != -1) {
-                edge_control = apr_psprintf(d->pool, "downstream-ttl=%d",
-                        d->client_config->edge_control_downstream_ttl);
-            }
-            expire_time = d->client_config->cache_control_max_age;
-        }
-
-    } else if(d->status == DIMS_SUCCESS && d->source_image->response_code == 200) {
-        expire_time = d->config->default_expire;
-        cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
-    } else {
-        expire_time = d->config->no_image_expire;
-        cache_control = apr_psprintf(d->pool, "max-age=%d, public", expire_time);
-    }
-
-    if(cache_control) {
-        apr_table_set(d->r->headers_out, "Cache-Control", cache_control);
-    }
-
-    if(edge_control) {
+    if(d->client_config->edge_control_downstream_ttl != -1) {
+        edge_control = apr_psprintf(d->pool, "downstream-ttl=%d", downstream_ttl);
         apr_table_set(d->r->headers_out, "Edge-Control", edge_control);
     }
 
@@ -278,7 +206,7 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
         apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
     }
 
-    if(expire_time) {
+    if(expire_time > 0) {
         char buf[APR_RFC822_DATE_LEN];
         apr_time_t e = apr_time_now() + ((long long) expire_time * 1000L * 1000L);
         apr_rfc822_date(buf, e);
@@ -286,24 +214,25 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     }
 
     if(d->status == DIMS_SUCCESS) {
+        char buf[128];
         snprintf(buf, 128, "DIMS_CLIENT_%s", d->client_id);
         apr_table_set(d->r->notes, "DIMS_CLIENT", d->client_id);
-        apr_table_set(d->r->subprocess_env, buf, d->client_id);
     }
 
-    char *etag = NULL;
     if (d->source_image->etag) {
-        etag = ap_md5(d->pool,
-            (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->source_image->etag, NULL));
-    } else if (d->source_image->last_modified) {
-        etag = ap_md5(d->pool,
-            (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->source_image->last_modified, NULL));
-    }
+        char *etag = ap_md5(d->pool, (unsigned char *) 
+            apr_pstrcat(d->pool, d->request_hash, d->source_image->etag, NULL));
 
-    if (etag) {
+        apr_table_set(d->r->headers_out, "ETag", etag);
+    } else if (d->source_image->last_modified) {
+        char *etag = ap_md5(d->pool, (unsigned char *) 
+            apr_pstrcat(d->pool, d->request_hash, d->source_image->last_modified, NULL));
+
         apr_table_set(d->r->headers_out, "ETag", etag);
     }
 
+    unsigned char *blob = image->bytes;
+    size_t length = image->length;
     if (blob != NULL) {
         char content_length[256] = "";
         snprintf(content_length, sizeof(content_length), "%zu", (size_t) image->length);
@@ -313,8 +242,6 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     } else {
         apr_table_set(d->r->headers_out, "Content-Length", "0");
     }
-
-    ap_rflush(d->r);
 
     return OK;
 }
@@ -666,7 +593,7 @@ dims_handle_request(dims_request_rec *d)
         apr_table_set(d->r->notes, "DIMS_IM_TIME", buf);
     }
 
-    return HTTP_OK;
+    return dims_status_to_http_code(d);
 }
 
 static dims_request_rec *

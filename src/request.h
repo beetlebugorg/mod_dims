@@ -17,6 +17,7 @@ typedef struct dims_image_data_t {
     char *edge_control;
     char *last_modified;
     char *etag;
+    int max_age;
 } dims_image_data_t;
 
 typedef struct dims_command_t {

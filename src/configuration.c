@@ -263,6 +263,12 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
             case 1:
                 client_config->id = argv[0];
         }
+
+        // The min and max values for 'max-age' must be set in order to trust this client.
+        if(client_config->min_src_cache_control == -1 && client_config->max_src_cache_control == -1) {
+            client_config->trust_src = 0;
+        }
+
     }
 
     apr_hash_set(config->clients, argv[0], APR_HASH_KEY_STRING, client_config);
