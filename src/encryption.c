@@ -36,14 +36,14 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
 
     // Initialize the context
     if (!(ctx = EVP_CIPHER_CTX_new())) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Failed to create new EVP_CIPHER_CTX");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Decrypting: Failed to create new EVP_CIPHER_CTX");
         ERR_print_errors_cb(aes_errors, r);
         return NULL;
     }
 
     // Initialize the decryption operation
     if (!EVP_DecryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL)) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_DecryptInit_ex failed (1)");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Decrypting: EVP_DecryptInit_ex failed (1)");
         ERR_print_errors_cb(aes_errors, r);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
@@ -51,7 +51,7 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
 
     // Set the IV length, if necessary
     if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL)) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_CIPHER_CTX_ctrl failed to set IV length");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Decrypting: EVP_CIPHER_CTX_ctrl failed to set IV length");
         ERR_print_errors_cb(aes_errors, r);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
@@ -59,7 +59,7 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
 
     // Set the key and IV
     if (!EVP_DecryptInit_ex(ctx, NULL, NULL, key, iv)) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_DecryptInit_ex failed (2)");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Decrypting: EVP_DecryptInit_ex failed (2)");
         ERR_print_errors_cb(aes_errors, r);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
@@ -67,14 +67,14 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
 
     plaintext = apr_palloc(r->pool, ciphertext_length + 1); // +1 for null terminator
     if (!plaintext) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Memory allocation failed");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Decrypting: Memory allocation failed");
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
 
     // Provide the message to be decrypted and obtain the plaintext output
     if (!EVP_DecryptUpdate(ctx, (unsigned char *)plaintext, &out_length, encrypted_text, ciphertext_length)) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_DecryptUpdate failed");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Decrypting: EVP_DecryptUpdate failed");
         ERR_print_errors_cb(aes_errors, r);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
@@ -84,7 +84,7 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
 
     // Set expected tag value (must be done after EVP_DecryptUpdate)
     if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag)) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_CIPHER_CTX_ctrl failed to set tag");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Decrypting: EVP_CIPHER_CTX_ctrl failed to set tag");
         ERR_print_errors_cb(aes_errors, r);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
@@ -100,7 +100,7 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
         plaintext[plaintext_length] = '\0';  // Explicitly add the null terminator
         return plaintext;
     } else {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "EVP_DecryptFinal_ex failed");
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Decrypting: EVP_DecryptFinal_ex failed");
         ERR_print_errors_cb(aes_errors, r);
         return NULL;
     }

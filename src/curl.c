@@ -76,7 +76,7 @@ dims_curl_debug_cb(
     dims_request_rec *d = (dims_request_rec *) clientp;
     switch(type) {
         case CURLINFO_HEADER_OUT:
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Curl request header data: %s ", data);
+            ap_log_rerror(APLOG_MARK, APLOG_TRACE1, 0, d->r, "Curl request header data: %s ", data);
             break;
         default:
             break;

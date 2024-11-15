@@ -324,7 +324,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         token = apr_strtok(args, "&", &strtokstate);
         while (token) {
             if (strncmp(token, "overlay=", 4) == 0) {
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                 overlay_url = apr_pstrdup(d->r->pool, token + 8);
                 ap_unescape_url(overlay_url);
             }
@@ -528,10 +527,6 @@ dims_legacy_crop_operation (dims_request_rec *d, char *args, char **err) {
     x = (width / 2) - (rec.width / 2);
     y = (height / 2) - (rec.height / 2);
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "legacy_crop will crop to %ldx%ld+%d+%d", 
-        rec.width, rec.height, x, y);
-
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, x, y), d);
 
     return DIMS_SUCCESS;
@@ -565,9 +560,6 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         MAGICK_CHECK(MagickScaleImage(d->wand, rec.width, rec.height), d);
     }
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "legacy_thumbnail will resize to %ldx%ld", rec.width, rec.height);
-
     flags = ParseAbsoluteGeometry(args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (crop) geometry failed";
@@ -578,9 +570,6 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     height = MagickGetImageHeight(d->wand);
     x = (width / 2) - (rec.width / 2);
     y = (height / 2) - (rec.height / 2);
-
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "legacy_thumbnail will crop to %ldx%ld+%d+%d", rec.width, rec.height, x, y);
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, x, y), d);
 

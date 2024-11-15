@@ -17,7 +17,7 @@
 apr_status_t 
 dims_handler(request_rec *r) 
 {
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Handler %s : %s", r->handler, r->uri);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "URI: %s ARGS: %s", r->uri, r->args);
 
     if(strcmp(r->handler, "dims-status") == 0) {
         return status_handler(r);

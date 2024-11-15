@@ -75,7 +75,7 @@ dims_imagemagick_progress_cb(const char *text,
     if(diff > p->d->config->imagemagick_timeout) {
         p->d->status = DIMS_IMAGEMAGICK_TIMEOUT;
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, p->d->r, 
-                "Imagemagick operation, '%s', "
+                "Imagemagick: operation '%s', "
                 "timed out after %d ms. "
                 "(max: %d), on request: %s",
                 text, (int) diff, 
@@ -100,16 +100,13 @@ dims_download_source_image(dims_request_rec *d, const char *url)
     d->source_image->edge_control = NULL;
     d->source_image->last_modified = NULL;
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Loading image from %s", url);
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Downloading: %s", url);
 
     CURLcode code = dims_curl(d, url, d->source_image);
 
     start_time = apr_time_now();
     if(code != 0) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                "libcurl error, '%s', on request: %s ", 
-                curl_easy_strerror(code), d->r->uri);
-
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "Downloading: libcurl error, '%s'", curl_easy_strerror(code));
 
         if(code == CURLE_OPERATION_TIMEDOUT) {
             d->status = DIMS_DOWNLOAD_TIMEOUT;
@@ -309,8 +306,7 @@ dims_process_image(dims_request_rec *d)
         ExceptionType et;
 
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-            "ImageMagick error, '%s', on request: %s ", 
-            MagickGetException(d->wand, &et), d->r->uri);
+            "ImageMagick: error reading image, '%s'", MagickGetException(d->wand, &et));
 
         image->error = DIMS_FAILURE;
 
@@ -390,7 +386,7 @@ dims_process_image(dims_request_rec *d)
                 char *err = NULL;
                 apr_status_t code;
 
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing command %s(%s)", cmd->name, cmd->arg);
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing: %s => %s", cmd->name, cmd->arg);
 
                 if ((code = func(d, cmd->arg, &err)) != DIMS_SUCCESS) {
                     DestroyMagickWand(d->wand);
@@ -424,7 +420,7 @@ dims_process_image(dims_request_rec *d)
         char *err = NULL;
         apr_status_t code;
 
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing default strip command, on request %s", d->r->uri);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing: strip => true (config default)");
 
         if((code = dims_strip_operation(d, NULL, &err)) != DIMS_SUCCESS) {
             DestroyMagickWand(d->wand);
@@ -453,7 +449,7 @@ int
 verify_dims4_signature(dims_request_rec *d) {
     if(d->client_config->secret_key == NULL) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-            "Secret key not set for client '%s'", d->client_config->id);
+            "Validating: Secret key not set for client '%s'", d->client_config->id);
 
         return DIMS_MISSING_SECRET;
     }
@@ -482,8 +478,7 @@ verify_dims4_signature(dims_request_rec *d) {
     if (strncasecmp(d->signature, signature, 6) != 0) {
         signature[7] = '\0';
 
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-            "Signature invalid: wanted %6s got %6s [%s?url=%s]", signature, d->signature, d->r->uri, d->image_url);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Validating: invalid dims4 signature, expected %6s got %6s", signature, d->signature);
 
         return DIMS_INVALID_SIGNATURE;
     }
