@@ -634,6 +634,10 @@ dims_parse_args(request_rec *r)
 {
     apr_hash_t *query_params = apr_hash_make(r->pool);
 
+    if (r->args == NULL) {
+        return query_params;
+    }
+
     const size_t args_len = strlen(r->args) + 1;
     char *args = apr_pstrndup(r->pool, r->args, args_len);
     char *token;
