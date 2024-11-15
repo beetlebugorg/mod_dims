@@ -28,6 +28,20 @@ ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
 ENV PREFIX=/usr/local/apache2
 ENV PATH=${PREFIX}/bin:${PATH}
 
+# Imagemagick configuration
+
+# 2GB disk limit
+ENV MAGICK_DISK_LIMIT=2147483648
+
+# 512MB memory limit
+ENV MAGICK_MEMORY_LIMIT=536870912
+
+# 512MB map limit
+ENV MAGICK_MAP_LIMIT=536870912
+
+# 128MB area limit
+ENV MAGICK_AREA_LIMIT=134217728
+
 RUN apk update && \
     apk add imagemagick imagemagick-jpeg imagemagick-webp imagemagick-tiff curl 
 

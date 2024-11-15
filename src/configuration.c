@@ -27,11 +27,6 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->strip_metadata = 1;
     config->default_output_format = NULL;
 
-    config->area_size = 128 * 1024 * 1024;         //  128mb max.
-    config->memory_size = 512 * 1024 * 1024;       //  512mb max.
-    config->map_size = 1024 * 1024 * 1024;         // 1024mb max.
-    config->disk_size = 2048ul * 1024ul * 1024ul;  // 2048mb max.
-
     config->curl_queue_size = 10;
     config->cache_dir = NULL;
     config->secret_key = apr_pstrdup(p,"m0d1ms");
@@ -291,47 +286,10 @@ dims_config_set_image_prefix(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 const char *
-dims_config_set_imagemagick_disk_size(cmd_parms *cmd, void *dummy, const char *arg)
-{
-    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-            cmd->server->module_config, &dims_module);
-    config->disk_size = atol(arg) * 1024 * 1024;
-    
-    return NULL;
-}
-
-const char *
 dims_config_set_secretkeyExpiryPeriod(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
     config->max_expiry_period = atol(arg);
-    return NULL;
-}
-
-const char *
-dims_config_set_imagemagick_area_size(cmd_parms *cmd, void *dummy, const char *arg)
-{
-    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-            cmd->server->module_config, &dims_module);
-    config->area_size = atol(arg) * 1024 * 1024;
-    return NULL;
-}
-
-const char *
-dims_config_set_imagemagick_map_size(cmd_parms *cmd, void *dummy, const char *arg)
-{
-    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-            cmd->server->module_config, &dims_module);
-    config->map_size = atol(arg) * 1024 * 1024;
-    return NULL;
-}
-
-const char *
-dims_config_set_imagemagick_memory_size(cmd_parms *cmd, void *dummy, const char *arg)
-{
-    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-            cmd->server->module_config, &dims_module);
-    config->memory_size = atol(arg) * 1024 * 1024;
     return NULL;
 }

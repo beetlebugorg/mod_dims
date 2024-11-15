@@ -40,22 +40,6 @@ static const command_rec dims_directives[] =
                   dims_config_set_imagemagick_timeout, NULL, RSRC_CONF,
                   "Timeout for processing images."
                   "The default is 3000."),
-    AP_INIT_TAKE1("DimsImagemagickMemorySize",
-                  dims_config_set_imagemagick_memory_size, NULL, RSRC_CONF,
-                  "Maximum amount of memory in megabytes to use for pixel cache."
-                  "The default is 512mb."),
-    AP_INIT_TAKE1("DimsImagemagickAreaSize",
-                  dims_config_set_imagemagick_area_size, NULL, RSRC_CONF,
-                  "Maximum amount of memory in megabytes that any one image can use."
-                  "The default is 128mb."),
-    AP_INIT_TAKE1("DimsImagemagickMapSize",
-                  dims_config_set_imagemagick_map_size, NULL, RSRC_CONF,
-                  "Maximum amount of memory map in megabytes to use for the pixel cache."
-                  "The default is 1024mb."),
-    AP_INIT_TAKE1("DimsImagemagickDiskSize",
-                  dims_config_set_imagemagick_disk_size, NULL, RSRC_CONF,
-                  "Maximum amount of disk space in megabytes to use for the pixel cache."
-                  "The default is 1024mb."),
     AP_INIT_TAKE1("DimsSecretMaxExpiryPeriod",
                 dims_config_set_secretkeyExpiryPeriod, NULL, RSRC_CONF,
                 "How long in the future (in seconds) can the expiry date on the URL be requesting. 0 = forever"

@@ -42,10 +42,6 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
 
     MagickWandGenesis();
-    MagickSetResourceLimit(AreaResource, config->area_size);
-    MagickSetResourceLimit(DiskResource, config->disk_size);
-    MagickSetResourceLimit(MemoryResource, config->memory_size);
-    MagickSetResourceLimit(MapResource, config->map_size);
 
     return OK;
 }

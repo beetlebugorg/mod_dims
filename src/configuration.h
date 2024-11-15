@@ -24,11 +24,7 @@ const char *dims_config_set_user_agent_override(cmd_parms *cmd, void *dummy, con
 const char *dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[]);
 const char *dims_config_set_no_image_url(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_image_prefix(cmd_parms *cmd, void *dummy, const char *arg);
-const char *dims_config_set_imagemagick_disk_size(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_secretkeyExpiryPeriod(cmd_parms *cmd, void *dummy, const char *arg);
-const char *dims_config_set_imagemagick_area_size(cmd_parms *cmd, void *dummy, const char *arg);
-const char *dims_config_set_imagemagick_map_size(cmd_parms *cmd, void *dummy, const char *arg);
-const char *dims_config_set_imagemagick_memory_size(cmd_parms *cmd, void *dummy, const char *arg);
 
 struct dims_config_rec {
     int download_timeout;
@@ -44,11 +40,6 @@ struct dims_config_rec {
     int strip_metadata;
     int include_disposition;
     char *default_output_format;
-
-    MagickSizeType area_size;
-    MagickSizeType memory_size;
-    MagickSizeType map_size;
-    MagickSizeType disk_size;
 
     int curl_queue_size;
     char *secret_key;
