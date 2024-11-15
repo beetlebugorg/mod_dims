@@ -196,7 +196,7 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     cache_control = apr_psprintf(d->pool, "max-age=%d, public", max_age);
     apr_table_set(d->r->headers_out, "Cache-Control", cache_control);
 
-    if(d->client_config->edge_control_downstream_ttl != -1) {
+    if(downstream_ttl != -1) {
         edge_control = apr_psprintf(d->pool, "downstream-ttl=%d", downstream_ttl);
         apr_table_set(d->r->headers_out, "Edge-Control", edge_control);
     }
