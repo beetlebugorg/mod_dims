@@ -51,9 +51,6 @@ typedef struct dims_request_rec {
     /* The source image. */
     dims_image_data_t *source_image;
 
-    /* The sample factor for optimizing resizing. */
-    float optimize_resize;
-
     /* The global configuration. */
     dims_config_rec *config;
 

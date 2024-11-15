@@ -68,10 +68,6 @@ static const command_rec dims_directives[] =
                 dims_config_set_include_disposition, NULL, RSRC_CONF,
                 "Should DIMS include Content-Disposition header, true OR false."
                 "The default is false."),
-    AP_INIT_TAKE1("DimsOptimizeResize",
-                dims_config_set_optimize_resize, NULL, RSRC_CONF,
-                "Should DIMS optimize resize operations. This has a slight impact on image quality. 0 = disabled"
-                "The default is 0."),
     AP_INIT_TAKE1("DimsEncryptionAlgorithm",
                 dims_config_set_encryption_algorithm, NULL, RSRC_CONF,
                 "What algorithm should DIMS user to decrypt the 'eurl' parameter."

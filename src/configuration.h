@@ -18,7 +18,6 @@ const char *dims_config_set_download_timeout(cmd_parms *cmd, void *dummy, const 
 const char *dims_config_set_imagemagick_timeout(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_strip_metadata(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_include_disposition(cmd_parms *cmd, void *dummy, const char *arg);
-const char *dims_config_set_optimize_resize(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_encryption_algorithm(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_default_output_format(cmd_parms *cmd, void *dummy, const char *arg);
 const char *dims_config_set_user_agent_override(cmd_parms *cmd, void *dummy, const char *arg);
@@ -43,7 +42,6 @@ struct dims_config_rec {
     long no_image_expire;
     long default_expire;
     int strip_metadata;
-    float optimize_resize;
     int include_disposition;
     char *default_output_format;
 

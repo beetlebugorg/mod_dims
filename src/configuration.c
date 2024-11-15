@@ -25,7 +25,6 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->default_expire = 86400;
 
     config->strip_metadata = 1;
-    config->optimize_resize = 0;
     config->default_output_format = NULL;
 
     config->area_size = 128 * 1024 * 1024;         //  128mb max.
@@ -150,15 +149,6 @@ dims_config_set_include_disposition(cmd_parms *cmd, void *dummy, const char *arg
     else {
         config->include_disposition = 0;
     }
-    return NULL;
-}
-
-const char *
-dims_config_set_optimize_resize(cmd_parms *cmd, void *dummy, const char *arg)
-{
-    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-            cmd->server->module_config, &dims_module);
-    config->optimize_resize = atof(arg);
     return NULL;
 }
 

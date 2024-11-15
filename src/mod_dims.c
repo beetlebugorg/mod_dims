@@ -602,7 +602,6 @@ dims_create_request(request_rec *r)
     request->start_time = apr_time_now();
     request->download_time = 0;
     request->imagemagick_time = 0;
-    request->optimize_resize = config->optimize_resize;
     request->send_content_disposition = 0;
     request->content_disposition_filename = NULL;
     request->commands_list = apr_array_make(r->pool, 10, sizeof(dims_command_t));
@@ -732,14 +731,6 @@ dims_request_parse(dims_request_rec *request, int dims4)
         request->image_url = dims_encode_spaces(r->pool, url);
     } else {
         return DIMS_BAD_URL;
-    }
-
-    // Check for optimizeResize parameter.
-    char *optimize_resize = apr_hash_get(request->query_params, "optimizeResize", APR_HASH_KEY_STRING);
-    if (optimize_resize != NULL) {
-        request->optimize_resize = atof(optimize_resize);
-
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r, "Overriding optimize resize: %f", request->optimize_resize);
     }
 
     request->request_hash = ap_md5(r->pool, 
