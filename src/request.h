@@ -38,10 +38,6 @@ typedef struct dims_request_rec {
 
     /* The URL to the image being manipulated. */
     char *image_url;
-    int use_no_image;
-
-    /* The URL to the NOIMAGE image in case of failures. */
-    char *no_image_url;
 
     /* The parsed commands with the signature and expiration timestamp removed. */
     char *commands;

@@ -120,11 +120,7 @@ dims_download_source_image(dims_request_rec *d, const char *url)
     d->download_time = (apr_time_now() - start_time) / 1000;
 
     if(d->source_image->response_code != 200) {
-        if(d->source_image->response_code == 404) {
-            d->status = DIMS_FILE_NOT_FOUND;
-        }
-
-        return DIMS_FAILURE;
+        return d->source_image->response_code;
     }
 
     // Ensure SVGs have the appropriate XML header.
@@ -135,7 +131,7 @@ dims_download_source_image(dims_request_rec *d, const char *url)
         d->source_image->used += 55;
     }
 
-    return DIMS_SUCCESS;
+    return d->source_image->response_code;
 }
 
 static apr_status_t 
@@ -155,6 +151,91 @@ dims_status_to_http_code(dims_request_rec *d)
     }
 
     return OK;
+}
+
+static void
+dims_send_error(dims_request_rec *d, int status)
+{
+    request_rec *r = d->r;
+
+    if (d->wand) {
+        DestroyMagickWand(d->wand);
+    }
+    d->wand = NewMagickWand();
+
+    PixelWand *background = NewPixelWand();
+    PixelSetColor(background, d->client_config != NULL ? 
+        d->client_config->error_image_background : 
+        d->config->error_image_background);
+
+    MagickNewImage(d->wand, 1024, 1024, background);
+
+    MagickStatusType flags;
+    RectangleInfo rec;
+
+    /* Process operations. */
+    int output_format_provided = false;
+    for (int i = 0; i < d->commands_list->nelts; i++) {
+        dims_command_t *cmd = &APR_ARRAY_IDX(d->commands_list, i, dims_command_t);
+
+        if (strcmp(cmd->name, "format") == 0) {
+            output_format_provided = true;
+        }
+
+        dims_operation_func *func = dims_operation_lookup(cmd->name);
+        if (func != NULL) {
+            char *err = NULL;
+            apr_status_t code;
+
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing: %s => %s", cmd->name, cmd->arg);
+
+            if ((code = func(d, cmd->arg, &err)) != DIMS_SUCCESS) {
+                continue;
+            }
+        }
+
+        MagickMergeImageLayers(d->wand, TrimBoundsLayer);
+    }
+
+    // Set the format for the error image.
+	if (!output_format_provided && d->config->default_output_format) {
+        MagickSetImageFormat(d->wand, d->config->default_output_format);
+    } else {
+        MagickSetImageFormat(d->wand, "JPEG");
+    }
+
+    MagickResetIterator(d->wand);
+
+    size_t length;
+    unsigned char *blob = MagickGetImagesBlob(d->wand, &length);
+    char *format = MagickGetImageFormat(d->wand);
+
+    // Set the Content-Type based on the image format.
+    char *content_type = apr_psprintf(r->pool, "image/%s", format);
+    ap_content_type_tolower(content_type);
+    ap_set_content_type(r, content_type);
+
+    if (blob != NULL) {
+        char content_length[256] = "";
+        snprintf(content_length, sizeof(content_length), "%zu", (size_t) length);
+        apr_table_set(d->r->headers_out, "Content-Length", content_length);
+
+        ap_rwrite(blob, length, d->r);
+    } else {
+        apr_table_set(d->r->headers_out, "Content-Length", "0");
+    }
+
+    // Calculate the cache control headers.
+    char buf[APR_RFC822_DATE_LEN];
+    apr_time_t e = apr_time_now() + ((long long) d->config->error_image_expire * 1000L * 1000L);
+    apr_rfc822_date(buf, e);
+    apr_table_set(d->r->headers_out, "Expires", buf);
+
+    d->r->status = status;
+    ap_rflush(d->r);
+
+    DestroyMagickWand(d->wand);
+    free(format);
 }
 
 static void
@@ -539,14 +620,20 @@ dims_handle_request(dims_request_rec *d)
     // Download image.
     apr_status_t status = dims_download_source_image(d, d->image_url);
     if (status != DIMS_SUCCESS) {
+        dims_send_error(d, status);
+
         return status;
     }
 
     // Execute Imagemagick commands.
     dims_processed_image *image = dims_process_image(d);
     if (image != NULL && image->error != DIMS_SUCCESS) {
+        dims_send_error(d, status);
+
         return image->error;
     } else if (image == NULL) {
+        dims_send_error(d, status);
+
         return DIMS_FAILURE;
     }
 
@@ -589,8 +676,6 @@ dims_create_request(request_rec *r)
     request->wand = NULL;
     request->config = config;
     request->client_config = NULL;
-    request->no_image_url = request->config->no_image_url;
-    request->use_no_image = 0;
     request->image_url = NULL;
     request->request_hash = NULL;
     request->status = DIMS_SUCCESS;
@@ -759,15 +844,15 @@ dims_handle_dims3(request_rec *r)
     }
 
     if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
-        return DIMS_BAD_CLIENT;
-    }
+        dims_send_error(d, HTTP_UNAUTHORIZED);
 
-    if(d->client_config && d->client_config->no_image_url) {
-        d->no_image_url = d->client_config->no_image_url;
+        return DIMS_BAD_CLIENT;
     }
 
     // Verify allowlist (dims3 only).
     if (verify_dims3_allowlist(d)) {
+        dims_send_error(d, HTTP_UNAUTHORIZED);
+
         return HTTP_UNAUTHORIZED;
     }
 
@@ -784,16 +869,16 @@ dims_handle_dims4(request_rec *r)
     }
 
     if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
-        return DIMS_BAD_CLIENT;
-    }
+        dims_send_error(d, HTTP_UNAUTHORIZED);
 
-    if(d->client_config && d->client_config->no_image_url) {
-        d->no_image_url = d->client_config->no_image_url;
+        return DIMS_BAD_CLIENT;
     }
 
     // Verify signature (dims4 only).
     if (verify_dims4_signature(d)) {
-        return HTTP_UNAUTHORIZED;
+        dims_send_error(d, HTTP_UNAUTHORIZED);
+
+        return HTTP_BAD_REQUEST;
     }
 
     return dims_handle_request(d);

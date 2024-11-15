@@ -18,19 +18,19 @@ static const command_rec dims_directives[] =
     AP_INIT_TAKE_ARGV("DimsIgnoreDefaultOutputFormat",
                       dims_config_set_ignore_default_output_format, NULL, RSRC_CONF,
                       "Add input formats that shouldn't be converted to the default output format."),
-    AP_INIT_TAKE1("DimsDefaultImageURL",
-                  dims_config_set_no_image_url, NULL, RSRC_CONF,
-                  "Default image if processing fails or original image doesn't exist."),
+    AP_INIT_TAKE1("DimsDefaultImageBackground",
+                  dims_config_set_error_image_background, NULL, RSRC_CONF,
+                  "Default image background color if processing fails."),
     AP_INIT_TAKE1("DimsDefaultImagePrefix",
                   dims_config_set_image_prefix, NULL, RSRC_CONF,
                   "Default image prefix if URL is relative."),
     AP_INIT_TAKE1("DimsCacheExpire",
                   dims_config_set_default_expire, NULL, RSRC_CONF,
-                  "Default expire time for Cache-Control/Expires/Edge-Control headers, in seconds."
+                  "Default cache-control expire time headers, in seconds."
                   "The default is 86400"),
-    AP_INIT_TAKE1("DimsNoImageCacheExpire",
-                  dims_config_set_no_image_expire, NULL, RSRC_CONF,
-                  "Default expire time for Cache-Control/Expires/Edge-Control headers for NOIMAGE image, in seconds."
+    AP_INIT_TAKE1("DimsErrorImageCacheExpire",
+                  dims_config_set_error_image_expire, NULL, RSRC_CONF,
+                  "Default cache-control expire time for error image, in seconds."
                   "The default is 60"),
     AP_INIT_TAKE1("DimsDownloadTimeout",
                   dims_config_set_download_timeout, NULL, RSRC_CONF,
@@ -41,7 +41,7 @@ static const command_rec dims_directives[] =
                   "Timeout for processing images."
                   "The default is 3000."),
     AP_INIT_TAKE1("DimsSecretMaxExpiryPeriod",
-                dims_config_set_secretkeyExpiryPeriod, NULL, RSRC_CONF,
+                dims_config_set_secretkey_expiry_period, NULL, RSRC_CONF,
                 "How long in the future (in seconds) can the expiry date on the URL be requesting. 0 = forever"
                 "The default is 0."),
     AP_INIT_TAKE1("DimsStripMetadata",

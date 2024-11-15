@@ -18,8 +18,8 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->download_timeout = 3000;
     config->imagemagick_timeout = 3000;
 
-    config->no_image_url = NULL;
-    config->no_image_expire = 60;
+    config->error_image_background = "#5ADAFD";
+    config->error_image_expire = 60;
     config->default_image_prefix = NULL;
 
     config->default_expire = 86400;
@@ -92,11 +92,11 @@ dims_config_set_default_expire(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 const char *
-dims_config_set_no_image_expire(cmd_parms *cmd, void *dummy, const char *arg)
+dims_config_set_error_image_expire(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->no_image_expire = atol(arg);
+    config->error_image_expire = atol(arg);
     return NULL;
 }
 
@@ -195,7 +195,7 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
                 apr_pcalloc(cmd->pool, 
                             sizeof(dims_client_config_rec));
 
-        client_config->no_image_url = NULL;
+        client_config->error_image_background = config->error_image_background;
         client_config->cache_control_max_age = config->default_expire;
         client_config->edge_control_downstream_ttl = -1;
         client_config->trust_src = 0;
@@ -243,7 +243,7 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
                 }
             case 2:
                 if(strcmp(argv[1], "-") != 0) {
-                    client_config->no_image_url = argv[1];
+                    client_config->error_image_background = argv[1];
                 }
             case 1:
                 client_config->id = argv[0];
@@ -262,11 +262,11 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
 }
 
 const char *
-dims_config_set_no_image_url(cmd_parms *cmd, void *dummy, const char *arg)
+dims_config_set_error_image_background(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->no_image_url = (char *) arg;
+    config->error_image_background = (char *) arg;
     return NULL;
 }
 
@@ -286,7 +286,7 @@ dims_config_set_image_prefix(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 const char *
-dims_config_set_secretkeyExpiryPeriod(cmd_parms *cmd, void *dummy, const char *arg)
+dims_config_set_secretkey_expiry_period(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
