@@ -73,7 +73,6 @@ dims_imagemagick_progress_cb(const char *text,
     //long complete = (long) 100L * (offset / (span - 1));
 
     if(diff > p->d->config->imagemagick_timeout) {
-        p->d->status = DIMS_IMAGEMAGICK_TIMEOUT;
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, p->d->r, 
                 "Imagemagick: operation '%s', "
                 "timed out after %d ms. "
@@ -102,24 +101,19 @@ dims_download_source_image(dims_request_rec *d, const char *url)
 
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Downloading: %s", url);
 
-    CURLcode code = dims_curl(d, url, d->source_image);
-
     start_time = apr_time_now();
-    if(code != 0) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "Downloading: libcurl error, '%s'", curl_easy_strerror(code));
-
-        if(code == CURLE_OPERATION_TIMEDOUT) {
-            d->status = DIMS_DOWNLOAD_TIMEOUT;
-        }
-
-        d->download_time = (apr_time_now() - start_time) / 1000;
-
-        return DIMS_FAILURE;
-    }
-
+    CURLcode code = dims_curl(d, url, d->source_image);
     d->download_time = (apr_time_now() - start_time) / 1000;
 
+    if(code != CURLE_OK) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "Downloading: libcurl error, '%s'", curl_easy_strerror(code));
+
+        return HTTP_INTERNAL_SERVER_ERROR;
+    }
+
     if(d->source_image->response_code != 200) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "Downloading: libcurl response code, '%d'", d->source_image->response_code);
+
         return d->source_image->response_code;
     }
 
@@ -134,33 +128,11 @@ dims_download_source_image(dims_request_rec *d, const char *url)
     return d->source_image->response_code;
 }
 
-static apr_status_t 
-dims_status_to_http_code(dims_request_rec *d)
-{
-    if(d->status == DIMS_FILE_NOT_FOUND) {
-        return HTTP_NOT_FOUND;
-    } else if (d->source_image->response_code != 0) {
-        return d->source_image->response_code;
-    } else if (d->status != DIMS_SUCCESS) {
-        if (d->status == DIMS_BAD_URL || d->status == DIMS_BAD_ARGUMENTS) {
-            return HTTP_BAD_REQUEST;
-        } else {
-            //Includes DIMS_BAD_CLIENT, DIMS_DOWNLOAD_TIMEOUT, DIMS_IMAGEMAGICK_TIMEOUT, DIMS_HOSTNAME_NOT_IN_WHITELIST
-            return HTTP_INTERNAL_SERVER_ERROR;
-        }
-    }
-
-    return OK;
-}
-
 static void
 dims_send_error(dims_request_rec *d, int status)
 {
     request_rec *r = d->r;
 
-    if (d->wand) {
-        DestroyMagickWand(d->wand);
-    }
     d->wand = NewMagickWand();
 
     PixelWand *background = NewPixelWand();
@@ -291,12 +263,6 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
         apr_table_set(d->r->headers_out, "Expires", buf);
     }
 
-    if(d->status == DIMS_SUCCESS) {
-        char buf[128];
-        snprintf(buf, 128, "DIMS_CLIENT_%s", d->client_id);
-        apr_table_set(d->r->notes, "DIMS_CLIENT", d->client_id);
-    }
-
     if (d->source_image->etag) {
         char *etag = ap_md5(d->pool, (unsigned char *) 
             apr_pstrcat(d->pool, d->request_hash, d->source_image->etag, NULL));
@@ -389,7 +355,7 @@ dims_process_image(dims_request_rec *d)
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
             "ImageMagick: error reading image, '%s'", MagickGetException(d->wand, &et));
 
-        image->error = DIMS_FAILURE;
+        image->error = HTTP_INTERNAL_SERVER_ERROR;
 
         return image;
     }
@@ -471,7 +437,7 @@ dims_process_image(dims_request_rec *d)
 
                 if ((code = func(d, cmd->arg, &err)) != DIMS_SUCCESS) {
                     DestroyMagickWand(d->wand);
-                    image->error = code;
+                    image->error = HTTP_INTERNAL_SERVER_ERROR;
                     return image;
                 }
             }
@@ -489,7 +455,7 @@ dims_process_image(dims_request_rec *d)
 
                 if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
                     DestroyMagickWand(d->wand);
-                    image->error = code;
+                    image->error = HTTP_INTERNAL_SERVER_ERROR;
                     return image;
                 }
             }
@@ -505,7 +471,7 @@ dims_process_image(dims_request_rec *d)
 
         if((code = dims_strip_operation(d, NULL, &err)) != DIMS_SUCCESS) {
             DestroyMagickWand(d->wand);
-            image->error = code;
+            image->error = HTTP_INTERNAL_SERVER_ERROR;
             return image;
         }
     }
@@ -529,10 +495,10 @@ dims_process_image(dims_request_rec *d)
 int
 verify_dims4_signature(dims_request_rec *d) {
     if(d->client_config->secret_key == NULL) {
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
             "Validating: Secret key not set for client '%s'", d->client_config->id);
 
-        return DIMS_MISSING_SECRET;
+        return DIMS_FAILURE;
     }
 
     // Standard signature params.
@@ -561,10 +527,10 @@ verify_dims4_signature(dims_request_rec *d) {
 
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Validating: invalid dims4 signature, expected %6s got %6s", signature, d->signature);
 
-        return DIMS_INVALID_SIGNATURE;
+        return DIMS_FAILURE;
     }
 
-    return OK;
+    return DIMS_SUCCESS;
 }
 
 int
@@ -579,12 +545,12 @@ verify_dims3_allowlist(dims_request_rec *d) {
         * and it's value is set to "glob" the match will be accepted.
         */
     if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
-        return DIMS_BAD_URL;
+        return DIMS_FAILURE;
     }
 
     char *filename = strrchr(uri.path, '/');
     if (!filename || !uri.hostname) {
-        return DIMS_BAD_URL;
+        return DIMS_FAILURE;
     }
 
     hostname = uri.hostname;
@@ -619,7 +585,7 @@ dims_handle_request(dims_request_rec *d)
 
     // Download image.
     apr_status_t status = dims_download_source_image(d, d->image_url);
-    if (status != DIMS_SUCCESS) {
+    if (status != 200) {
         dims_send_error(d, status);
 
         return status;
@@ -628,13 +594,13 @@ dims_handle_request(dims_request_rec *d)
     // Execute Imagemagick commands.
     dims_processed_image *image = dims_process_image(d);
     if (image != NULL && image->error != DIMS_SUCCESS) {
-        dims_send_error(d, status);
+        dims_send_error(d, image->error);
 
         return image->error;
     } else if (image == NULL) {
-        dims_send_error(d, status);
+        dims_send_error(d, HTTP_INTERNAL_SERVER_ERROR);
 
-        return DIMS_FAILURE;
+        return HTTP_INTERNAL_SERVER_ERROR;
     }
 
     // Serve the image.
@@ -644,9 +610,6 @@ dims_handle_request(dims_request_rec *d)
     free(image->format);
 
     /* Record metrics for logging. */
-    snprintf(buf, 128, "%d", d->status);
-    apr_table_set(d->r->notes, "DIMS_STATUS", buf);
-
     snprintf(buf, 128, "%ld", d->source_image->used);
     apr_table_set(d->r->notes, "DIMS_ORIG_BYTES", buf);
 
@@ -656,13 +619,10 @@ dims_handle_request(dims_request_rec *d)
     snprintf(buf, 128, "%ld", (apr_time_now() - d->start_time) / 1000);
     apr_table_set(d->r->notes, "DIMS_TOTAL_TIME", buf);
 
-    if(d->status != DIMS_DOWNLOAD_TIMEOUT && 
-            d->status != DIMS_IMAGEMAGICK_TIMEOUT) {
-        snprintf(buf, 128, "%ld", d->imagemagick_time);
-        apr_table_set(d->r->notes, "DIMS_IM_TIME", buf);
-    }
+    snprintf(buf, 128, "%ld", d->imagemagick_time);
+    apr_table_set(d->r->notes, "DIMS_IM_TIME", buf);
 
-    return dims_status_to_http_code(d);
+    return HTTP_OK;
 }
 
 static dims_request_rec *
@@ -678,7 +638,6 @@ dims_create_request(request_rec *r)
     request->client_config = NULL;
     request->image_url = NULL;
     request->request_hash = NULL;
-    request->status = DIMS_SUCCESS;
     request->start_time = apr_time_now();
     request->download_time = 0;
     request->imagemagick_time = 0;
@@ -805,12 +764,12 @@ dims_request_parse(dims_request_rec *request, int dims4)
         request->image_url = dims_decrypt_eurl(r, request->config->secret_key, eurl);
 
         if (request->image_url == NULL) {
-            return DIMS_DECRYPTION_FAILURE;
+            return DIMS_FAILURE;
         }
     } else if (url != NULL) {
         request->image_url = dims_encode_spaces(r->pool, url);
     } else {
-        return DIMS_BAD_URL;
+        return DIMS_FAILURE;
     }
 
     request->request_hash = ap_md5(r->pool, 
@@ -824,7 +783,7 @@ dims_request_parse(dims_request_rec *request, int dims4)
     apr_uri_t uri;
     if (apr_uri_parse(r->pool, request->image_url, &uri) == APR_SUCCESS) {
         if (!uri.path) {
-            return DIMS_BAD_URL;
+            return DIMS_FAILURE;
         }
 
         const char *path = apr_filepath_name_get(uri.path);
@@ -844,9 +803,11 @@ dims_handle_dims3(request_rec *r)
     }
 
     if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Validating: Client '%s' not found", d->client_id);
+
         dims_send_error(d, HTTP_UNAUTHORIZED);
 
-        return DIMS_BAD_CLIENT;
+        return DIMS_FAILURE;
     }
 
     // Verify allowlist (dims3 only).
@@ -869,9 +830,11 @@ dims_handle_dims4(request_rec *r)
     }
 
     if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Validating: Client '%s' not found", d->client_id);
+
         dims_send_error(d, HTTP_UNAUTHORIZED);
 
-        return DIMS_BAD_CLIENT;
+        return DIMS_FAILURE;
     }
 
     // Verify signature (dims4 only).

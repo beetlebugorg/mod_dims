@@ -71,9 +71,7 @@ dims_operation_lookup(char *name) {
 #define MAGICK_CHECK(func, rec) \
     do { \
         apr_status_t code = func; \
-        if(rec->status == DIMS_IMAGEMAGICK_TIMEOUT) {\
-            return DIMS_IMAGEMAGICK_TIMEOUT; \
-        } else if(code == MagickFalse) {\
+        if(code == MagickFalse) {\
             return DIMS_FAILURE; \
         } \
     } while(0)

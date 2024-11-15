@@ -53,13 +53,6 @@ typedef struct dims_request_rec {
     /* The client specific configuration, if available. */
     dims_client_config_rec *client_config;
 
-    /* The current status of this request.  If downloading
-     * or manipulating the image times out this will
-     * be set to DIMS_*_TIMEOUT.  If everything is ok it will
-     * be set to DIMS_SUCCESS.
-     */
-    apr_status_t status;
-
     /* Time this request started.  Used for statistics. */
     apr_time_t start_time;
     apr_time_t download_time;

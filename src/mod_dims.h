@@ -40,19 +40,8 @@
 
 #include <curl/curl.h>
 
-#define DIMS_IGNORE -1
-#define DIMS_SUCCESS 200 
-#define DIMS_FAILURE 500 
-#define DIMS_FILE_NOT_FOUND 404
-#define DIMS_DOWNLOAD_TIMEOUT 1000
-#define DIMS_IMAGEMAGICK_TIMEOUT 1001
-#define DIMS_BAD_CLIENT 1002
-#define DIMS_BAD_URL 1003 
-#define DIMS_BAD_ARGUMENTS 1004
-#define DIMS_HOSTNAME_NOT_IN_WHITELIST 1005
-#define DIMS_INVALID_SIGNATURE 1006
-#define DIMS_MISSING_SECRET 1007
-#define DIMS_DECRYPTION_FAILURE 1008
+#define DIMS_FAILURE 1
+#define DIMS_SUCCESS 0 
 
 apr_status_t dims_handle_dims3(request_rec *d);
 apr_status_t dims_handle_dims4(request_rec *d);
