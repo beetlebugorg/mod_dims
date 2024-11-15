@@ -301,35 +301,34 @@ dims_set_optimal_geometry(dims_request_rec *d)
 static dims_processed_image *
 dims_process_image(dims_request_rec *d) 
 {
+    dims_processed_image *image = (dims_processed_image *) apr_palloc(d->pool, sizeof(dims_processed_image)); 
+
+    // Load the source image.
     apr_time_t start_time = apr_time_now();
-
     d->wand = NewMagickWand();
-
-    if(MagickReadImageBlob(d->wand, d->source_image->data, d->source_image->used) == MagickFalse) {
+    dims_set_optimal_geometry(d);
+    if (MagickReadImageBlob(d->wand, d->source_image->data, d->source_image->used) == MagickFalse) {
         ExceptionType et;
 
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
             "ImageMagick error, '%s', on request: %s ", 
             MagickGetException(d->wand, &et), d->r->uri);
 
-        return NULL;
+        image->error = DIMS_FAILURE;
+
+        return image;
     }
-    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
-    dims_processed_image *image = (dims_processed_image *) apr_palloc(d->pool, sizeof(dims_processed_image)); 
-
-    /* Hook in the progress monitor.  It gets passed a dims_progress_rec which keeps track of the start time.  */
+    // Hook in the progress monitor. This will allow us to timeout.
     dims_progress_rec *progress_rec = (dims_progress_rec *) apr_palloc(d->pool, sizeof(dims_progress_rec));
     progress_rec->d = d;
     progress_rec->start_time = apr_time_now();
-
-    /* Setting the progress monitor from the MagickWand API does not seem to work.  The monitor never gets called.  */
     SetImageProgressMonitor(GetImageFromMagickWand(d->wand), dims_imagemagick_progress_cb, (void *) progress_rec);
 
     int exc_strip_cmd = 0;
 
-    /* Convert image to RGB from CMYK. */
-    if(MagickGetImageColorspace(d->wand) == CMYKColorspace) {
+    // Convert image to RGB from CMYK. 
+    if (MagickGetImageColorspace(d->wand) == CMYKColorspace) {
         size_t number_profiles;
         char **profiles;
 
@@ -342,16 +341,14 @@ dims_process_image(dims_request_rec *d)
         MagickRelinquishMemory((void *)profiles);
     }
 
-    /*
-     * Flip image orientation, if needed.
-     */
     MagickAutoOrientImage(d->wand);
 
-    /* Flatten images (i.e animated gif) if there's an overlay or file type is `psd`. Otherwise, pass through. */
+    // Flatten images (i.e animated gif) if there's an overlay or file type is `psd`. Otherwise, pass through.
     size_t images = MagickGetNumberImages(d->wand);
     bool should_flatten = false;
 
     if (images > 1) {
+        // Always flatten if there's a watermark command.
         for (int i = 0; i < d->commands_list->nelts; i++) {
             dims_command_t *cmd = &APR_ARRAY_IDX(d->commands_list, i, dims_command_t);
 
@@ -375,6 +372,7 @@ dims_process_image(dims_request_rec *d)
         }
     }
 
+    // Passthrough images contain multiple frames
     if (images == 1 || should_flatten) {
         bool output_format_provided = false;
 
@@ -394,8 +392,7 @@ dims_process_image(dims_request_rec *d)
                 char *err = NULL;
                 apr_status_t code;
 
-                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-                    "Executing command %s(%s), on request %s", cmd->name, cmd->arg, d->r->uri);
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing command %s(%s)", cmd->name, cmd->arg);
 
                 if ((code = func(d, cmd->arg, &err)) != DIMS_SUCCESS) {
                     DestroyMagickWand(d->wand);
@@ -424,31 +421,21 @@ dims_process_image(dims_request_rec *d)
         }
     }
 
-    /*
-     * If the strip command was not executed from the loop, call it anyway with NULL args
-     */
-    if(!exc_strip_cmd) {
-        dims_operation_func *strip_func = dims_operation_lookup("strip");
-        if(strip_func != NULL) {
-            char *err = NULL;
-            apr_status_t code;
+    // If the strip command was not executed from the loop
+    if(!exc_strip_cmd && d->config->strip_metadata) {
+        char *err = NULL;
+        apr_status_t code;
 
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                "Executing default strip command, on request %s", d->r->uri);
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing default strip command, on request %s", d->r->uri);
 
-            if((code = strip_func(d, NULL, &err)) != DIMS_SUCCESS) {
-                DestroyMagickWand(d->wand);
-                image->error = code;
-                return image;
-            }
-        }        
+        if((code = dims_strip_operation(d, NULL, &err)) != DIMS_SUCCESS) {
+            DestroyMagickWand(d->wand);
+            image->error = code;
+            return image;
+        }
     }
 
-    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
-
-    /* Disable timeouts at this point since the only thing left
-     * to do is save the image. 
-     */
+    // Unregister the progress monitor so we don't timeout on writing the image.
     SetImageProgressMonitor(GetImageFromMagickWand(d->wand), NULL, NULL);
 
     MagickResetIterator(d->wand);
@@ -458,6 +445,8 @@ dims_process_image(dims_request_rec *d)
     image->bytes = MagickGetImagesBlob(d->wand, &image->length);
 
     DestroyMagickWand(d->wand);
+
+    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
     return image;
 }
