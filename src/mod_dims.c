@@ -160,7 +160,7 @@ dims_status_to_http_code(dims_request_rec *d)
     return OK;
 }
 
-static apr_status_t
+static void
 dims_send_image(dims_request_rec *d, dims_processed_image *image)
 {
     request_rec *r = d->r;
@@ -242,8 +242,6 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     } else {
         apr_table_set(d->r->headers_out, "Content-Length", "0");
     }
-
-    return OK;
 }
 
 /**
@@ -271,8 +269,8 @@ dims_set_optimal_geometry(dims_request_rec *d)
         dims_command_t *cmd = &APR_ARRAY_IDX(d->commands_list, i, dims_command_t);
 
         if(strcmp(cmd->name, "resize") == 0 ||
-            strcmp(cmd->name, "legacy_thumbnail") == 0 ||
-            strcmp(cmd->name, "thumbnail") == 0) {
+           strcmp(cmd->name, "legacy_thumbnail") == 0 ||
+           strcmp(cmd->name, "thumbnail") == 0) {
 
             flags = ParseAbsoluteGeometry(cmd->arg, &rec);
             if(flags & WidthValue && flags & HeightValue && !(flags & PercentValue)) {
@@ -558,10 +556,10 @@ dims_handle_request(dims_request_rec *d)
     }
 
     // Serve the image.
-    status = dims_send_image(d, image);
-    if (status != DIMS_SUCCESS) {
-        return status;
-    }
+    dims_send_image(d, image);
+
+    free(image->bytes);
+    free(image->format);
 
     /* Record metrics for logging. */
     snprintf(buf, 128, "%d", d->status);
