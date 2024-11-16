@@ -207,7 +207,9 @@ dims_send_error(dims_request_rec *d, int status)
     ap_rflush(d->r);
 
     DestroyMagickWand(d->wand);
+    DestroyPixelWand(background);
     MagickRelinquishMemory(format);
+    MagickRelinquishMemory(blob);
 }
 
 static void
