@@ -48,9 +48,9 @@ typedef struct dims_progress_rec {
 
 typedef struct dims_processed_image {
     size_t length;
+    apr_status_t error;
     unsigned char *bytes;
     char *format;
-    apr_status_t error;
 } dims_processed_image;
 
 /**
@@ -207,7 +207,7 @@ dims_send_error(dims_request_rec *d, int status)
     ap_rflush(d->r);
 
     DestroyMagickWand(d->wand);
-    free(format);
+    MagickRelinquishMemory(format);
 }
 
 static void
@@ -278,11 +278,11 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     unsigned char *blob = image->bytes;
     size_t length = image->length;
     if (blob != NULL) {
-        char content_length[256] = "";
-        snprintf(content_length, sizeof(content_length), "%zu", (size_t) image->length);
+        char *content_length = apr_psprintf(d->pool, "%d", length);
         apr_table_set(d->r->headers_out, "Content-Length", content_length);
 
         ap_rwrite(blob, length, d->r);
+        ap_rflush(d->r);
     } else {
         apr_table_set(d->r->headers_out, "Content-Length", "0");
     }
@@ -403,7 +403,7 @@ dims_process_image(dims_request_rec *d)
         if (strcmp(input_format, "PSD") == 0 || strcmp(input_format, "psd") == 0) {
             should_flatten = true;
         }
-        free(input_format);
+        MagickRelinquishMemory(input_format);
 
         if (should_flatten) {
             for (size_t i = 1; i <= images - 1; i++) {
@@ -437,6 +437,7 @@ dims_process_image(dims_request_rec *d)
 
                 if ((code = func(d, cmd->arg, &err)) != DIMS_SUCCESS) {
                     DestroyMagickWand(d->wand);
+                    d->wand = NULL;
                     image->error = HTTP_INTERNAL_SERVER_ERROR;
                     return image;
                 }
@@ -455,6 +456,7 @@ dims_process_image(dims_request_rec *d)
 
                 if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
                     DestroyMagickWand(d->wand);
+                    d->wand = NULL;
                     image->error = HTTP_INTERNAL_SERVER_ERROR;
                     return image;
                 }
@@ -471,6 +473,7 @@ dims_process_image(dims_request_rec *d)
 
         if((code = dims_strip_operation(d, NULL, &err)) != DIMS_SUCCESS) {
             DestroyMagickWand(d->wand);
+            d->wand = NULL;
             image->error = HTTP_INTERNAL_SERVER_ERROR;
             return image;
         }
@@ -606,8 +609,8 @@ dims_handle_request(dims_request_rec *d)
     // Serve the image.
     dims_send_image(d, image);
 
-    free(image->bytes);
-    free(image->format);
+    MagickRelinquishMemory(image->bytes);
+    MagickRelinquishMemory(image->format);
 
     /* Record metrics for logging. */
     snprintf(buf, 128, "%ld", d->source_image->used);

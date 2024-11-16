@@ -108,57 +108,6 @@ dims_write_image_cb(void *new_data, size_t size, size_t nmemb, void *data)
     return realsize;
 }
 
-static size_t
-dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
-{
-    dims_request_rec *d = (dims_request_rec *) data;
-    size_t realsize = size * nmemb;
-    char *start = (char *) ptr;
-    char *header = (char *) ptr;
-    char *key = NULL, *value = NULL;
-
-    while(header < (start + realsize)) {
-        if(*header == ':') {
-            key = apr_pstrndup(d->pool, start, header - start);
-            while(*header == ' ') {
-                header++;
-            }
-            value = apr_pstrndup(d->pool, header, start + realsize - header - 2);
-            header = start + realsize;
-        }
-        header++;
-    }
-
-    if(key && value && strcmp(key, "Cache-Control") == 0) {
-        d->source_image->cache_control = value;
-
-        char *src_header = value;
-        char *src_start = src_header;
-        int src_len = strlen(src_header);
-
-        // Ex. max-age=3600
-        while(src_header < (src_start + src_len)) {
-            if(*src_header == '=') {
-                src_header++;
-                while(*src_header == ' ') {
-                    src_header++;
-                }
-
-                d->source_image->max_age = atoi(src_header);
-            }
-            src_header++;
-        }
-    } else if(key && value && strcmp(key, "Edge-Control") == 0) {
-        d->source_image->edge_control = value;
-    } else if(key && value && strcmp(key, "Last-Modified") == 0) {
-        d->source_image->last_modified = value;
-    } else if(key && value && strcmp(key, "ETag") == 0) {
-        d->source_image->etag = value;
-    }
-
-    return realsize;
-}
-
 CURLcode
 dims_curl(dims_request_rec *d, const char *url, dims_image_data_t *source_image)
 {
@@ -174,8 +123,6 @@ dims_curl(dims_request_rec *d, const char *url, dims_image_data_t *source_image)
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
-    curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, dims_write_header_cb);
-    curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout);
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
@@ -203,16 +150,58 @@ dims_curl(dims_request_rec *d, const char *url, dims_image_data_t *source_image)
 
     code = curl_easy_perform(curl_handle);
 
+    // Grab cache headers using curl_easy_headers()
+    struct curl_header *header = NULL;
+    CURLHcode header_code = curl_easy_header(curl_handle, "cache-control", 0, CURLH_HEADER, -1, &header);
+    if (CURLHE_OK == header_code) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Cache-Control: %s", header->value);
+        source_image->cache_control = apr_pstrdup(d->pool, header->value);
+
+        char *src_header = source_image->cache_control;
+        char *src_start = src_header;
+        int src_len = strlen(src_header);
+
+        // Ex. max-age=3600
+        while(src_header < (src_start + src_len)) {
+            if(*src_header++ == '=') {
+                while(*src_header == ' ') {
+                    src_header++;
+                }
+
+                d->source_image->max_age = atol(src_header);
+                break;
+            }
+        }
+    }
+
+    header_code = curl_easy_header(curl_handle, "edge-control", 0, CURLH_HEADER, -1, &header);
+    if (CURLHE_OK == header_code) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Edge-Control: %s", header->value);
+        source_image->edge_control = apr_pstrdup(d->pool, header->value);
+    }
+
+    header_code = curl_easy_header(curl_handle, "last-modified", 0, CURLH_HEADER, -1, &header);
+    if (CURLHE_OK == header_code) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Last-Modified: %s", header->value);
+        source_image->last_modified = apr_pstrdup(d->pool, header->value);
+    }
+
+    header_code = curl_easy_header(curl_handle, "etag", 0, CURLH_HEADER, -1, &header);
+    if (CURLHE_OK == header_code) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ETag: %s", header->value);
+        source_image->etag = apr_pstrdup(d->pool, header->value);
+    }
+
     curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &source_image->response_code);
     curl_easy_cleanup(curl_handle);
 
     if (source_image->response_code == 200) {
         source_image->data = apr_pmemdup(d->pool, image_data.data, image_data.used);
-        source_image->size = image_data.used;
+        source_image->size = image_data.size;
         source_image->used = image_data.used;
     }
 
-    free(image_data.data);
+    MagickRelinquishMemory(image_data.data);
 
     return code;
 }
