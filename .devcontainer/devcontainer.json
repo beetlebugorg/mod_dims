@@ -29,7 +29,6 @@
 				"ms-vscode.cpptools",
 				"ms-vscode.cpptools-extension-pack",
 				"vscodevim.vim",
-				"ziglang.vscode-zig",
 				"GitHub.copilot"
 			]
 		},
