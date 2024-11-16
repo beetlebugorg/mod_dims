@@ -17,21 +17,6 @@ static char to_hex(char code) {
     return hex[code & 15];
 }
 
-/* Returns a url-encoded version of str */
-/* IMPORTANT: be sure to free() the returned string after use */
-static char *url_encode(char *str) {
-    char *pstr = str, *buf = malloc(strlen(str) * 3 + 1), *pbuf = buf;
-    while (*pstr) {
-        if (isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' || *pstr == '~' || *pstr == ':' || *pstr == '/' || *pstr == '?' || *pstr == '=' || *pstr == '&')
-            *pbuf++ = *pstr;
-        else
-            *pbuf++ = '%', *pbuf++ = to_hex(*pstr >> 4), *pbuf++ = to_hex(*pstr & 15);
-        pstr++;
-    }
-    *pbuf = '\0';
-    return buf;
-}
-
 void 
 lock_share(CURL *handle, 
            curl_lock_data data, 
