@@ -41,6 +41,15 @@
             return d->status; \
     } while(0); 
 
+#define MAGICK_WAND_CLEANUP(wand_ptr, error_code) \
+    do { \
+        if ((wand_ptr) != NULL) { \
+            DestroyMagickWand(wand_ptr); \
+            (wand_ptr) = NULL; \
+        } \
+        return (error_code); \
+    } while (0)
+
 typedef struct dims_progress_rec {
     dims_request_rec *d;
     apr_time_t start_time;
@@ -48,7 +57,6 @@ typedef struct dims_progress_rec {
 
 typedef struct dims_processed_image {
     size_t length;
-    apr_status_t error;
     unsigned char *bytes;
     char *format;
 } dims_processed_image;
@@ -328,38 +336,35 @@ dims_set_optimal_geometry(dims_request_rec *d)
 }
 
 /**
- * This is the main code for processing images.  It will parse
- * the command string into individual commands and execute them.  
- * When it's finished it will write the content type header and
- * image data to connection and flush the connection.
- *
- * Commands should always come in pairs, the command name followed
- * by the commands arguments delimited by '/'.  Example:
- *
- *      thumbnail/78x110/quality/70
- *
- * This would first execute the thumbnail command then it would
- * set the quality of the image to 70 before writing the image
- * to the connection.
+ * dims_process_image
+ * 
+ * Processes an image based on image manipulation commands in the request, 
+ * applying each transformation sequentially.
+ * 
+ * On success, populates `processed_image_out` with the result.
+ * 
+ * @d: Image request context.
+ * @processed_image_out: Output pointer for the processed image.
+ * 
+ * @returns: APR_SUCCESS on success, or http error code if processing fails.
  */
-static dims_processed_image *
-dims_process_image(dims_request_rec *d) 
-{
-    dims_processed_image *image = (dims_processed_image *) apr_palloc(d->pool, sizeof(dims_processed_image)); 
+static apr_status_t dims_process_image(dims_request_rec *d, dims_processed_image **processed_image_out) {
+    if (!d || !processed_image_out) {
+        return APR_EINVAL; // Invalid argument
+    }
 
-    // Load the source image.
+    dims_processed_image *image = (dims_processed_image *) apr_palloc(d->pool, sizeof(dims_processed_image)); 
+    *processed_image_out = image;
+
     apr_time_t start_time = apr_time_now();
     d->wand = NewMagickWand();
     dims_set_optimal_geometry(d);
+
     if (MagickReadImageBlob(d->wand, d->source_image->data, d->source_image->used) == MagickFalse) {
         ExceptionType et;
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, "ImageMagick: error reading image, '%s'", MagickGetException(d->wand, &et));
 
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-            "ImageMagick: error reading image, '%s'", MagickGetException(d->wand, &et));
-
-        image->error = HTTP_INTERNAL_SERVER_ERROR;
-
-        return image;
+        MAGICK_WAND_CLEANUP(d->wand, HTTP_INTERNAL_SERVER_ERROR);
     }
 
     // Hook in the progress monitor. This will allow us to timeout.
@@ -426,7 +431,7 @@ dims_process_image(dims_request_rec *d)
                 output_format_provided = true;
             }
 
-            if(strcmp(cmd->name, "strip") == 0) {
+            if (strcmp(cmd->name, "strip") == 0) {
                 exc_strip_cmd = 1;
             }
 
@@ -438,10 +443,7 @@ dims_process_image(dims_request_rec *d)
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing: %s => %s", cmd->name, cmd->arg);
 
                 if ((code = func(d, cmd->arg, &err)) != DIMS_SUCCESS) {
-                    DestroyMagickWand(d->wand);
-                    d->wand = NULL;
-                    image->error = HTTP_INTERNAL_SERVER_ERROR;
-                    return image;
+                    MAGICK_WAND_CLEANUP(d->wand, HTTP_INTERNAL_SERVER_ERROR);
                 }
             }
 
@@ -456,28 +458,22 @@ dims_process_image(dims_request_rec *d)
                 char *err = NULL;
                 apr_status_t code;
 
-                if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
-                    DestroyMagickWand(d->wand);
-                    d->wand = NULL;
-                    image->error = HTTP_INTERNAL_SERVER_ERROR;
-                    return image;
+                if ((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
+                    MAGICK_WAND_CLEANUP(d->wand, HTTP_INTERNAL_SERVER_ERROR);
                 }
             }
         }
     }
 
     // If the strip command was not executed from the loop
-    if(!exc_strip_cmd && d->config->strip_metadata) {
+    if (!exc_strip_cmd && d->config->strip_metadata) {
         char *err = NULL;
         apr_status_t code;
 
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Executing: strip => true (config default)");
 
-        if((code = dims_strip_operation(d, NULL, &err)) != DIMS_SUCCESS) {
-            DestroyMagickWand(d->wand);
-            d->wand = NULL;
-            image->error = HTTP_INTERNAL_SERVER_ERROR;
-            return image;
+        if ((code = dims_strip_operation(d, NULL, &err)) != DIMS_SUCCESS) {
+            MAGICK_WAND_CLEANUP(d->wand, HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -486,15 +482,12 @@ dims_process_image(dims_request_rec *d)
 
     MagickResetIterator(d->wand);
 
-    image->error = DIMS_SUCCESS;
     image->format = MagickGetImageFormat(d->wand);
     image->bytes = MagickGetImagesBlob(d->wand, &image->length);
 
-    DestroyMagickWand(d->wand);
-
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
-    return image;
+    MAGICK_WAND_CLEANUP(d->wand, APR_SUCCESS);
 }
 
 int
@@ -597,15 +590,12 @@ dims_handle_request(dims_request_rec *d)
     }
 
     // Execute Imagemagick commands.
-    dims_processed_image *image = dims_process_image(d);
-    if (image != NULL && image->error != DIMS_SUCCESS) {
-        dims_send_error(d, image->error);
+    dims_processed_image *image;
+    status = dims_process_image(d, &image);
+    if (status != APR_SUCCESS) {
+        dims_send_error(d, status);
 
-        return image->error;
-    } else if (image == NULL) {
-        dims_send_error(d, HTTP_INTERNAL_SERVER_ERROR);
-
-        return HTTP_INTERNAL_SERVER_ERROR;
+        return status;
     }
 
     // Serve the image.
