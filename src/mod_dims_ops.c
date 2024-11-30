@@ -15,6 +15,9 @@
  */
 
 #include "mod_dims.h"
+#include "mod_dims_ops.h"
+#include "curl.h"
+#include "request.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -22,14 +25,53 @@
 #include <stdio.h>
 #include <paths.h>
 
-#include <magick/exception.h>
+#include <apr.h>
+#include <MagickCore/exception.h>
+
+static operations_rec ops[] = {
+    {"strip", dims_strip_operation},
+    {"resize", dims_resize_operation},
+    {"crop", dims_crop_operation},
+    {"thumbnail", dims_thumbnail_operation},
+    {"legacy_thumbnail", dims_legacy_thumbnail_operation},
+    {"legacy_crop", dims_legacy_crop_operation},
+    {"quality", dims_quality_operation},
+    {"sharpen", dims_sharpen_operation},
+    {"format", dims_format_operation},
+    {"brightness", dims_brightness_operation},
+    {"flipflop", dims_flipflop_operation},
+    {"sepia", dims_sepia_operation},
+    {"grayscale", dims_grayscale_operation},
+    {"autolevel", dims_autolevel_operation},
+    {"rotate", dims_rotate_operation},
+    {"invert", dims_invert_operation},
+    {"watermark", dims_watermark_operation},
+    {NULL, NULL}
+};
+
+dims_operation_func *
+dims_operation_lookup(char *name) {
+    operations_rec *op_ptr = ops;
+
+    if (name == NULL) {
+        return NULL;
+    }
+
+    while (op_ptr->name != NULL) {
+        if (strcmp(name, op_ptr->name) == 0) {
+            return op_ptr->func;
+        }
+
+        ++op_ptr;
+    }
+
+    return NULL;
+}
 
 #define MAGICK_CHECK(func, rec) \
     do { \
         apr_status_t code = func; \
-        if(rec->status == DIMS_IMAGEMAGICK_TIMEOUT) {\
-            return DIMS_IMAGEMAGICK_TIMEOUT; \
-        } else if(code == MagickFalse) {\
+        if(code == MagickFalse) {\
             return DIMS_FAILURE; \
         } \
     } while(0)
@@ -52,42 +94,12 @@ static DimsGravity gravities[] = {
     {NULL, CenterGravity}
 };
 
-/*
-apr_status_t
-dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
-    MagickStatusType flags;
-    RectangleInfo rec;
-    ExceptionInfo ex_info;
-
-    flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, &ex_info);
-    if(!(flags & AllValues)) {
-        *err = "Parsing crop geometry failed";
-        return DIMS_FAILURE;
-    }
-
-    // MAGICK_CHECK(MagickResizeImage(d->wand, rec.width, rec.height, UndefinedFilter, 1), d);
-    smartCrop(d->wand, 20, rec.width, rec.height);
-
-    return DIMS_SUCCESS;
-}
-*/
-
 apr_status_t
 dims_strip_operation (dims_request_rec *d, char *args, char **err) {
-
-    /* If args is passed from the user and 
-     *   a) it equals true, strip the image.
-     *   b) it equals false, don't strip the image.
-     *   c) it is neither true/false, strip based on config value.
-     * If args is NULL, strip based on config value.
-     */
-    if(args != NULL) {
-        if(strcmp(args, "true") == 0 || ( strcmp(args, "false") != 0 && d->config->strip_metadata )) {
+    if (args != NULL) {
+        if (strcmp(args, "true") == 0 || ( strcmp(args, "false") != 0 && d->config->strip_metadata)) {
             MAGICK_CHECK(MagickStripImage(d->wand), d);
         }
-    }
-    else if(d->config->strip_metadata) {
-        MAGICK_CHECK(MagickStripImage(d->wand), d);
     }
 
     return DIMS_SUCCESS;
@@ -98,7 +110,8 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    SetGeometry(GetImageFromMagickWand(d->wand), &rec);
+    flags = ParseMetaGeometry(args,  &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
         return DIMS_FAILURE;
@@ -110,23 +123,6 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
         MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
     MagickRelinquishMemory(format);
-
-    if (d->optimize_resize) {
-        size_t orig_width;
-        size_t orig_height;
-
-        RectangleInfo sampleRec = rec;
-        sampleRec.width *= d->optimize_resize;
-        sampleRec.height *= d->optimize_resize;
-
-        orig_width = MagickGetImageWidth(d->wand);
-        orig_height = MagickGetImageHeight(d->wand);
-
-        if(sampleRec.width < orig_width && sampleRec.height < orig_height) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %zdx%zd before resizing.", sampleRec.width, sampleRec.height);
-            MAGICK_CHECK(MagickSampleImage(d->wand, sampleRec.width, sampleRec.height), d);
-        }
-    }
 
     MAGICK_CHECK(MagickScaleImage(d->wand, rec.width, rec.height), d);
 
@@ -154,7 +150,8 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    SetGeometry(GetImageFromMagickWand(d->wand), &rec);
+    flags = ParseMetaGeometry(resize_args,  &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -166,23 +163,6 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         MAGICK_CHECK(MagickSetSamplingFactors(d->wand, 3, factors), d);
     }
     MagickRelinquishMemory(format);
-
-    if (d->optimize_resize) {
-        size_t orig_width;
-        size_t orig_height;
-
-        RectangleInfo sampleRec = rec;
-        sampleRec.width *= d->optimize_resize;
-        sampleRec.height *= d->optimize_resize;
-
-        orig_width = MagickGetImageWidth(d->wand);
-        orig_height = MagickGetImageHeight(d->wand);
-
-        if(sampleRec.width < orig_width && sampleRec.height < orig_height) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Sampling image down to %zdx%zd before resizing.", sampleRec.width, sampleRec.height);
-            MAGICK_CHECK(MagickSampleImage(d->wand, sampleRec.width, sampleRec.height), d);
-        }
-    }
 
     MAGICK_CHECK(MagickThumbnailImage(d->wand, rec.width, rec.height), d);
 
@@ -206,25 +186,6 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     ExceptionInfo *ex_info = AcquireExceptionInfo();
-
-    /* Replace spaces with '+'. This happens when some user agents inadvertantly 
-     * escape the '+' as %20 which gets converted to a space.
-     * 
-     * Example: 
-     * 
-     * 900x900%20350%200 is '900x900 350 0' which is an invalid, the following code
-     * coverts this to '900x900+350+0'.
-     *
-     */
-    char *s = args;
-    while (*s) {
-        if (*s == ' ') {
-            *s = '+';
-        }
-
-        s++;
-    }
-
 
     flags = ParseGravityGeometry(GetImageFromMagickWand(d->wand), args, &rec, ex_info);
     if(!(flags & AllValues)) {
@@ -361,7 +322,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         token = apr_strtok(args, "&", &strtokstate);
         while (token) {
             if (strncmp(token, "overlay=", 4) == 0) {
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                 overlay_url = apr_pstrdup(d->r->pool, token + 8);
                 ap_unescape_url(overlay_url);
             }
@@ -425,7 +385,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     // Write to disk.
     } else {
         dims_image_data_t image_data;
-        CURLcode code = dims_get_image_data(d, overlay_url, &image_data);
+        CURLcode code = dims_curl(d, overlay_url, &image_data);
 
         if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
             if (image_data.data) {
@@ -565,10 +525,6 @@ dims_legacy_crop_operation (dims_request_rec *d, char *args, char **err) {
     x = (width / 2) - (rec.width / 2);
     y = (height / 2) - (rec.height / 2);
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "legacy_crop will crop to %ldx%ld+%d+%d", 
-        rec.width, rec.height, x, y);
-
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, x, y), d);
 
     return DIMS_SUCCESS;
@@ -582,7 +538,8 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     int x, y;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    SetGeometry(GetImageFromMagickWand(d->wand), &rec);
+    flags = ParseMetaGeometry(resize_args,  &rec.x, &rec.y, &rec.width, &rec.height);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -601,9 +558,6 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
         MAGICK_CHECK(MagickScaleImage(d->wand, rec.width, rec.height), d);
     }
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "legacy_thumbnail will resize to %ldx%ld", rec.width, rec.height);
-
     flags = ParseAbsoluteGeometry(args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (crop) geometry failed";
@@ -614,9 +568,6 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     height = MagickGetImageHeight(d->wand);
     x = (width / 2) - (rec.width / 2);
     y = (height / 2) - (rec.height / 2);
-
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-        "legacy_thumbnail will crop to %ldx%ld+%d+%d", rec.width, rec.height, x, y);
 
     MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, x, y), d);
 

@@ -1,3 +1,5 @@
+.idea 
+.DS_Store
 m4/
 Makefile
 Makefile.in
@@ -20,3 +22,20 @@ install-sh
 missing
 INSTALL
 stamp-h1
+
+*.lo
+*.la
+*.lai
+*.o
+*.Plo
+*.Tpo
+*.a
+*~
+
+*.dylib
+*.so
+
+.zig-out
+.zig-cache
+zig-out
+zig-cache

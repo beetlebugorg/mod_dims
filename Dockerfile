@@ -1,6 +1,20 @@
 ARG HTTPD_VERSION=2.4.62
 
-FROM httpd:${HTTPD_VERSION}-alpine
+FROM httpd:${HTTPD_VERSION}-alpine AS builder
+
+ENV PREFIX=/usr/local/apache2
+ENV PATH=${PREFIX}/bin:${PATH}
+
+COPY . /build/mod-dims
+WORKDIR /build/mod-dims
+
+RUN apk update && \
+    apk add vim gdb zig apr-dev apr-util-dev imagemagick-dev curl-dev \
+    imagemagick-jpeg imagemagick-webp imagemagick-tiff && \
+    zig build || true; \
+    ln -sf /build/mod-dims/zig-out/lib/libmod_dims.so.4.0.0 ${PREFIX}/modules/libmod_dims.so || true
+
+FROM httpd:${HTTPD_VERSION}-alpine AS final
 
 ENV DIMS_DOWNLOAD_TIMEOUT=60000
 ENV DIMS_IMAGEMAGICK_TIMEOUT=20000
@@ -30,15 +44,9 @@ ENV MAGICK_MAP_LIMIT=536870912
 ENV MAGICK_AREA_LIMIT=134217728
 
 RUN apk update && \
-    apk add vim gdb zig apr-dev apr-util-dev imagemagick-dev curl-dev \
-    imagemagick-jpeg imagemagick-webp imagemagick-tiff && \
-    zig build --verbose || true; \
-    ln -sf /workspaces/mod_dims/zig-out/lib/libmod_dims.so.4.0.0 ${PREFIX}/modules/libmod_dims.so
+    apk add imagemagick imagemagick-jpeg imagemagick-webp imagemagick-tiff curl 
 
+COPY --from=builder /build/mod-dims/zig-out/lib/libmod_dims.so.4.0.0 ${PREFIX}/modules/libmod_dims.so
 COPY dims.conf /usr/local/apache2/conf/httpd.conf
 
-ENV DIMS_CLIENT=development
-ENV DIMS_SECRET=devmode
-ENV DIMS_WHITELIST="*.com *.net *.org *.io"
-ENV DIMS_NO_IMAGE_URL="http://192.168.65.1:8081/mod-dims_00001_.jpg"
-ENV DIMS_DEFAULT_IMAGE_URL="http://192.168.65.1:8081/mod-dims_00001_.jpg"
+EXPOSE 8000
