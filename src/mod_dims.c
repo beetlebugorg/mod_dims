@@ -240,15 +240,19 @@ dims_send_image(dims_request_rec *d, dims_processed_image *image)
     char *cache_control = NULL,
          *edge_control = NULL;
 
-    // Use 'max-age' from the source image only if the client trusts the source,
-    // and the source image has a 'max-age' that falls within the configured min and max values.
+    // Use 'max-age' from the source image only if the client trusts the source and the 
+    // source image has a 'max-age' that falls within the configured min and max values.
     int trust_src_img = 0;
     if (d->client_config->trust_src && d->source_image->max_age > 0) {
+        // The source image domain is trusted and the source image has a max-age set.
+
         int min = d->client_config->min_src_cache_control;
         int max = d->client_config->max_src_cache_control;
 
-        if((min == -1 || d->source_image->max_age >= d->client_config->min_src_cache_control) && 
-           (max == -1 || d->source_image->max_age <= d->client_config->max_src_cache_control)) {
+        if ((min == -1 || d->source_image->max_age >= min) && 
+            (max == -1 || d->source_image->max_age <= max)) {
+            // The source image max-age falls within the configured min and max values.
+
             max_age = d->source_image->max_age;
             expire_time = d->source_image->max_age;
             downstream_ttl = d->source_image->max_age;
