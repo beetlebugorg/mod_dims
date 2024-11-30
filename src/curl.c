@@ -164,20 +164,26 @@ dims_curl(dims_request_rec *d, const char *url, dims_image_data_t *source_image)
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Cache-Control: %s", header->value);
         source_image->cache_control = apr_pstrdup(d->pool, header->value);
 
-        char *src_header = source_image->cache_control;
-        char *src_start = src_header;
-        int src_len = strlen(src_header);
+        // Parse the Cache-Control header to extract "max-age" if present
+        char *cache_control = source_image->cache_control;
+        char *saveptr;
+        char *directive = strtok_r(cache_control, ",", &saveptr);
 
-        // Ex. max-age=3600
-        while(src_header < (src_start + src_len)) {
-            if(*src_header++ == '=') {
-                while(*src_header == ' ') {
-                    src_header++;
-                }
-
-                d->source_image->max_age = atol(src_header);
-                break;
+        while (directive != NULL) {
+            // Trim leading spaces
+            while (*directive == ' ') {
+                directive++;
             }
+
+            // Check if the directive is "max-age"
+            if (strncmp(directive, "max-age=", 8) == 0) {
+                d->source_image->max_age = atol(directive + 8);
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Max-Age: %d", d->source_image->max_age);
+                break;  // Exit loop once max-age is found
+            }
+
+            // Get the next directive
+            directive = strtok_r(NULL, ",", &saveptr);
         }
     }
 
@@ -204,11 +210,11 @@ dims_curl(dims_request_rec *d, const char *url, dims_image_data_t *source_image)
 
     if (source_image->response_code == 200) {
         source_image->data = apr_pmemdup(d->pool, image_data.data, image_data.used);
-        source_image->size = image_data.size;
+        source_image->size = image_data.used;
         source_image->used = image_data.used;
     }
 
-    MagickRelinquishMemory(image_data.data);
+    free(image_data.data);
 
     return code;
 }
