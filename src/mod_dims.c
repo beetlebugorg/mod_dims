@@ -103,6 +103,10 @@ dims_download_source_image(dims_request_rec *d, const char *url)
 {
     apr_time_t start_time;
     d->source_image = apr_palloc(d->pool, sizeof(dims_image_data_t));
+    if (d->source_image == NULL) {
+        return HTTP_INTERNAL_SERVER_ERROR;
+    }
+
     d->source_image->cache_control = NULL;
     d->source_image->edge_control = NULL;
     d->source_image->last_modified = NULL;
@@ -139,11 +143,17 @@ dims_download_source_image(dims_request_rec *d, const char *url)
 static void
 dims_send_error(dims_request_rec *d, int status)
 {
+    ap_assert(d != NULL);
+
     request_rec *r = d->r;
 
     d->wand = NewMagickWand();
 
     PixelWand *background = NewPixelWand();
+    if (background == NULL) {
+        return;
+    }
+
     PixelSetColor(background, d->client_config != NULL ? 
         d->client_config->error_image_background : 
         d->config->error_image_background);
@@ -225,6 +235,11 @@ dims_send_error(dims_request_rec *d, int status)
 static void
 dims_send_image(dims_request_rec *d, dims_processed_image *image)
 {
+    ap_assert(d != NULL);
+    ap_assert(image != NULL);
+    ap_assert(image->bytes != NULL);
+    ap_assert(image->format != NULL);
+
     request_rec *r = d->r;
 
     // Set the Content-Type based on the image format.
@@ -359,6 +374,9 @@ static apr_status_t dims_process_image(dims_request_rec *d, dims_processed_image
     ap_assert(processed_image_out != NULL);
 
     dims_processed_image *image = (dims_processed_image *) apr_palloc(d->pool, sizeof(dims_processed_image)); 
+    if (image == NULL) {
+        return HTTP_INTERNAL_SERVER_ERROR;
+    }
     *processed_image_out = image;
 
     apr_time_t start_time = apr_time_now();
@@ -374,6 +392,9 @@ static apr_status_t dims_process_image(dims_request_rec *d, dims_processed_image
 
     // Hook in the progress monitor. This will allow us to timeout.
     dims_progress_rec *progress_rec = (dims_progress_rec *) apr_palloc(d->pool, sizeof(dims_progress_rec));
+    if (progress_rec == NULL) {
+        MAGICK_WAND_CLEANUP(d->wand, HTTP_INTERNAL_SERVER_ERROR);
+    }
     progress_rec->d = d;
     progress_rec->start_time = apr_time_now();
     SetImageProgressMonitor(GetImageFromMagickWand(d->wand), dims_imagemagick_progress_cb, (void *) progress_rec);
@@ -511,6 +532,9 @@ verify_dims4_signature(dims_request_rec *d) {
         d->commands, 
         d->image_url, 
         NULL);
+    if (signature_params == NULL) {
+        return DIMS_FAILURE;
+    }
 
     // Concatenate additional params.
     char *strtokstate = NULL;
@@ -518,7 +542,12 @@ verify_dims4_signature(dims_request_rec *d) {
     if (keys != NULL) {
         char *token = apr_strtok(keys, ",", &strtokstate);
         while (token) {
-            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(d->query_params, token, APR_HASH_KEY_STRING), NULL);
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Validating: adding signature param '%s'", token);
+
+            char *value = apr_hash_get(d->query_params, token, APR_HASH_KEY_STRING);
+            if (value != NULL) {
+                signature_params = apr_pstrcat(d->pool, signature_params, value, NULL);
+            }
             token = apr_strtok(NULL, ",", &strtokstate);
         }
     }
@@ -532,6 +561,8 @@ verify_dims4_signature(dims_request_rec *d) {
 
         return DIMS_FAILURE;
     }
+
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Validating: signature valid -> '%s'", signature);
 
     return DIMS_SUCCESS;
 }
@@ -629,6 +660,10 @@ static dims_request_rec *
 dims_create_request(request_rec *r)
 {
     dims_request_rec *request = (dims_request_rec *) apr_palloc(r->pool, sizeof(dims_request_rec));
+    if (request == NULL) {
+        return NULL;
+    }
+
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(r->server->module_config, &dims_module);
 
     request->r = r;
@@ -700,6 +735,10 @@ dims_parse_commands(dims_request_rec *request, char *commands) {
         if(strlen(command) > 0) {
             char *args = ap_getword(request->pool, &cmds, '/');
             dims_command_t *cmd = (dims_command_t *) apr_palloc(request->pool, sizeof(dims_command_t)); 
+            if (cmd == NULL) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, request->r, "Memory allocation failed for dims_command_t");
+                return commands_list;
+            }
             cmd->name = command;
             cmd->arg = dims_encode_spaces(request->pool, args);
 
@@ -824,12 +863,17 @@ apr_status_t
 dims_handle_dims4(request_rec *r)
 {
     dims_request_rec *d = dims_create_request(r);
+    if (d == NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Memory allocation failed for dims_request_rec");
+        return HTTP_INTERNAL_SERVER_ERROR;
+    }
+
     int status = dims_request_parse(d, 1);
     if (status != DIMS_SUCCESS) {
         return status;
     }
 
-    if(!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
+    if (!(d->client_config = apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Validating: Client '%s' not found", d->client_id);
 
         dims_send_error(d, HTTP_UNAUTHORIZED);
