@@ -71,26 +71,48 @@ dims_curl_debug_cb(
 }
 
 /**
- * This callback is called by the libcurl API to write data into memory as it's being downloaded.
+ * dims_write_image_cb - Appends image data chunk to an existing buffer.
+ *
+ * @chunk: Pointer to the incoming data chunk.
+ * @size: The number of elements in the data chunk.
+ * @bytes_size: Size of each element in bytes.
+ * @data: Pointer to the image data structure (dims_image_data_t).
+ *
+ * This function writes a given image data chunk into an existing dynamically 
+ * allocated buffer, reallocating memory as needed.
+ *
+ * Returns: The number of bytes successfully appended to the buffer, or 0 on failure.
  */
 size_t
-dims_write_image_cb(void *new_data, size_t size, size_t nmemb, void *data)
+dims_write_image_cb(void *chunk, size_t size, size_t bytes_size, void *data)
 {
+    ap_assert(data != NULL);
+    ap_assert(chunk != NULL);
+
+    // Prevent overflow ('size' is always 1 but just in case)
+    if (size != 1 && bytes_size > SIZE_MAX / size) {
+        return 0; 
+    }
+
     dims_image_data_t *image = (dims_image_data_t *) data;
-    size_t realsize = size * nmemb;
+    size_t chunk_size = size * bytes_size;
 
-    /* Allocate more memory if needed. */
-    if(image->size - image->used <= realsize) {
-        image->size = image->size == 0 ? realsize : (image->size + realsize) * 1.25;
-        image->data = (char *) realloc(image->data, image->size);
+    // Allocate more memory if needed.
+    if(image->used + chunk_size > image->size) {
+        size_t new_size = (image->used + chunk_size) * 2;
+        char *new_data = (char *)realloc(image->data, new_size);
+        if (new_data == NULL) {
+            return 0;
+        }
+
+        image->data = new_data;
+        image->size = new_size;
     }
 
-    if (image->data) {
-        memcpy(&(image->data[image->used]), new_data, realsize);
-        image->used += realsize;
-    }
+    memcpy(&(image->data[image->used]), chunk, chunk_size);
+    image->used += chunk_size;
 
-    return realsize;
+    return chunk_size;
 }
 
 CURLcode
