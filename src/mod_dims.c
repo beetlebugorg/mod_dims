@@ -382,16 +382,16 @@ static apr_status_t dims_process_image(dims_request_rec *d, dims_processed_image
 
     // Convert image to RGB from CMYK. 
     if (MagickGetImageColorspace(d->wand) == CMYKColorspace) {
-        size_t number_profiles;
-        char **profiles;
+        size_t number_profiles = 0;
+        char **profiles = NULL;
 
         profiles = MagickGetImageProfiles(d->wand, "icc", &number_profiles);
-        if (number_profiles == 0) {
+        if (profiles == NULL || number_profiles == 0) {
             MagickProfileImage(d->wand, "ICC", cmyk_icc, sizeof(cmyk_icc));
+        } else {
+            MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
+            MagickRelinquishMemory(profiles);
         }
-        MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
-
-        MagickRelinquishMemory((void *)profiles);
     }
 
     MagickAutoOrientImage(d->wand);
