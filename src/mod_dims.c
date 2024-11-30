@@ -355,9 +355,8 @@ dims_set_optimal_geometry(dims_request_rec *d)
  * @returns: APR_SUCCESS on success, or http error code if processing fails.
  */
 static apr_status_t dims_process_image(dims_request_rec *d, dims_processed_image **processed_image_out) {
-    if (!d || !processed_image_out) {
-        return APR_EINVAL; // Invalid argument
-    }
+    ap_assert(d != NULL);
+    ap_assert(processed_image_out != NULL);
 
     dims_processed_image *image = (dims_processed_image *) apr_palloc(d->pool, sizeof(dims_processed_image)); 
     *processed_image_out = image;
