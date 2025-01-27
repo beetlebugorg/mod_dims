@@ -501,14 +501,14 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
     char *header = (char *) ptr;
     char *key = NULL, *value = NULL;
 
-    while(header < (start + realsize)) {
+    while (header < (start + realsize)) {
         if(*header == ':') {
             key = apr_pstrndup(d->pool, start, header - start);
             while(*header == ' ') {
                 header++;
             }
-            value = apr_pstrndup(d->pool, header, start + realsize - header - 2);
-            header = start + realsize;
+            value = apr_pstrndup(d->pool, header + 1, start + realsize - header - 3);
+            header = start + realsize - 1;
         }
         header++;
     }
@@ -966,12 +966,7 @@ dims_send_image(dims_request_rec *d)
     if(d->last_modified) {
         /* Why does the raw header have a ": " prefix? Not sure but this logic removes it */
         char *last_modified = d->last_modified;
-        const char *prefix = ": ";
-        size_t prefix_len = strlen(prefix);
-        if (strncmp(last_modified, prefix, prefix_len) == 0) {
-            memmove(last_modified, last_modified + prefix_len, strlen(last_modified) - prefix_len + 1);
-        }
-        apr_table_set(d->r->headers_out, "Last-Modified", last_modified);
+        apr_table_set(d->r->headers_out, "Last-Modified", d->last_modified);
     }
 
     MagickSizeType image_size = 0;
