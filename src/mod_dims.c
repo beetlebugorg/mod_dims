@@ -964,8 +964,6 @@ dims_send_image(dims_request_rec *d)
     }
 
     if(d->last_modified) {
-        /* Why does the raw header have a ": " prefix? Not sure but this logic removes it */
-        char *last_modified = d->last_modified;
         apr_table_set(d->r->headers_out, "Last-Modified", d->last_modified);
     }
 
