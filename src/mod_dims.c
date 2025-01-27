@@ -957,13 +957,21 @@ dims_send_image(dims_request_rec *d)
     if (d->etag) {
         etag = ap_md5(d->pool,
                 (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->etag, NULL));
-    } else if (d->last_modified) {
-        etag = ap_md5(d->pool,
-                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->last_modified, NULL));
     }
 
     if (etag) {
         apr_table_set(d->r->headers_out, "ETag", etag);
+    }
+
+    if(d->last_modified) {
+        /* Why does the raw header have a ": " prefix? Not sure but this logic removes it */
+        char *last_modified = d->last_modified;
+        const char *prefix = ": ";
+        size_t prefix_len = strlen(prefix);
+        if (strncmp(last_modified, prefix, prefix_len) == 0) {
+            memmove(last_modified, last_modified + prefix_len, strlen(last_modified) - prefix_len + 1);
+        }
+        apr_table_set(d->r->headers_out, "Last-Modified", last_modified);
     }
 
     MagickSizeType image_size = 0;
