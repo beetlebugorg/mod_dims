@@ -501,14 +501,14 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
     char *header = (char *) ptr;
     char *key = NULL, *value = NULL;
 
-    while(header < (start + realsize)) {
+    while (header < (start + realsize)) {
         if(*header == ':') {
             key = apr_pstrndup(d->pool, start, header - start);
             while(*header == ' ') {
                 header++;
             }
-            value = apr_pstrndup(d->pool, header, start + realsize - header - 2);
-            header = start + realsize;
+            value = apr_pstrndup(d->pool, header + 1, start + realsize - header - 3);
+            header = start + realsize - 1;
         }
         header++;
     }
@@ -957,13 +957,14 @@ dims_send_image(dims_request_rec *d)
     if (d->etag) {
         etag = ap_md5(d->pool,
                 (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->etag, NULL));
-    } else if (d->last_modified) {
-        etag = ap_md5(d->pool,
-                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->last_modified, NULL));
     }
 
     if (etag) {
         apr_table_set(d->r->headers_out, "ETag", etag);
+    }
+
+    if(d->last_modified) {
+        apr_table_set(d->r->headers_out, "Last-Modified", d->last_modified);
     }
 
     MagickSizeType image_size = 0;
