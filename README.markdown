@@ -90,6 +90,53 @@ Encrypted `eurl` recommendations:
     DimsEncryptionAlgorithm AES/GCM/NoPadding
     DimsAllowLegacyEcb false
 
+Backward Compatibility & Migration
+==================================
+
+Are the behavior changes good?
+
+Yes for security. The stricter defaults reduce risk from weak crypto usage, unsafe URL handling, oversized downloads, and redirect abuse.
+
+What remains backward compatible:
+
+* `/dims3/` and `/dims4/` URL formats.
+* `dims4` signature verification using `legacy-md5` by default.
+
+What can break older clients:
+
+* Legacy encrypted URLs (`eurl`) that rely on ECB now fail unless explicitly enabled.
+* Remote fetches now enforce scheme allowlist, download size limits, and redirect limits.
+
+Legacy compatibility profile (temporary migration mode):
+
+    DimsSignatureAlgorithm legacy-md5
+    DimsStrictValidation false
+    DimsEncryptionAlgorithm AES/ECB/PKCS5Padding
+    DimsAllowLegacyEcb true
+    DimsAllowedFetchSchemes http,https
+    DimsMaxDownloadBytes 268435456
+    DimsMaxRedirects 10
+
+Recommended hardened profile:
+
+    DimsSignatureAlgorithm hmac-sha256
+    DimsStrictValidation true
+    DimsEncryptionAlgorithm AES/GCM/NoPadding
+    DimsAllowLegacyEcb false
+    DimsAllowedFetchSchemes http,https
+    DimsMaxDownloadBytes 67108864
+    DimsMaxRedirects 5
+    DimsConnectTimeout 1000
+    DimsLogSensitiveData false
+
+Suggested rollout:
+
+1. Start with legacy profile to keep traffic stable.
+2. Migrate clients from ECB `eurl` to AES-GCM.
+3. Move `dims4` callers to `hmac-sha256`.
+4. Enable strict validation.
+5. Switch to hardened profile and remove legacy ECB support.
+
 Errors
 ======
 
