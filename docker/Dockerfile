@@ -2,10 +2,11 @@ ARG HTTPD_VERSION=2.4.52
 
 FROM httpd:${HTTPD_VERSION} as build-mod-dims
 
-ARG DIMS_VERSION=3.3.26
-ARG IMAGEMAGICK_VERSION=6.9.12-34
-ARG WEBP_VERSION=1.2.1
-ARG TIFF_VERSION=4.3.0
+ARG DIMS_VERSION=3.3.31
+ARG IMAGEMAGICK_VERSION=7.1.2-13
+ARG WEBP_VERSION=1.6.0
+ARG TIFF_VERSION=4.7.1
+ARG CURL_VERSION=8.17.0
 ARG PREFIX=/usr/local/imagemagick
 
 WORKDIR /build
@@ -43,11 +44,11 @@ RUN wget https://download.imagemagick.org/ImageMagick/download/releases/ImageMag
     make -j4 && make install
 
 # libcurl
-RUN wget https://curl.se/download/curl-7.87.0.tar.xz && \
+RUN wget https://curl.se/download/curl-${CURL_VERSION}.tar.xz && \
     export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig && \
-    tar xvf curl-7.87.0.tar.xz && \
-    cd curl-7.87.0 && \
-    ./configure --with-openssl --prefix=$PREFIX && \
+    tar xvf curl-${CURL_VERSION}.tar.xz && \
+    cd curl-${CURL_VERSION} && \
+    ./configure --with-openssl --without-libpsl --prefix=$PREFIX && \
     make -j4 && make install
 
 RUN apt-get --no-install-recommends install -y apt-transport-https apt-utils \
@@ -68,7 +69,14 @@ RUN export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig && \
 FROM httpd:${HTTPD_VERSION}
 
 ENV DIMS_DOWNLOAD_TIMEOUT=60000
+ENV DIMS_CONNECT_TIMEOUT=1000
 ENV DIMS_IMAGEMAGICK_TIMEOUT=20000
+ENV DIMS_MAX_DOWNLOAD_BYTES=67108864
+ENV DIMS_MAX_REDIRECTS=5
+ENV DIMS_ALLOWED_FETCH_SCHEMES="http,https"
+ENV DIMS_LOG_SENSITIVE_DATA="false"
+ENV DIMS_ALLOW_LEGACY_ECB="false"
+ENV DIMS_ENCRYPTION_ALGORITHM="AES/GCM/NoPadding"
 ENV DIMS_CLIENT=development
 ENV DIMS_NO_IMAGE_URL="http://placehold.it/350x150"
 ENV DIMS_DEFAULT_IMAGE_URL="http://placehold.it/350x150"
@@ -78,6 +86,8 @@ ENV DIMS_TRUST_SOURCE=true
 ENV DIMS_MIN_SOURCE_CACHE=604800
 ENV DIMS_MAX_SOURCE_CACHE=604800
 ENV DIMS_SECRET=""
+ENV DIMS_SIGNATURE_ALGORITHM="legacy-md5"
+ENV DIMS_STRICT_VALIDATION="false"
 ENV DIMS_CACHE_EXPIRE=604800
 ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
 ENV LC_ALL="C"

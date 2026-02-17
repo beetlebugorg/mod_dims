@@ -8,9 +8,46 @@ AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 
-# Check for ImageMagick
-PKG_CHECK_MODULES(MagickCore, MagickCore)
-PKG_CHECK_MODULES(MagickWand, MagickWand)
+# Check for ImageMagick (support both IM6 and IM7 pkg-config names)
+PKG_CHECK_MODULES([MagickCore], [MagickCore], [], [
+  PKG_CHECK_MODULES([MagickCore], [MagickCore-7.Q16HDRI], [], [
+    PKG_CHECK_MODULES([MagickCore], [MagickCore-7.Q16], [], [
+      PKG_CHECK_MODULES([MagickCore], [MagickCore-7.Q8HDRI], [], [
+        PKG_CHECK_MODULES([MagickCore], [MagickCore-7.Q8], [], [
+          PKG_CHECK_MODULES([MagickCore], [MagickCore-6.Q16HDRI], [], [
+            PKG_CHECK_MODULES([MagickCore], [MagickCore-6.Q16], [], [
+              PKG_CHECK_MODULES([MagickCore], [MagickCore-6.Q8HDRI], [], [
+                PKG_CHECK_MODULES([MagickCore], [MagickCore-6.Q8], [], [
+                  AC_MSG_ERROR([*** Could not find a supported MagickCore pkg-config package!])
+                ])
+              ])
+            ])
+          ])
+        ])
+      ])
+    ])
+  ])
+])
+
+PKG_CHECK_MODULES([MagickWand], [MagickWand], [], [
+  PKG_CHECK_MODULES([MagickWand], [MagickWand-7.Q16HDRI], [], [
+    PKG_CHECK_MODULES([MagickWand], [MagickWand-7.Q16], [], [
+      PKG_CHECK_MODULES([MagickWand], [MagickWand-7.Q8HDRI], [], [
+        PKG_CHECK_MODULES([MagickWand], [MagickWand-7.Q8], [], [
+          PKG_CHECK_MODULES([MagickWand], [MagickWand-6.Q16HDRI], [], [
+            PKG_CHECK_MODULES([MagickWand], [MagickWand-6.Q16], [], [
+              PKG_CHECK_MODULES([MagickWand], [MagickWand-6.Q8HDRI], [], [
+                PKG_CHECK_MODULES([MagickWand], [MagickWand-6.Q8], [], [
+                  AC_MSG_ERROR([*** Could not find a supported MagickWand pkg-config package!])
+                ])
+              ])
+            ])
+          ])
+        ])
+      ])
+    ])
+  ])
+])
 PKG_CHECK_MODULES(libcurl, libcurl)
 
 AC_CONFIG_MACRO_DIRS([m4])
@@ -45,4 +82,3 @@ AC_CHECK_FUNCS([memset sqrt strstr])
 
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
-

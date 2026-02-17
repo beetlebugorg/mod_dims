@@ -21,8 +21,17 @@
 #include <openssl/sha.h>
 #include <stdio.h>
 #include <paths.h>
+#include <errno.h>
 
-#include <magick/exception.h>
+#if defined(__has_include)
+#  if __has_include(<MagickCore/exception.h>)
+#    include <MagickCore/exception.h>
+#  elif __has_include(<magick/exception.h>)
+#    include <magick/exception.h>
+#  endif
+#else
+#  include <magick/exception.h>
+#endif
 
 #define MAGICK_CHECK(func, rec) \
     do { \
@@ -51,6 +60,30 @@ static DimsGravity gravities[] = {
     {"c", CenterGravity},
     {NULL, CenterGravity}
 };
+
+static int
+dims_ops_parse_double_value(const char *arg, double min_value, double max_value, double *result)
+{
+    char *end = NULL;
+    double value;
+
+    if (arg == NULL || *arg == '\0' || result == NULL) {
+        return 0;
+    }
+
+    errno = 0;
+    value = strtod(arg, &end);
+    if (errno != 0 || end == arg || *end != '\0') {
+        return 0;
+    }
+
+    if (value < min_value || value > max_value) {
+        return 0;
+    }
+
+    *result = value;
+    return 1;
+}
 
 /*
 apr_status_t
@@ -98,7 +131,7 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    flags = ParseAbsoluteGeometry(args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
         return DIMS_FAILURE;
@@ -154,7 +187,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     RectangleInfo rec;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = ParseAbsoluteGeometry(resize_args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -287,7 +320,13 @@ dims_flipflop_operation (dims_request_rec *d, char *args, char **err) {
 
 apr_status_t
 dims_sepia_operation (dims_request_rec *d, char *args, char **err) {
-    double threshold = atof(args);
+    double threshold = 0.8;
+
+    if (args != NULL && *args != '\0' &&
+        !dims_ops_parse_double_value(args, 0.0, 1.0, &threshold)) {
+        *err = "Invalid sepia threshold";
+        return DIMS_FAILURE;
+    }
 
     MAGICK_CHECK(MagickSepiaToneImage(d->wand, threshold * QuantumRange), d);
 
@@ -332,7 +371,12 @@ dims_invert_operation (dims_request_rec *d, char *args, char **err) {
 
 apr_status_t
 dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
-    double degrees = atof(args);
+    double degrees = 0;
+
+    if (!dims_ops_parse_double_value(args, -3600.0, 3600.0, &degrees)) {
+        *err = "Invalid rotate value";
+        return DIMS_FAILURE;
+    }
 
     PixelWand *pxWand = NewPixelWand();
     MAGICK_CHECK(MagickRotateImage(d->wand, pxWand, degrees), d);
@@ -351,6 +395,9 @@ apr_status_t
 dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     MagickWand *overlay_wand = NewMagickWand();
     char *overlay_url = NULL;
+    float opacity = 0.2f;
+    double size = 0.5;
+    GravityType gravity = SouthEastGravity;
 
     if (d->r->args) {
         const size_t args_len = strlen(d->r->args) + 1;
@@ -360,7 +407,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
         token = apr_strtok(args, "&", &strtokstate);
         while (token) {
-            if (strncmp(token, "overlay=", 4) == 0) {
+            if (strncmp(token, "overlay=", 8) == 0) {
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
                 overlay_url = apr_pstrdup(d->r->pool, token + 8);
                 ap_unescape_url(overlay_url);
@@ -376,6 +423,10 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
     apr_finfo_t finfo;
     char *filename = strrchr(overlay_url, '/' );
+    if (filename == NULL) {
+        *err = "Invalid overlay URL!";
+        return DIMS_FAILURE;
+    }
 
     if (*filename == '/') {
         ++filename;
@@ -383,7 +434,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
 
     // Hash filename via SHA-1.
     unsigned char hash[SHA_DIGEST_LENGTH];
-    SHA1(filename, sizeof(filename), hash);
+    SHA1((unsigned char *) filename, strlen(filename), hash);
 
     // Convert to hex.
     char hex[SHA_DIGEST_LENGTH * 2 + 1];
@@ -426,6 +477,10 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     } else {
         dims_image_data_t image_data;
         CURLcode code = dims_get_image_data(d, overlay_url, &image_data);
+        if (code != CURLE_OK) {
+            *err = "Unable to download overlay image";
+            return DIMS_FAILURE;
+        }
 
         if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
             if (image_data.data) {
@@ -456,23 +511,28 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         free(image_data.data);
     }
 
-    float opacity;
-    double size;
-    GravityType gravity;
+    char *watermark_args = apr_pstrdup(d->pool, args ? args : "");
+    char *token_state = NULL;
+    char *token = apr_strtok(watermark_args, ",", &token_state);
 
-    char *token = strtok(args, ",");
-
-    if (token) {
-        opacity = atof(token);
+    if (token && *token != '\0') {
+        double parsed_opacity = 0;
+        if (!dims_ops_parse_double_value(token, 0.0, 1.0, &parsed_opacity)) {
+            *err = "Invalid watermark opacity";
+            return DIMS_FAILURE;
+        }
+        opacity = parsed_opacity;
     }
 
-    token = strtok(NULL, ",");
-
-    if (token) {
-        size = atof(token);
+    token = apr_strtok(NULL, ",", &token_state);
+    if (token && *token != '\0') {
+        if (!dims_ops_parse_double_value(token, 0.01, 2.0, &size)) {
+            *err = "Invalid watermark size";
+            return DIMS_FAILURE;
+        }
     }
 
-    token = strtok(NULL, ",");
+    token = apr_strtok(NULL, ",", &token_state);
     if (token) {
         DimsGravity *gravity_ptr = gravities;
         while (gravity_ptr->name != NULL) {
@@ -482,6 +542,11 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
             }
 
             gravity_ptr++;
+        }
+
+        if (gravity_ptr->name == NULL) {
+            *err = "Invalid watermark gravity";
+            return DIMS_FAILURE;
         }
     }
 
@@ -582,7 +647,7 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
     int x, y;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = ParseAbsoluteGeometry(resize_args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -622,4 +687,3 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 
     return DIMS_SUCCESS;
 }
-

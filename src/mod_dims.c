@@ -42,10 +42,16 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include <scoreboard.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
+#include <openssl/hmac.h>
 #include <openssl/err.h>
 
 #include <curl/curl.h>
@@ -53,6 +59,9 @@
 module dims_module; 
 
 #define DIMS_CURL_SHARED_KEY "dims_curl_shared"
+#define DIMS_DEFAULT_CONNECT_TIMEOUT 1000
+#define DIMS_DEFAULT_MAX_DOWNLOAD_BYTES (64L * 1024L * 1024L)
+#define DIMS_DEFAULT_MAX_REDIRECTS 5
 
 #define MAGICK_CHECK(func, d) \
     do {\
@@ -87,6 +96,339 @@ dims_stats_rec *stats;
 apr_shm_t *shm;
 apr_hash_t *ops;
 
+static int
+dims_parse_long_value(const char *arg, long min_value, long max_value, long *result)
+{
+    char *end = NULL;
+    long value;
+
+    if (arg == NULL || *arg == '\0' || result == NULL) {
+        return 0;
+    }
+
+    errno = 0;
+    value = strtol(arg, &end, 10);
+
+    if (errno != 0 || end == arg || *end != '\0') {
+        return 0;
+    }
+
+    if (value < min_value || value > max_value) {
+        return 0;
+    }
+
+    *result = value;
+    return 1;
+}
+
+static int
+dims_parse_double_value(const char *arg, double min_value, double max_value, double *result)
+{
+    char *end = NULL;
+    double value;
+
+    if (arg == NULL || *arg == '\0' || result == NULL) {
+        return 0;
+    }
+
+    errno = 0;
+    value = strtod(arg, &end);
+
+    if (errno != 0 || end == arg || *end != '\0') {
+        return 0;
+    }
+
+    if (value < min_value || value > max_value) {
+        return 0;
+    }
+
+    *result = value;
+    return 1;
+}
+
+static int
+dims_parse_bool_value(const char *arg, int *result)
+{
+    if (arg == NULL || result == NULL) {
+        return 0;
+    }
+
+    if (strcasecmp(arg, "true") == 0 || strcmp(arg, "1") == 0) {
+        *result = 1;
+        return 1;
+    }
+
+    if (strcasecmp(arg, "false") == 0 || strcmp(arg, "0") == 0) {
+        *result = 0;
+        return 1;
+    }
+
+    return 0;
+}
+
+static int
+dims_is_signature_algorithm_supported(const char *algorithm)
+{
+    if (algorithm == NULL) {
+        return 0;
+    }
+
+    return strcmp(algorithm, DIMS_SIGNATURE_ALGORITHM_LEGACY_MD5) == 0 ||
+        strcmp(algorithm, DIMS_SIGNATURE_ALGORITHM_HMAC_SHA256) == 0;
+}
+
+static int
+dims_is_supported_fetch_scheme(const char *scheme, size_t length)
+{
+    if (scheme == NULL || length == 0) {
+        return 0;
+    }
+
+    return (length == 4 && strncasecmp(scheme, "http", 4) == 0) ||
+        (length == 5 && strncasecmp(scheme, "https", 5) == 0);
+}
+
+static int
+dims_are_fetch_schemes_valid(const char *schemes)
+{
+    const char *cursor = schemes;
+    int seen_scheme = 0;
+
+    if (schemes == NULL || *schemes == '\0') {
+        return 0;
+    }
+
+    while (*cursor != '\0') {
+        const char *start;
+        size_t length;
+
+        while (*cursor == ',' || apr_isspace(*cursor)) {
+            cursor++;
+        }
+
+        if (*cursor == '\0') {
+            break;
+        }
+
+        start = cursor;
+        while (*cursor != '\0' && *cursor != ',' && !apr_isspace(*cursor)) {
+            cursor++;
+        }
+        length = (size_t) (cursor - start);
+
+        if (!dims_is_supported_fetch_scheme(start, length)) {
+            return 0;
+        }
+
+        seen_scheme = 1;
+    }
+
+    return seen_scheme;
+}
+
+static int
+dims_is_fetch_scheme_allowed(const char *allowed_schemes, const char *scheme)
+{
+    const char *cursor = allowed_schemes;
+    size_t scheme_length;
+
+    if (scheme == NULL || *scheme == '\0' ||
+        allowed_schemes == NULL || *allowed_schemes == '\0') {
+        return 0;
+    }
+
+    scheme_length = strlen(scheme);
+    while (*cursor != '\0') {
+        const char *start;
+        size_t length;
+
+        while (*cursor == ',' || apr_isspace(*cursor)) {
+            cursor++;
+        }
+
+        if (*cursor == '\0') {
+            break;
+        }
+
+        start = cursor;
+        while (*cursor != '\0' && *cursor != ',' && !apr_isspace(*cursor)) {
+            cursor++;
+        }
+        length = (size_t) (cursor - start);
+
+        if (length == scheme_length && strncasecmp(start, scheme, length) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int
+dims_build_curl_protocol_mask(const char *schemes, long *protocol_mask)
+{
+    const char *cursor = schemes;
+    long mask = 0;
+    int seen_scheme = 0;
+
+    if (protocol_mask == NULL || schemes == NULL || *schemes == '\0') {
+        return 0;
+    }
+
+    while (*cursor != '\0') {
+        const char *start;
+        size_t length;
+
+        while (*cursor == ',' || apr_isspace(*cursor)) {
+            cursor++;
+        }
+
+        if (*cursor == '\0') {
+            break;
+        }
+
+        start = cursor;
+        while (*cursor != '\0' && *cursor != ',' && !apr_isspace(*cursor)) {
+            cursor++;
+        }
+        length = (size_t) (cursor - start);
+
+        if (length == 4 && strncasecmp(start, "http", 4) == 0) {
+            mask |= CURLPROTO_HTTP;
+        } else if (length == 5 && strncasecmp(start, "https", 5) == 0) {
+            mask |= CURLPROTO_HTTPS;
+        } else {
+            return 0;
+        }
+
+        seen_scheme = 1;
+    }
+
+    if (!seen_scheme) {
+        return 0;
+    }
+
+    *protocol_mask = mask;
+    return 1;
+}
+
+static int
+dims_derive_aes128_key(const char *secret, unsigned char key[16])
+{
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+
+    if (secret == NULL || key == NULL) {
+        return 0;
+    }
+
+    SHA256((const unsigned char *) secret, strlen(secret), hash);
+    memcpy(key, hash, 16);
+
+    return 1;
+}
+
+static int
+dims_parse_legacy_dims_segments(apr_pool_t *pool, const char *uri,
+                                char **appid, char **bitmap, char **width,
+                                char **height, char **quality)
+{
+    const char *cursor;
+
+    if (pool == NULL || uri == NULL || appid == NULL || bitmap == NULL ||
+        width == NULL || height == NULL || quality == NULL ||
+        strncmp(uri, "/dims/", 6) != 0) {
+        return 0;
+    }
+
+    cursor = uri + 6;
+    *appid = ap_getword(pool, &cursor, '/');
+    *bitmap = ap_getword(pool, &cursor, '/');
+    *width = ap_getword(pool, &cursor, '/');
+    *height = ap_getword(pool, &cursor, '/');
+    *quality = ap_getword(pool, &cursor, '/');
+
+    if (**appid == '\0' || **bitmap == '\0' || **width == '\0' ||
+        **height == '\0' || **quality == '\0') {
+        return 0;
+    }
+
+    if (strlen(*appid) > 49 || strlen(*bitmap) > 9 || strlen(*width) > 9 ||
+        strlen(*height) > 9 || strlen(*quality) > 9) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static char *
+dims_hmac_sha256(apr_pool_t *pool, const char *secret, const char *payload)
+{
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digest_length = 0;
+    int i;
+    char *hex;
+
+    if (pool == NULL || secret == NULL || payload == NULL) {
+        return NULL;
+    }
+
+    if (HMAC(EVP_sha256(),
+             secret,
+             (int) strlen(secret),
+             (const unsigned char *) payload,
+             strlen(payload),
+             digest,
+             &digest_length) == NULL) {
+        return NULL;
+    }
+
+    hex = apr_palloc(pool, (digest_length * 2) + 1);
+    for (i = 0; i < (int) digest_length; i++) {
+        apr_snprintf(hex + (i * 2), 3, "%02x", digest[i]);
+    }
+    hex[digest_length * 2] = '\0';
+
+    return hex;
+}
+
+static apr_hash_t *
+dims_parse_query_params(apr_pool_t *pool, const char *query)
+{
+    apr_hash_t *params = apr_hash_make(pool);
+    char *args;
+    char *token;
+    char *state;
+
+    if (params == NULL || query == NULL || *query == '\0') {
+        return params;
+    }
+
+    args = apr_pstrdup(pool, query);
+    token = apr_strtok(args, "&", &state);
+
+    while (token != NULL) {
+        char *separator = strchr(token, '=');
+        char *key = token;
+        char *value = "";
+
+        if (separator != NULL) {
+            *separator = '\0';
+            value = separator + 1;
+        }
+
+        if (*key != '\0') {
+            apr_hash_set(params,
+                         apr_pstrdup(pool, key),
+                         APR_HASH_KEY_STRING,
+                         apr_pstrdup(pool, value));
+        }
+
+        token = apr_strtok(NULL, "&", &state);
+    }
+
+    return params;
+}
+
 static void *
 dims_create_config(apr_pool_t *p, server_rec *s)
 {
@@ -99,6 +441,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
 
     config->download_timeout = 3000;
     config->imagemagick_timeout = 3000;
+    config->connect_timeout = DIMS_DEFAULT_CONNECT_TIMEOUT;
 
     config->no_image_url = NULL;
     config->no_image_expire = 60;
@@ -109,6 +452,11 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->strip_metadata = 1;
     config->optimize_resize = 0;
     config->disable_encoded_fetch = 0;
+    config->max_download_bytes = DIMS_DEFAULT_MAX_DOWNLOAD_BYTES;
+    config->max_redirects = DIMS_DEFAULT_MAX_REDIRECTS;
+    config->allowed_fetch_schemes = apr_pstrdup(p, "http,https");
+    config->log_sensitive_data = 0;
+    config->allow_legacy_ecb = 0;
     config->default_output_format = NULL;
 
     config->area_size = 128 * 1024 * 1024;         //  128mb max.
@@ -119,7 +467,9 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->curl_queue_size = 10;
     config->cache_dir = NULL;
     config->secret_key = apr_pstrdup(p,"m0d1ms");
-    config->encryption_algorithm = "AES/ECB/PKCS5Padding";
+    config->encryption_algorithm = "AES/GCM/NoPadding";
+    config->signature_algorithm = DIMS_SIGNATURE_ALGORITHM_LEGACY_MD5;
+    config->strict_validation = 0;
     config->max_expiry_period= 0; // never expire
 
     return (void *) config;
@@ -176,7 +526,13 @@ dims_config_set_default_expire(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->default_expire = atol(arg);
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 0, LONG_MAX, &value)) {
+        return "DimsCacheExpire must be a non-negative integer.";
+    }
+
+    config->default_expire = value;
     return NULL;
 }
 
@@ -185,7 +541,13 @@ dims_config_set_no_image_expire(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->no_image_expire = atol(arg);
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 0, LONG_MAX, &value)) {
+        return "DimsNoImageCacheExpire must be a non-negative integer.";
+    }
+
+    config->no_image_expire = value;
     return NULL;
 }
 
@@ -194,7 +556,13 @@ dims_config_set_download_timeout(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->download_timeout = atol(arg);
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 1, LONG_MAX, &value)) {
+        return "DimsDownloadTimeout must be a positive integer in milliseconds.";
+    }
+
+    config->download_timeout = value;
     return NULL;
 }
 
@@ -203,7 +571,28 @@ dims_config_set_imagemagick_timeout(cmd_parms *cmd, void *dummy, const char *arg
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->imagemagick_timeout = atol(arg);
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 1, LONG_MAX, &value)) {
+        return "DimsImagemagickTimeout must be a positive integer in milliseconds.";
+    }
+
+    config->imagemagick_timeout = value;
+    return NULL;
+}
+
+static const char *
+dims_config_set_connect_timeout(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 1, LONG_MAX, &value)) {
+        return "DimsConnectTimeout must be a positive integer in milliseconds.";
+    }
+
+    config->connect_timeout = value;
     return NULL;
 }
 
@@ -227,12 +616,13 @@ dims_config_set_include_disposition(cmd_parms *cmd, void *dummy, const char *arg
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    if(strcmp(arg, "true") == 0) {
-        config->include_disposition = 1;
+    int value = 0;
+
+    if (!dims_parse_bool_value(arg, &value)) {
+        return "DimsIncludeDisposition must be true/false.";
     }
-    else {
-        config->include_disposition = 0;
-    }
+
+    config->include_disposition = value;
     return NULL;
 }
 
@@ -241,7 +631,13 @@ dims_config_set_optimize_resize(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->optimize_resize = atof(arg);
+    double value = 0;
+
+    if (!dims_parse_double_value(arg, 0.0, 16.0, &value)) {
+        return "DimsOptimizeResize must be between 0.0 and 16.0.";
+    }
+
+    config->optimize_resize = value;
     return NULL;
 }
 
@@ -250,7 +646,93 @@ dims_config_set_encoded_fetch(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->disable_encoded_fetch = atoi(arg);
+    int bool_value = 0;
+    long long_value = 0;
+
+    if (dims_parse_bool_value(arg, &bool_value)) {
+        config->disable_encoded_fetch = bool_value;
+        return NULL;
+    }
+
+    if (!dims_parse_long_value(arg, 0, 1, &long_value)) {
+        return "DimsDisableEncodedFetch must be 0/1 or true/false.";
+    }
+
+    config->disable_encoded_fetch = long_value;
+    return NULL;
+}
+
+static const char *
+dims_config_set_max_download_bytes(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 1, LONG_MAX, &value)) {
+        return "DimsMaxDownloadBytes must be a positive integer in bytes.";
+    }
+
+    config->max_download_bytes = value;
+    return NULL;
+}
+
+static const char *
+dims_config_set_max_redirects(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 0, LONG_MAX, &value)) {
+        return "DimsMaxRedirects must be a non-negative integer.";
+    }
+
+    config->max_redirects = value;
+    return NULL;
+}
+
+static const char *
+dims_config_set_allowed_fetch_schemes(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+
+    if (!dims_are_fetch_schemes_valid(arg)) {
+        return "DimsAllowedFetchSchemes must contain only comma-separated values from: http,https.";
+    }
+
+    config->allowed_fetch_schemes = (char *) arg;
+    return NULL;
+}
+
+static const char *
+dims_config_set_log_sensitive_data(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    int value = 0;
+
+    if (!dims_parse_bool_value(arg, &value)) {
+        return "DimsLogSensitiveData must be true/false.";
+    }
+
+    config->log_sensitive_data = value;
+    return NULL;
+}
+
+static const char *
+dims_config_set_allow_legacy_ecb(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    int value = 0;
+
+    if (!dims_parse_bool_value(arg, &value)) {
+        return "DimsAllowLegacyEcb must be true/false.";
+    }
+
+    config->allow_legacy_ecb = value;
     return NULL;
 }
 
@@ -259,7 +741,42 @@ dims_config_set_encryption_algorithm(cmd_parms *cmd, void *dummy, const char *ar
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
+
+    if (strcmp(arg, "AES/ECB/PKCS5Padding") != 0 &&
+        strcmp(arg, "AES/GCM/NoPadding") != 0) {
+        return "DimsEncryptionAlgorithm must be AES/ECB/PKCS5Padding or AES/GCM/NoPadding.";
+    }
+
     config->encryption_algorithm = (char *) arg;
+    return NULL;
+}
+
+static const char *
+dims_config_set_signature_algorithm(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+
+    if (!dims_is_signature_algorithm_supported(arg)) {
+        return "DimsSignatureAlgorithm must be legacy-md5 or hmac-sha256.";
+    }
+
+    config->signature_algorithm = (char *) arg;
+    return NULL;
+}
+
+static const char *
+dims_config_set_strict_validation(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    int value = 0;
+
+    if (!dims_parse_bool_value(arg, &value)) {
+        return "DimsStrictValidation must be true/false.";
+    }
+
+    config->strict_validation = value;
     return NULL;
 }
 
@@ -290,12 +807,11 @@ dims_config_set_user_agent_enabled(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    if(strcmp(arg, "true") == 0) {
-        config->user_agent_enabled = 1;
+
+    if (!dims_parse_bool_value(arg, &config->user_agent_enabled)) {
+        return "DimsUserAgentEnabled must be true/false.";
     }
-    else {
-        config->user_agent_enabled = 0;
-    }
+
     return NULL;
 }
 
@@ -332,22 +848,24 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
                 }
             case 7:
                 if(strcmp(argv[6], "-") != 0) {
-                    if(atoi(argv[6]) <= 0 && strcmp(argv[6], "0") != 0) {
+                    long value = 0;
+                    if(!dims_parse_long_value(argv[6], 0, LONG_MAX, &value)) {
                         // erroneous value
                         client_config->max_src_cache_control = -2;
                     }
                     else {
-                        client_config->max_src_cache_control = atoi(argv[6]);
+                        client_config->max_src_cache_control = value;
                     }
                 }
             case 6:
                 if(strcmp(argv[5], "-") != 0) {
-                    if(atoi(argv[5]) <= 0 && strcmp(argv[5], "0") != 0) {
+                    long value = 0;
+                    if(!dims_parse_long_value(argv[5], 0, LONG_MAX, &value)) {
                         // erroneous value
                         client_config->min_src_cache_control = -2;
                     }
                     else {
-                        client_config->min_src_cache_control = atoi(argv[5]);
+                        client_config->min_src_cache_control = value;
                     }
                 }
             case 5:
@@ -356,11 +874,17 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
                 }
             case 4:
                 if(strcmp(argv[3], "-") != 0) {
-                    client_config->edge_control_downstream_ttl = atoi(argv[3]);
+                    long value = 0;
+                    if (dims_parse_long_value(argv[3], 0, LONG_MAX, &value)) {
+                        client_config->edge_control_downstream_ttl = value;
+                    }
                 }
             case 3:
                 if(strcmp(argv[2], "-") != 0) {
-                    client_config->cache_control_max_age = atoi(argv[2]);
+                    long value = 0;
+                    if (dims_parse_long_value(argv[2], 0, LONG_MAX, &value)) {
+                        client_config->cache_control_max_age = value;
+                    }
                 }
             case 2:
                 if(strcmp(argv[1], "-") != 0) {
@@ -405,7 +929,13 @@ dims_config_set_imagemagick_disk_size(cmd_parms *cmd, void *dummy, const char *a
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->disk_size = atol(arg) * 1024 * 1024;
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 1, LONG_MAX / (1024 * 1024), &value)) {
+        return "DimsImagemagickDiskSize must be a positive integer in megabytes.";
+    }
+
+    config->disk_size = value * 1024 * 1024;
     
     return NULL;
 }
@@ -414,7 +944,13 @@ dims_config_set_secretkeyExpiryPeriod(cmd_parms *cmd, void *dummy, const char *a
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->max_expiry_period = atol(arg);
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 0, LONG_MAX, &value)) {
+        return "DimsSecretMaxExpiryPeriod must be a non-negative integer in seconds.";
+    }
+
+    config->max_expiry_period = value;
     return NULL;
 }
 static const char *
@@ -422,7 +958,13 @@ dims_config_set_imagemagick_area_size(cmd_parms *cmd, void *dummy, const char *a
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->area_size = atol(arg) * 1024 * 1024;
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 1, LONG_MAX / (1024 * 1024), &value)) {
+        return "DimsImagemagickAreaSize must be a positive integer in megabytes.";
+    }
+
+    config->area_size = value * 1024 * 1024;
     return NULL;
 }
 
@@ -431,7 +973,13 @@ dims_config_set_imagemagick_map_size(cmd_parms *cmd, void *dummy, const char *ar
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->map_size = atol(arg) * 1024 * 1024;
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 1, LONG_MAX / (1024 * 1024), &value)) {
+        return "DimsImagemagickMapSize must be a positive integer in megabytes.";
+    }
+
+    config->map_size = value * 1024 * 1024;
     return NULL;
 }
 
@@ -440,7 +988,13 @@ dims_config_set_imagemagick_memory_size(cmd_parms *cmd, void *dummy, const char 
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->memory_size = atol(arg) * 1024 * 1024;
+    long value = 0;
+
+    if (!dims_parse_long_value(arg, 1, LONG_MAX / (1024 * 1024), &value)) {
+        return "DimsImagemagickMemorySize must be a positive integer in megabytes.";
+    }
+
+    config->memory_size = value * 1024 * 1024;
     return NULL;
 }
 
@@ -476,18 +1030,63 @@ static size_t
 dims_write_image_cb(void *ptr, size_t size, size_t nmemb, void *data)
 {
     dims_image_data_t *mem = (dims_image_data_t *) data;
-    size_t realsize = size * nmemb;
+    size_t realsize;
+    size_t needed;
+    size_t allocated;
+    size_t new_size;
+    char *new_data;
 
-    /* Allocate more memory if needed. */
-    if(mem->size - mem->used <= realsize) {
-        mem->size = mem->size == 0 ? realsize : (mem->size + realsize) * 1.25;
-        mem->data = (char *) realloc(mem->data, mem->size);
+    if (mem == NULL) {
+        return 0;
     }
 
-    if (mem->data) {
-        memcpy(&(mem->data[mem->used]), ptr, realsize);
-        mem->used += realsize;
+    if (size != 0 && nmemb > SIZE_MAX / size) {
+        mem->truncated = 1;
+        return 0;
     }
+    realsize = size * nmemb;
+
+    if (realsize == 0) {
+        return 0;
+    }
+
+    if (mem->max_size > 0 &&
+        (mem->used >= mem->max_size || realsize > (mem->max_size - mem->used))) {
+        mem->truncated = 1;
+        mem->too_large = 1;
+        return 0;
+    }
+
+    needed = mem->used + realsize;
+    if (needed == SIZE_MAX) {
+        mem->truncated = 1;
+        return 0;
+    }
+    allocated = needed + 1;
+
+    if (mem->size < allocated) {
+        new_size = mem->size > 0 ? mem->size : 8192;
+        while (new_size < allocated) {
+            if (new_size > SIZE_MAX / 2) {
+                new_size = allocated;
+                break;
+            }
+            new_size *= 2;
+        }
+
+        new_data = (char *) realloc(mem->data, new_size);
+        if (new_data == NULL) {
+            mem->truncated = 1;
+            return 0;
+        }
+
+        mem->data = new_data;
+        mem->size = new_size;
+    }
+
+    memcpy(&(mem->data[mem->used]), ptr, realsize);
+    mem->used += realsize;
+    mem->data[mem->used] = '\0';
 
     return realsize;
 }
@@ -496,30 +1095,61 @@ static size_t
 dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
 {
     dims_request_rec *d = (dims_request_rec *) data;
-    size_t realsize = size * nmemb;
-    char *start = (char *) ptr;
-    char *header = (char *) ptr;
-    char *key = NULL, *value = NULL;
+    size_t realsize;
+    char *line = NULL;
+    char *separator = NULL;
+    char *key = NULL;
+    char *value = NULL;
+    size_t line_length;
 
-    while (header < (start + realsize)) {
-        if(*header == ':') {
-            key = apr_pstrndup(d->pool, start, header - start);
-            while(*header == ' ') {
-                header++;
-            }
-            value = apr_pstrndup(d->pool, header + 1, start + realsize - header - 3);
-            header = start + realsize - 1;
-        }
-        header++;
+    if (d == NULL || ptr == NULL) {
+        return 0;
     }
 
-    if(key && value && strcmp(key, "Cache-Control") == 0) {
+    if (size != 0 && nmemb > SIZE_MAX / size) {
+        return 0;
+    }
+    realsize = size * nmemb;
+
+    if (realsize == 0) {
+        return 0;
+    }
+
+    line = apr_pstrndup(d->pool, (const char *) ptr, realsize);
+    if (line == NULL) {
+        return 0;
+    }
+
+    line_length = strlen(line);
+    while (line_length > 0 &&
+           (line[line_length - 1] == '\r' || line[line_length - 1] == '\n')) {
+        line[--line_length] = '\0';
+    }
+
+    separator = strchr(line, ':');
+    if (separator == NULL) {
+        return realsize;
+    }
+
+    *separator = '\0';
+    key = line;
+    value = separator + 1;
+
+    while (*value != '\0' && apr_isspace(*value)) {
+        value++;
+    }
+
+    if (*key == '\0' || *value == '\0') {
+        return realsize;
+    }
+
+    if (strcasecmp(key, "Cache-Control") == 0) {
         d->cache_control = value;
-    } else if(key && value && strcmp(key, "Edge-Control") == 0) {
+    } else if (strcasecmp(key, "Edge-Control") == 0) {
         d->edge_control = value;
-    } else if(key && value && strcmp(key, "Last-Modified") == 0) {
+    } else if (strcasecmp(key, "Last-Modified") == 0) {
         d->last_modified = value;
-    } else if(key && value && strcmp(key, "ETag") == 0) {
+    } else if (strcasecmp(key, "ETag") == 0) {
         d->etag = value;
     }
 
@@ -558,63 +1188,76 @@ dims_imagemagick_progress_cb(const char *text, const MagickOffsetType offset,
     return MagickTrue;
 }
 
-/* Converts a hex character to its integer value */
-char from_hex(char ch) {
-    return isdigit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
-}
-
 /* Converts an integer value to its hex character*/
-char to_hex(char code) {
+static char
+to_hex(unsigned char code)
+{
     static char hex[] = "0123456789abcdef";
     return hex[code & 15];
 }
 
 /* Returns a url-encoded version of str */
 /* IMPORTANT: be sure to free() the returned string after use */
-char *url_encode(char *str) {
-    char *pstr = str, *buf = malloc(strlen(str) * 3 + 1), *pbuf = buf;
+static char *
+url_encode(const char *str)
+{
+    const unsigned char *pstr;
+    size_t input_length;
+    char *buf;
+    char *pbuf;
+
+    if (str == NULL) {
+        return NULL;
+    }
+
+    input_length = strlen(str);
+    if (input_length > (SIZE_MAX - 1) / 3) {
+        return NULL;
+    }
+
+    pstr = (const unsigned char *) str;
+    buf = malloc((input_length * 3) + 1);
+    if (buf == NULL) {
+        return NULL;
+    }
+    pbuf = buf;
+
     while (*pstr) {
-        if (isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' || *pstr == '~' || *pstr == ':' || *pstr == '/' || *pstr == '?' || *pstr == '=' || *pstr == '&')
-            *pbuf++ = *pstr;
-        else
-            *pbuf++ = '%', *pbuf++ = to_hex(*pstr >> 4), *pbuf++ = to_hex(*pstr & 15);
+        if (apr_isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' ||
+            *pstr == '~' || *pstr == ':' || *pstr == '/' || *pstr == '?' ||
+            *pstr == '=' || *pstr == '&') {
+            *pbuf++ = (char) *pstr;
+        } else {
+            *pbuf++ = '%';
+            *pbuf++ = to_hex(*pstr >> 4);
+            *pbuf++ = to_hex(*pstr & 15);
+        }
         pstr++;
     }
+
     *pbuf = '\0';
     return buf;
-}
-
-static int
-dims_curl_debug_cb(CURL *handle,
-    curl_infotype type,
-    char *data,
-    size_t size,
-    void *clientp)
-{
-    dims_request_rec *d = (dims_request_rec *) clientp;
-    switch(type) {
-        case CURLINFO_HEADER_OUT:
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Curl request header data: %s ", data);
-            break;
-        default:
-            break;
-    }
 }
 
 CURLcode
 dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data)
 {
-    CURL *curl_handle;
-    CURLcode code;
-
+    CURL *curl_handle = NULL;
+    CURLcode code = CURLE_OK;
+    CURLcode result_code = CURLE_OK;
+    long protocol_mask = 0;
     dims_image_data_t image_data;
-    image_data.data = NULL;
-    image_data.size = 0;
-    image_data.used = 0;
     int extra_time = 0;
+    char *encoded_fetch_url = NULL;
 
     /* Allow for some extra time to download the NOIMAGE image. */
     void *s = NULL;
+
+    memset(&image_data, 0, sizeof(image_data));
+    image_data.max_size = d->config->max_download_bytes > 0 ?
+        (size_t) d->config->max_download_bytes : 0;
+    image_data.truncated = 0;
+    image_data.too_large = 0;
 
     if (d->status == DIMS_DOWNLOAD_TIMEOUT) {
         extra_time += 500;
@@ -625,22 +1268,49 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
 
     /* Encode the fetch URL before downloading */
     if (!d->config->disable_encoded_fetch) {
-        fetch_url = url_encode(fetch_url);
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
+        encoded_fetch_url = url_encode(fetch_url);
+        if (encoded_fetch_url == NULL) {
+            result_code = CURLE_OUT_OF_MEMORY;
+            goto cleanup;
+        }
+        fetch_url = encoded_fetch_url;
+
+        if (d->config->log_sensitive_data) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
+        }
+    }
+
+    if (!dims_build_curl_protocol_mask(d->config->allowed_fetch_schemes, &protocol_mask)) {
+        result_code = CURLE_UNSUPPORTED_PROTOCOL;
+        goto cleanup;
     }
 
     curl_handle = curl_easy_init();
+    if (curl_handle == NULL) {
+        result_code = CURLE_FAILED_INIT;
+        goto cleanup;
+    }
+
     curl_easy_setopt(curl_handle, CURLOPT_URL, fetch_url);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, dims_write_image_cb);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *) &image_data);
     curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, dims_write_header_cb);
     curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
+    curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT_MS, d->config->connect_timeout);
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
-    curl_easy_setopt(curl_handle, CURLOPT_DEBUGFUNCTION, dims_curl_debug_cb);
-    curl_easy_setopt(curl_handle, CURLOPT_DEBUGDATA, d);
+    curl_easy_setopt(curl_handle, CURLOPT_MAXREDIRS, d->config->max_redirects);
+    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 0L);
+#ifdef CURLOPT_PROTOCOLS_STR
+    curl_easy_setopt(curl_handle, CURLOPT_PROTOCOLS_STR, d->config->allowed_fetch_schemes);
+    curl_easy_setopt(curl_handle, CURLOPT_REDIR_PROTOCOLS_STR, d->config->allowed_fetch_schemes);
+#else
+    curl_easy_setopt(curl_handle, CURLOPT_PROTOCOLS, protocol_mask);
+    curl_easy_setopt(curl_handle, CURLOPT_REDIR_PROTOCOLS, protocol_mask);
+#endif
 
     /* Set the user agent to dims/<version> */
     if (d->config->user_agent_override != NULL && d->config->user_agent_enabled == 1) {
@@ -659,17 +1329,30 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     }
 
     code = curl_easy_perform(curl_handle);
-
-    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &image_data.response_code);
-    curl_easy_cleanup(curl_handle);
-
-    *data = image_data;
-
-    if (!d->config->disable_encoded_fetch) {
-        free(fetch_url);
+    if (code != CURLE_OK) {
+        result_code = code;
+        goto cleanup;
     }
 
-    return code;
+    curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &image_data.response_code);
+    if (image_data.truncated) {
+        result_code = CURLE_WRITE_ERROR;
+    } else {
+        result_code = CURLE_OK;
+    }
+
+cleanup:
+    *data = image_data;
+
+    if (curl_handle != NULL) {
+        curl_easy_cleanup(curl_handle);
+    }
+
+    if (encoded_fetch_url != NULL) {
+        free(encoded_fetch_url);
+    }
+
+    return result_code;
 }
 
 /**
@@ -684,8 +1367,13 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
     int extra_time = 0;
     apr_time_t start_time;
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-            "Loading image from %s", fetch_url);
+    if (d->config->log_sensitive_data) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                "Loading image from %s", fetch_url);
+    } else {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                "Loading image from upstream source");
+    }
 
     /* Allow file:/// references for NOIMAGE urls. */
     if(url == NULL && strncmp(fetch_url, "file:///", 8) == 0) {
@@ -723,9 +1411,15 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 free(image_data.data);
             }
 
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "libcurl error, '%s', on request: %s ", 
-                    curl_easy_strerror(code), d->r->uri);
+            if (image_data.too_large && d->config->max_download_bytes > 0) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                        "mod_dims error, 'Downloaded image exceeds DimsMaxDownloadBytes (%ld bytes)', on request: %s",
+                        d->config->max_download_bytes, d->r->uri);
+            } else {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                        "libcurl error, '%s', on request: %s ",
+                        curl_easy_strerror(code), d->r->uri);
+            }
 
             d->status = DIMS_FAILURE;
             d->fetch_http_status = 500;
@@ -864,7 +1558,12 @@ dims_send_image(dims_request_rec *d)
                         src_header++;
                     }
                     src_max_age_str = apr_pstrdup(d->pool, src_header);
-                    src_max_age = atoi(src_max_age_str);
+                    long parsed_src_max_age = 0;
+                    if (!dims_parse_long_value(src_max_age_str, 0, LONG_MAX, &parsed_src_max_age)) {
+                        src_max_age = 0;
+                    } else {
+                        src_max_age = parsed_src_max_age;
+                    }
                 }
                 src_header++;
             }
@@ -1331,12 +2030,24 @@ dims_handle_request(dims_request_rec *d)
     if ( d->use_secret_key == 1 ) {
         char *hash;
         char *expires_str;
-        long expires;
-        char *gen_hash;
+        long expires = 0;
+        char *gen_hash = NULL;
         long now;
+        size_t compare_length;
+        const char *secret = NULL;
+        const int using_hmac_sha256 = strcmp(d->config->signature_algorithm, DIMS_SIGNATURE_ALGORITHM_HMAC_SHA256) == 0;
+
         hash = ap_getword(d->pool, (const char**)&d->unparsed_commands,'/');
         expires_str = ap_getword(d->pool, (const char**)&d->unparsed_commands,'/');
-        expires = atol( expires_str);
+
+        if (*hash == '\0' || *expires_str == '\0') {
+            return dims_cleanup(d, "Missing signature hash or expiry", DIMS_BAD_URL);
+        }
+
+        if (!dims_parse_long_value(expires_str, 0, LONG_MAX, &expires)) {
+            return dims_cleanup(d, "Invalid image expiry", DIMS_BAD_URL);
+        }
+
         now = apr_time_sec(now_time);
         if ( expires - now < 0 ) {
             ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r, "Image expired: %s now=%ld", d->r->uri,now);
@@ -1348,23 +2059,25 @@ dims_handle_request(dims_request_rec *d)
             return dims_cleanup(d, "Image key too far in the future", DIMS_BAD_URL);
         }
 
+        if (d->client_config->secret_key == NULL || *d->client_config->secret_key == '\0') {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r,
+                "Developer key not set for client '%s'", d->client_config->id);
+            return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
+        }
+
+        secret = d->client_config->secret_key;
+        if (strlen(secret) < 16) {
+            if (d->config->strict_validation) {
+                return dims_cleanup(d, "Developer Key is too short (minimum 16 chars in strict mode)", DIMS_BAD_CLIENT);
+            }
+
+            ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, d->r,
+                "Developer key for client '%s' is shorter than recommended minimum (16).", d->client_config->id);
+        }
+
         // Throw all query params and their values into a hash table.
         // This is used to derive additional signature params.
-        apr_hash_t *params = apr_hash_make(d->pool);
-
-        if (d->r->args) {
-            const size_t args_len = strlen(d->r->args) + 1;
-            char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
-            char *token;
-            char *strtokstate;
-
-            token = apr_strtok(args, "&", &strtokstate);
-            while (token) {
-                char *param = strtok(token, "=");
-                apr_hash_set(params, param, APR_HASH_KEY_STRING, apr_pstrdup(d->r->pool, param + strlen(param) + 1));
-                token = apr_strtok(NULL, "&", &strtokstate);
-            }
-        }
+        apr_hash_t *params = dims_parse_query_params(d->pool, d->r->args);
 
         // Convert %20 (space) back to '+' in commands. This fixes an issue with "+" being encoded as %20 by some clients.
         char *commands = apr_pstrdup(d->r->pool, d->unparsed_commands);
@@ -1381,30 +2094,57 @@ dims_handle_request(dims_request_rec *d)
         char *signature_params = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, commands, d->image_url, NULL);
 
         // Concatenate additional params.
-        char *token;
-        char *strtokstate;
-        token = apr_strtok(apr_hash_get(params, "_keys", APR_HASH_KEY_STRING), ",", &strtokstate);
-        while (token) {
-            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
-            token = apr_strtok(NULL, ",", &strtokstate);
+        char *keys = apr_hash_get(params, "_keys", APR_HASH_KEY_STRING);
+        if (keys != NULL && *keys != '\0') {
+            char *token;
+            char *strtokstate;
+            char *keys_copy = apr_pstrdup(d->pool, keys);
+
+            token = apr_strtok(keys_copy, ",", &strtokstate);
+            while (token) {
+                char *signed_value = apr_hash_get(params, token, APR_HASH_KEY_STRING);
+                if (signed_value == NULL) {
+                    if (d->config->strict_validation) {
+                        return dims_cleanup(d, "Missing signed query parameter listed in _keys", DIMS_BAD_URL);
+                    }
+                } else {
+                    signature_params = apr_pstrcat(d->pool, signature_params, signed_value, NULL);
+                }
+                token = apr_strtok(NULL, ",", &strtokstate);
+            }
         }
 
         // Hash.
-        gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
-        
-        if(d->client_config->secret_key == NULL) {
-            gen_hash[7] = '\0';
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-                "Developer key not set for client '%s'", d->client_config->id);
-            return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
-        } else if (strncasecmp(hash, gen_hash, 6) != 0) {
-            gen_hash[7] = '\0';
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-                "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, hash, d->r->uri, d->image_url);
+        if (using_hmac_sha256) {
+            gen_hash = dims_hmac_sha256(d->pool, secret, signature_params);
+            compare_length = d->config->strict_validation ? 64 : 12;
+        } else {
+            gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
+            compare_length = d->config->strict_validation ? 32 : 6;
+        }
+
+        if (gen_hash == NULL) {
+            return dims_cleanup(d, "Unable to compute signature hash", DIMS_FAILURE);
+        }
+
+        if (strlen(hash) < compare_length || strncasecmp(hash, gen_hash, compare_length) != 0) {
+            if (d->config->log_sensitive_data) {
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r,
+                    "Key Mismatch: wanted %.*s got %s [%s?url=%s]",
+                    (int) compare_length, gen_hash, hash, d->r->uri, d->image_url);
+            } else {
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r,
+                    "Key mismatch for request: %s", d->r->uri);
+            }
             return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
         }
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-            "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);    
+        if (d->config->log_sensitive_data) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                "secret key (%.*s) validated (%s:%s)", (int) compare_length, hash, d->unparsed_commands, d->image_url);
+        } else {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                "secret key validated for request: %s", d->r->uri);
+        }
     }
 
     d->request_hash = ap_md5(d->pool,
@@ -1476,8 +2216,17 @@ dims_handle_request(dims_request_rec *d)
             return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
         }
 
+        if (uri.scheme == NULL ||
+            !dims_is_fetch_scheme_allowed(d->config->allowed_fetch_schemes, uri.scheme)) {
+            return dims_cleanup(d, "Invalid URL scheme in request.", DIMS_BAD_URL);
+        }
+
+        if (uri.path == NULL || uri.hostname == NULL) {
+            return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+        }
+
         char *filename = strrchr(uri.path, '/');
-        if (!filename || !uri.hostname) {
+        if (!filename) {
             return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
         }
 
@@ -1548,6 +2297,10 @@ dims_sizer(dims_request_rec *d)
     if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
         return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
     }
+    if (uri.scheme == NULL ||
+        !dims_is_fetch_scheme_allowed(d->config->allowed_fetch_schemes, uri.scheme)) {
+        return dims_cleanup(d, "Invalid URL scheme in request.", DIMS_BAD_URL);
+    }
     if(dims_fetch_remote_image(d, d->image_url ) != 0) {
         return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
     }
@@ -1585,9 +2338,8 @@ aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_tex
         return NULL;
     }
 
-    int decrypted_length;
     int plaintext_length, out_length;
-    char *plaintext = apr_palloc(r->pool, encrypted_length * sizeof(char));
+    char *plaintext = apr_palloc(r->pool, (encrypted_length + 1) * sizeof(char));
     if (EVP_DecryptUpdate(ctx, (unsigned char *) plaintext, &out_length, encrypted_text, encrypted_length)) {
         plaintext_length = out_length;
 
@@ -1623,10 +2375,19 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
     unsigned char *encrypted_data = apr_palloc(r->pool, encrypted_length);
     int decoded_length = apr_base64_decode((char *)encrypted_data, (const char *)base64_encrypted_text);
 
+    if (decoded_length <= 28) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Invalid encrypted payload length");
+        return NULL;
+    }
+
     // Extract IV (12 bytes), ciphertext, and tag (16 bytes)
     unsigned char *iv = encrypted_data;
     unsigned char *encrypted_text = encrypted_data + 12; // 12-byte IV
     int ciphertext_length = decoded_length - 12 - 16; // 16-byte tag at the end
+    if (ciphertext_length <= 0) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Invalid ciphertext length");
+        return NULL;
+    }
     unsigned char *tag = encrypted_text + ciphertext_length; // 16-byte tag
 
     // Initialize the context
@@ -1764,25 +2525,37 @@ dims_handler(request_rec *r)
 
         return dims_handle_request(d);
     } else if(r->uri && strncmp(r->uri, "/dims/", 6) == 0) {
-        int status = 0;
-        char appid[50], b[10], w[10], h[10], q[10];
+        char *appid = NULL;
+        char *b = NULL;
+        char *w = NULL;
+        char *h = NULL;
+        char *q = NULL;
         char *fixed_url, *url;
+        long bitmap = -1;
+        double width = 0;
+        double height = 0;
+        long quality = 0;
 
         /* Translate provided parameters into new-style parameters. */
-        b[0] = w[0] = h[0] = q[0] = '-';
-        status = sscanf(r->uri + 5, 
-                "/%49[^/]/%9[^/]/%9[^/]/%9[^/]/%9[^/]/", 
-                (char *) &appid, (char *) &b, (char *) &w, (char *) &h, 
-                (char *) &q);
-
-        if(status != 5) {
+        if (!dims_parse_legacy_dims_segments(r->pool, r->uri, &appid, &b, &w, &h, &q)) {
             return dims_cleanup(d, NULL, DIMS_BAD_URL);
         }
 
-        int bitmap    = (b[0] != '-') ? atoi(b) : -1;
-        double width  = (w[0] != '-') ? atof(w) : 0;
-        double height = (h[0] != '-') ? atof(h) : 0;
-        int quality   = (q[0] != '-') ? atoi(q) : 0;
+        if (b[0] != '-' && !dims_parse_long_value(b, 0, LONG_MAX, &bitmap)) {
+            return dims_cleanup(d, NULL, DIMS_BAD_URL);
+        }
+
+        if (w[0] != '-' && !dims_parse_double_value(w, 0.0, LONG_MAX, &width)) {
+            return dims_cleanup(d, NULL, DIMS_BAD_URL);
+        }
+
+        if (h[0] != '-' && !dims_parse_double_value(h, 0.0, LONG_MAX, &height)) {
+            return dims_cleanup(d, NULL, DIMS_BAD_URL);
+        }
+
+        if (q[0] != '-' && !dims_parse_long_value(q, 0, 100, &quality)) {
+            return dims_cleanup(d, NULL, DIMS_BAD_URL);
+        }
 
         if(bitmap == -1) {
             return dims_cleanup(d, NULL, DIMS_BAD_URL);
@@ -1841,7 +2614,7 @@ dims_handler(request_rec *r)
 
         if(quality > 0 && quality <= 100) {
             commands = apr_psprintf(r->pool, "%s/quality/%d", 
-                    commands, quality);
+                    commands, (int) quality);
         }
 
         /* Locate pointer to the image URL. */
@@ -1868,67 +2641,82 @@ dims_handler(request_rec *r)
 
         /* Check first if URL is passed as a query parameter. */
         if(r->args) {
-            const size_t args_len = strlen(r->args) + 1;
-            char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
-            char *token;
-            char *strtokstate;
-            token = apr_strtok(args, "&", &strtokstate);
-            while (token) {
-                if(strncmp(token, "url=", 4) == 0) {
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
-                    fixed_url = apr_pstrdup(r->pool, token + 4);
-                    ap_unescape_url(fixed_url);
+            apr_hash_t *query_params = dims_parse_query_params(d->pool, d->r->args);
+            char *url_param = apr_hash_get(query_params, "url", APR_HASH_KEY_STRING);
+            char *download_param = apr_hash_get(query_params, "download", APR_HASH_KEY_STRING);
+            char *eurl_param = apr_hash_get(query_params, "eurl", APR_HASH_KEY_STRING);
+            char *optimize_resize_param = apr_hash_get(query_params, "optimizeResize", APR_HASH_KEY_STRING);
 
-                    if (strcmp(fixed_url, "") == 0) {
-                        return dims_cleanup(d, NULL, DIMS_BAD_URL);
+            if (url_param != NULL && *url_param != '\0') {
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: url=<redacted>");
+                fixed_url = apr_pstrdup(r->pool, url_param);
+                ap_unescape_url(fixed_url);
+
+                if (*fixed_url == '\0') {
+                    return dims_cleanup(d, NULL, DIMS_BAD_URL);
+                }
+            } else if (url_param != NULL && d->config->strict_validation) {
+                return dims_cleanup(d, "Empty URL parameter", DIMS_BAD_URL);
+            }
+
+            if (download_param != NULL &&
+                (strcmp(download_param, "1") == 0 || strcasecmp(download_param, "true") == 0)) {
+                d->send_content_disposition = 1;
+            }
+
+            if (eurl_param != NULL && *eurl_param != '\0') {
+                eurl = apr_pstrdup(r->pool, eurl_param);
+                if (ap_unescape_url(eurl) != OK && d->config->strict_validation) {
+                    return dims_cleanup(d, "Invalid encrypted URL parameter", DIMS_BAD_URL);
+                }
+
+                if (d->client_config->secret_key == NULL || *d->client_config->secret_key == '\0') {
+                    return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
+                }
+
+                unsigned char key[16];
+                if (!dims_derive_aes128_key(d->client_config->secret_key, key)) {
+                    return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
+                }
+
+                if (d->config->encryption_algorithm != NULL &&
+                    strcmp((char *) d->config->encryption_algorithm, "AES/GCM/NoPadding") == 0) {
+
+                    fixed_url = aes_128_gcm_decrypt(r, key, eurl);
+                } else if (d->config->encryption_algorithm != NULL &&
+                           strcmp((char *) d->config->encryption_algorithm, "AES/ECB/PKCS5Padding") == 0) {
+                    if (!d->config->allow_legacy_ecb) {
+                        return dims_cleanup(d, "Legacy ECB decryption is disabled", DIMS_BAD_CLIENT);
                     }
-                } else if (strncmp(token, "download=1", 10) == 0) {
-                    d->send_content_disposition = 1;
 
-                } else if (strncmp(token, "eurl=", 4) == 0) {
-                    eurl = apr_pstrdup(r->pool, token + 5);
-
-                    // Hash secret via SHA-1.
-                    unsigned char *secret = (unsigned char *) d->client_config->secret_key;
-                    unsigned char hash[SHA_DIGEST_LENGTH];
-                    SHA1(secret, strlen((char *) secret), hash);
-
-                    // Convert to hex.
-                    char hex[SHA_DIGEST_LENGTH * 2 + 1];
-                    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-                        return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
-                    }
-
-                    // Use first 16 bytes.
-                    unsigned char key[17];
-                    strncpy((char *) key, hex, 16);
-                    key[16] = '\0';
-
-                    // Force key to uppercase
-                    unsigned char *s = key;
-                    while (*s) { *s = toupper(*s); s++; }
-
-                    if (d->config->encryption_algorithm != NULL &&
-                        strncmp((char *)d->config->encryption_algorithm, "AES/GCM/NoPadding", strlen("AES/GCM/NoPadding")) == 0) {
-
-                        fixed_url = aes_128_gcm_decrypt(r, key, eurl);
-                    } else {
-                        //Default is AES/ECB/PKCS5Padding
-                        unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
-                        int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
-                        fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
-                    }
-                    if (fixed_url == NULL) {
-                        return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
-                    }
+                    unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
+                    int encrypted_length = apr_base64_decode((char *) encrypted_text, eurl);
+                    fixed_url = aes_128_decrypt(r, key, encrypted_text, encrypted_length);
+                } else {
+                    return dims_cleanup(d, "Unsupported encryption algorithm", DIMS_BAD_CLIENT);
+                }
+                if (fixed_url == NULL) {
+                    return dims_cleanup(d, "URL Decryption Failed", DIMS_FAILURE);
+                }
+                if (d->config->log_sensitive_data) {
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
-                    break;
+                } else {
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL computed");
+                }
+            } else if (eurl_param != NULL && d->config->strict_validation) {
+                return dims_cleanup(d, "Empty encrypted URL parameter", DIMS_BAD_URL);
+            }
 
-                } else if (strncmp(token, "optimizeResize=", 4) == 0) {
-                    d->optimize_resize = atof(token + 15);
+            if (optimize_resize_param != NULL && *optimize_resize_param != '\0') {
+                double parsed_optimize_resize = 0;
+                if (!dims_parse_double_value(optimize_resize_param, 0.0, 16.0, &parsed_optimize_resize)) {
+                    if (d->config->strict_validation) {
+                        return dims_cleanup(d, "Invalid optimizeResize value", DIMS_BAD_URL);
+                    }
+                } else {
+                    d->optimize_resize = parsed_optimize_resize;
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Overriding optimize resize: %f", d->optimize_resize);
                 }
-                token = apr_strtok(NULL, "&", &strtokstate);
             }
         }
 
@@ -1997,6 +2785,14 @@ dims_handler(request_rec *r)
         ap_rprintf(r, "\nmod_dims version: %s (%s)\n", MODULE_VERSION, MODULE_RELEASE);
         ap_rprintf(r, "ImageMagick version: %s\n", GetMagickVersion(NULL));
         ap_rprintf(r, "libcurl version: %s\n", curl_version());
+        ap_rprintf(r, "Signature algorithm: %s\n", d->config->signature_algorithm);
+        ap_rprintf(r, "Strict validation: %s\n", d->config->strict_validation ? "true" : "false");
+        ap_rprintf(r, "Connect timeout (ms): %d\n", d->config->connect_timeout);
+        ap_rprintf(r, "Max download bytes: %ld\n", d->config->max_download_bytes);
+        ap_rprintf(r, "Max redirects: %ld\n", d->config->max_redirects);
+        ap_rprintf(r, "Allowed fetch schemes: %s\n", d->config->allowed_fetch_schemes);
+        ap_rprintf(r, "Log sensitive data: %s\n", d->config->log_sensitive_data ? "true" : "false");
+        ap_rprintf(r, "Allow legacy ECB: %s\n", d->config->allow_legacy_ecb ? "true" : "false");
 
         ap_rprintf(r, "\nDetails\n-------\n");
         
@@ -2240,6 +3036,10 @@ static const command_rec dims_commands[] =
                   dims_config_set_download_timeout, NULL, RSRC_CONF,
                   "Timeout for downloading remote images."
                   "The default is 3000."),
+    AP_INIT_TAKE1("DimsConnectTimeout",
+                  dims_config_set_connect_timeout, NULL, RSRC_CONF,
+                  "Timeout for opening remote image connections."
+                  "The default is 1000."),
     AP_INIT_TAKE1("DimsImagemagickTimeout",
                   dims_config_set_imagemagick_timeout, NULL, RSRC_CONF,
                   "Timeout for processing images."
@@ -2280,10 +3080,38 @@ static const command_rec dims_commands[] =
                 dims_config_set_encoded_fetch, NULL, RSRC_CONF,
                 "Should DIMS encode image url before fetching it."
                 "The default is 0."),
+    AP_INIT_TAKE1("DimsMaxDownloadBytes",
+                dims_config_set_max_download_bytes, NULL, RSRC_CONF,
+                "Maximum allowed response size when fetching remote images, in bytes."
+                "The default is 67108864."),
+    AP_INIT_TAKE1("DimsMaxRedirects",
+                dims_config_set_max_redirects, NULL, RSRC_CONF,
+                "Maximum number of redirects allowed while fetching remote images."
+                "The default is 5."),
+    AP_INIT_TAKE1("DimsAllowedFetchSchemes",
+                dims_config_set_allowed_fetch_schemes, NULL, RSRC_CONF,
+                "Comma-separated URL schemes allowed for remote fetches. Supported values: http,https."
+                "The default is http,https."),
+    AP_INIT_TAKE1("DimsLogSensitiveData",
+                dims_config_set_log_sensitive_data, NULL, RSRC_CONF,
+                "Whether sensitive request data may be logged."
+                "The default is false."),
     AP_INIT_TAKE1("DimsEncryptionAlgorithm",
                 dims_config_set_encryption_algorithm, NULL, RSRC_CONF,
                 "What algorithm should DIMS user to decrypt the 'eurl' parameter."
-                "The default is AES/ECB/PKCS5Padding."),
+                "The default is AES/GCM/NoPadding."),
+    AP_INIT_TAKE1("DimsAllowLegacyEcb",
+                dims_config_set_allow_legacy_ecb, NULL, RSRC_CONF,
+                "Allow legacy AES/ECB/PKCS5Padding encrypted URLs."
+                "The default is false."),
+    AP_INIT_TAKE1("DimsSignatureAlgorithm",
+                dims_config_set_signature_algorithm, NULL, RSRC_CONF,
+                "What algorithm should DIMS use to verify dims4 signatures."
+                "The default is legacy-md5."),
+    AP_INIT_TAKE1("DimsStrictValidation",
+                dims_config_set_strict_validation, NULL, RSRC_CONF,
+                "Whether strict validation should be enabled for signatures and query params."
+                "The default is false."),
     AP_INIT_TAKE1("DimsDefaultOutputFormat",
                 dims_config_set_default_output_format, NULL, RSRC_CONF,
                 "Default output format if 'format' command is not present in the request."),

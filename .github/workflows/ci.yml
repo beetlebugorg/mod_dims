@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake libtool pkg-config build-essential \
+            apache2-dev libcurl4-openssl-dev \
+            libmagickwand-dev libmagickcore-dev \
+            libssl-dev
+
+      - name: Bootstrap
+        run: ./autorun.sh
+
+      - name: Configure
+        run: ./configure
+
+      - name: Build
+        run: make -j"$(nproc)"
+
+      - name: Config smoke checks
+        run: tests/config-smoke.sh

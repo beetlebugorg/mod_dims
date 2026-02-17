@@ -33,7 +33,17 @@
 #include <http_log.h>
 #include <http_protocol.h>
 
-#include <wand/magick-wand.h>
+#if defined(__has_include)
+#  if __has_include(<MagickWand/MagickWand.h>)
+#    include <MagickWand/MagickWand.h>
+#  elif __has_include(<wand/magick-wand.h>)
+#    include <wand/magick-wand.h>
+#  else
+#    error "Could not find a compatible MagickWand header"
+#  endif
+#else
+#  include <wand/magick-wand.h>
+#endif
 
 #include <curl/curl.h>
 
@@ -56,6 +66,9 @@
 #define DIMS_HOSTNAME_NOT_IN_WHITELIST 64
 #define DIMS_FILE_NOT_FOUND 128
 
+#define DIMS_SIGNATURE_ALGORITHM_LEGACY_MD5 "legacy-md5"
+#define DIMS_SIGNATURE_ALGORITHM_HMAC_SHA256 "hmac-sha256"
+
 typedef struct dims_request_rec dims_request_rec;
 typedef struct dims_config_rec dims_config_rec;
 typedef struct dims_client_config_rec dims_client_config_rec;
@@ -64,6 +77,9 @@ typedef struct {
     size_t size;
     size_t used;
     long response_code;
+    size_t max_size;
+    int truncated;
+    int too_large;
 } dims_image_data_t;
 
 typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, char **err);
@@ -93,6 +109,7 @@ dims_operation_func
 struct dims_config_rec {
     int download_timeout;
     int imagemagick_timeout;
+    int connect_timeout;
 
     apr_table_t *whitelist;
     apr_hash_t *clients;
@@ -105,6 +122,11 @@ struct dims_config_rec {
     float optimize_resize;
     int include_disposition;
     int disable_encoded_fetch;
+    long max_download_bytes;
+    long max_redirects;
+    char *allowed_fetch_schemes;
+    int log_sensitive_data;
+    int allow_legacy_ecb;
     char *default_output_format;
 
     MagickSizeType area_size;
@@ -115,6 +137,8 @@ struct dims_config_rec {
     int curl_queue_size;
     char *secret_key;
     char *encryption_algorithm;
+    char *signature_algorithm;
+    int strict_validation;
     long max_expiry_period;
     char *cache_dir;
     char *default_image_prefix;

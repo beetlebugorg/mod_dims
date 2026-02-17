@@ -1,9 +1,20 @@
 Dependencies
 ============
 
-* Apache 2.2.x
-* Imagemagick 6.6+
-* libcurl 7.18.0+
+* Apache 2.4+
+* Imagemagick 6.9+ or 7.x (Docker/devcontainer pins 7.1.2-13)
+* libcurl 8+
+
+Testing
+=======
+
+Run config-level checks:
+
+    ./tests/config-smoke.sh
+
+Run end-to-end hardening integration tests (requires Docker, Python 3, OpenSSL, curl):
+
+    ./tests/hardening-integration.sh
 
 Compiling
 =========
@@ -38,7 +49,46 @@ Add the following to the Apache configuration:
         SetHandler dims-status
     </Location>
 
+    # Optional hardening.
+    # DimsSignatureAlgorithm hmac-sha256
+    # DimsStrictValidation true
+    # DimsAllowedFetchSchemes http,https
+    # DimsMaxDownloadBytes 67108864
+    # DimsMaxRedirects 5
+    # DimsConnectTimeout 1000
+    # DimsLogSensitiveData false
+    # DimsEncryptionAlgorithm AES/GCM/NoPadding
+    # DimsAllowLegacyEcb false
+
 This assumes mod_dims.so has been installed in $HTTP_ROOT/modules.
+
+Security Modes
+==============
+
+`/dims4/` supports two signature algorithms:
+
+* `legacy-md5` (default for backward compatibility)
+* `hmac-sha256` (recommended for new integrations)
+
+To enforce stronger validation and full-length signatures, enable:
+
+    DimsStrictValidation true
+
+Remote Fetch Hardening
+======================
+
+Recommended defaults for safer upstream fetch behavior:
+
+    DimsAllowedFetchSchemes http,https
+    DimsMaxDownloadBytes 67108864
+    DimsMaxRedirects 5
+    DimsConnectTimeout 1000
+    DimsLogSensitiveData false
+
+Encrypted `eurl` recommendations:
+
+    DimsEncryptionAlgorithm AES/GCM/NoPadding
+    DimsAllowLegacyEcb false
 
 Errors
 ======
@@ -121,5 +171,3 @@ can be considered serious.
 
 - Assertion failed: (wand->signature == WandSignature), 
   function MagickGetImageFormat, file wand/magick-image.c, line 4137.
-
-
