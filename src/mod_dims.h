@@ -66,7 +66,7 @@ typedef struct {
     long response_code;
 } dims_image_data_t;
 
-typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, char **err);
+typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, const char **err);
 void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsigned long cropHeight);
 CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
 
@@ -114,7 +114,7 @@ struct dims_config_rec {
 
     int curl_queue_size;
     char *secret_key;
-    char *encryption_algorithm;
+    const char *encryption_algorithm;
     long max_expiry_period;
     char *cache_dir;
     char *default_image_prefix;

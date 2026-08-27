@@ -21,7 +21,7 @@ test_status_is_alive(void)
 
 /*
  * Finding M17. The handler returns the mod_dims, ImageMagick, and libcurl
- * versions to any caller. PR 17 puts them behind DimsStatusVerbose.
+ * versions to any caller.
  */
 static void
 test_status_hides_versions(void)

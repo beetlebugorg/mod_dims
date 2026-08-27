@@ -37,7 +37,7 @@ test_watermark_north_west(void)
  *
  * The case runs the operation directly, so a crash takes the test binary down
  * and names itself. Over HTTP the same defect only shows as a dead worker.
- * PR 13 checks the pointer.
+ * Checking the pointer.
  */
 static void
 test_watermark_overlay_without_slash(void)
@@ -72,9 +72,8 @@ test_watermark_without_overlay(void)
  * property M9 actually threatens: the same request must produce the same
  * outcome every time.
  *
- * PR 30 initializes the three and refuses the wrong argument count
- * deliberately. This case then becomes a check that the refusal is stable,
- * which it still is.
+ * Initializing the three and refusing the wrong argument count is the fix.
+ * This case then becomes a check that the refusal is stable, which it is.
  */
 static void
 test_watermark_short_arguments(void)

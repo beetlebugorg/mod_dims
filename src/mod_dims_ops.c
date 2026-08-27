@@ -35,7 +35,7 @@
     } while(0)
 
 typedef struct DimsGravity {
-    char *name;
+    const char *name;
     GravityType gravity;
 } DimsGravity;
 
@@ -53,8 +53,26 @@ static DimsGravity gravities[] = {
 };
 
 /*
+ * ImageMagick 6 marks ParseSizeGeometry deprecated. It applies the geometry
+ * flags against the image's own dimensions, which is exactly what resize and
+ * thumbnail need, and version 6 ships nothing else that does the same thing.
+ * Any replacement would change what every request returns, so the call stays
+ * and the warning is suppressed in one place rather than at three call sites.
+ * The move to ImageMagick 7 has to settle this properly.
+ */
+static MagickStatusType
+dims_parse_size_geometry(const Image *image, const char *geometry,
+                         RectangleInfo *region)
+{
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    return ParseSizeGeometry(image, geometry, region);
+#pragma GCC diagnostic pop
+}
+
+/*
 apr_status_t
-dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
+dims_smart_crop_operation (dims_request_rec *d, char *args, const char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     ExceptionInfo ex_info;
@@ -73,7 +91,7 @@ dims_smart_crop_operation (dims_request_rec *d, char *args, char **err) {
 */
 
 apr_status_t
-dims_strip_operation (dims_request_rec *d, char *args, char **err) {
+dims_strip_operation (dims_request_rec *d, char *args, const char **err) {
 
     /* If args is passed from the user and 
      *   a) it equals true, strip the image.
@@ -94,11 +112,11 @@ dims_strip_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_resize_operation (dims_request_rec *d, char *args, char **err) {
+dims_resize_operation (dims_request_rec *d, char *args, const char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), args, &rec);
+    flags = dims_parse_size_geometry(GetImageFromMagickWand(d->wand), args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail geometry failed";
         return DIMS_FAILURE;
@@ -134,7 +152,7 @@ dims_resize_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_sharpen_operation (dims_request_rec *d, char *args, char **err) {
+dims_sharpen_operation (dims_request_rec *d, char *args, const char **err) {
     MagickStatusType flags;
     GeometryInfo geometry;
 
@@ -149,12 +167,12 @@ dims_sharpen_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
+dims_thumbnail_operation (dims_request_rec *d, char *args, const char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = dims_parse_size_geometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
@@ -202,7 +220,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_crop_operation (dims_request_rec *d, char *args, char **err) {
+dims_crop_operation (dims_request_rec *d, char *args, const char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     ExceptionInfo *ex_info = AcquireExceptionInfo();
@@ -243,13 +261,13 @@ dims_crop_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_format_operation (dims_request_rec *d, char *args, char **err) {
+dims_format_operation (dims_request_rec *d, char *args, const char **err) {
     MAGICK_CHECK(MagickSetImageFormat(d->wand, args), d);
     return DIMS_SUCCESS;
 }
 
 apr_status_t
-dims_quality_operation (dims_request_rec *d, char *args, char **err) {
+dims_quality_operation (dims_request_rec *d, char *args, const char **err) {
     int quality = apr_strtoi64(args, NULL, 0);
     int existing_quality = MagickGetImageCompressionQuality(d->wand);
 
@@ -260,11 +278,10 @@ dims_quality_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_brightness_operation (dims_request_rec *d, char *args, char **err) {
-    MagickStatusType flags;
+dims_brightness_operation (dims_request_rec *d, char *args, const char **err) {
     GeometryInfo geometry;
 
-    flags = ParseGeometry(args, &geometry);
+    (void) ParseGeometry(args, &geometry);
 
     MAGICK_CHECK(MagickBrightnessContrastImage(d->wand,
             geometry.rho, geometry.sigma), d);
@@ -273,7 +290,7 @@ dims_brightness_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_flipflop_operation (dims_request_rec *d, char *args, char **err) {
+dims_flipflop_operation (dims_request_rec *d, char *args, const char **err) {
     if(args != NULL) {
         if(strcmp(args, "horizontal") == 0) {
             MAGICK_CHECK(MagickFlopImage(d->wand), d);
@@ -286,7 +303,7 @@ dims_flipflop_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_sepia_operation (dims_request_rec *d, char *args, char **err) {
+dims_sepia_operation (dims_request_rec *d, char *args, const char **err) {
     double threshold = atof(args);
 
     MAGICK_CHECK(MagickSepiaToneImage(d->wand, threshold * QuantumRange), d);
@@ -295,7 +312,7 @@ dims_sepia_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_grayscale_operation (dims_request_rec *d, char *args, char **err) {
+dims_grayscale_operation (dims_request_rec *d, char *args, const char **err) {
 
     if(args != NULL) {
         if(strcmp(args, "true") == 0) {
@@ -307,7 +324,7 @@ dims_grayscale_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_autolevel_operation (dims_request_rec *d, char *args, char **err) {
+dims_autolevel_operation (dims_request_rec *d, char *args, const char **err) {
 
     if(args != NULL) {
         if(strcmp(args, "true") == 0) {
@@ -319,7 +336,7 @@ dims_autolevel_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_invert_operation (dims_request_rec *d, char *args, char **err) {
+dims_invert_operation (dims_request_rec *d, char *args, const char **err) {
 
     if(args != NULL) {
         if(strcmp(args, "true") == 0) {
@@ -331,7 +348,7 @@ dims_invert_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
+dims_rotate_operation (dims_request_rec *d, char *args, const char **err) {
     double degrees = atof(args);
 
     PixelWand *pxWand = NewPixelWand();
@@ -348,7 +365,7 @@ dims_rotate_operation (dims_request_rec *d, char *args, char **err) {
  * This also expects the overlay image url as an additional query parameter.
  */
 apr_status_t
-dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
+dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
     MagickWand *overlay_wand = NewMagickWand();
     char *overlay_url = NULL;
 
@@ -381,9 +398,11 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         ++filename;
     }
 
-    // Hash filename via SHA-1.
+    /* Hash the overlay basename. sizeof on a pointer would hash eight bytes
+     * of the address instead, so two overlays sharing a prefix would share a
+     * cache entry and the address would change the key between runs. */
     unsigned char hash[SHA_DIGEST_LENGTH];
-    SHA1(filename, sizeof(filename), hash);
+    SHA1((const unsigned char *) filename, strlen(filename), hash);
 
     // Convert to hex.
     char hex[SHA_DIGEST_LENGTH * 2 + 1];
@@ -395,7 +414,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     // 2. Check P_tmpdir macro from stdio.h.
     // 3. Check _PATH_TMP macro from paths.h.
     // 4. Use /tmp/.
-    char *tmp_dir = getenv("TMPDIR");
+    const char *tmp_dir = getenv("TMPDIR");
 
     if (tmp_dir == NULL) {
         #ifdef P_tmpdir
@@ -425,7 +444,10 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
     // Write to disk.
     } else {
         dims_image_data_t image_data;
-        CURLcode code = dims_get_image_data(d, overlay_url, &image_data);
+        /* The result is not read. A failed fetch leaves image_data empty and
+         * MagickReadImageBlob reports it, which is the only reason this does
+         * not crash. Checking the code belongs with the wider error handling. */
+        (void) dims_get_image_data(d, overlay_url, &image_data);
 
         if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
             if (image_data.data) {
@@ -456,9 +478,17 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
         free(image_data.data);
     }
 
-    float opacity;
-    double size;
-    GravityType gravity;
+    /*
+     * Every one of these is read below whether or not its token was present,
+     * so a short argument list used whatever the stack held. Zero keeps the
+     * outcome the caller sees today, because a zero width and height make the
+     * scale fail, but now it fails the same way every time instead of
+     * depending on the stack. Rejecting the wrong argument count outright is
+     * the real fix and is a separate change.
+     */
+    float opacity = 0.0f;
+    double size = 0.0;
+    GravityType gravity = UndefinedGravity;
 
     char *token = strtok(args, ",");
 
@@ -542,7 +572,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, char **err) {
  * Legacy API support.
  */
 apr_status_t
-dims_legacy_crop_operation (dims_request_rec *d, char *args, char **err) {
+dims_legacy_crop_operation (dims_request_rec *d, char *args, const char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     ExceptionInfo *ex_info = AcquireExceptionInfo();
@@ -575,14 +605,14 @@ dims_legacy_crop_operation (dims_request_rec *d, char *args, char **err) {
 }
 
 apr_status_t
-dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, char **err) {
+dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, const char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     long width, height;
     int x, y;
     char *resize_args = apr_psprintf(d->pool, "%s^", args);
 
-    flags = ParseSizeGeometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
+    flags = dims_parse_size_geometry(GetImageFromMagickWand(d->wand), resize_args, &rec);
     if(!(flags & AllValues)) {
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;

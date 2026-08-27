@@ -1,6 +1,6 @@
 /*
  * format, quality, and strip. mod_dims operations with no direct go-dims
- * case, written from specs/code-review.md.
+ * case.
  *
  * Copyright 2026 Jeremy Collins
  * SPDX-License-Identifier: Apache-2.0
@@ -34,7 +34,7 @@ test_quality(void)
 
 /*
  * quality is parsed with base 0, so a leading zero is read as octal. 070
- * becomes 56. Finding M8. The case records the behavior; PR 30 changes it.
+ * becomes 56. Finding M8.
  */
 static void
 test_quality_leading_zero(void)

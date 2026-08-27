@@ -35,7 +35,7 @@ test_missing_source(void)
 
 /*
  * Finding M2. The origin status is copied to the client, so a 500 from the
- * origin becomes a 500 from the service. PR 17 maps it to 502 under
+ * origin becomes a 500 from the service. Mapping it to 502 is the fix.
  * DimsOriginStatusMode.
  */
 static void
@@ -57,7 +57,7 @@ test_origin_failure_is_mapped(void)
  * A malformed geometry returns the fallback image with 200 today. The
  * operation fails, dims_cleanup fetches DimsDefaultImageURL, and
  * dims_send_image reports the fetch status of that image rather than the
- * failure. Finding M12. PR 17 maps each failure class to a status once.
+ * failure. Finding M12. Each failure class needs its own status.
  */
 static void
 test_bad_geometry(void)
@@ -74,7 +74,7 @@ test_bad_geometry(void)
 
 /*
  * Finding M8, the range half. quality is never range checked, so 500 reaches
- * MagickSetImageCompressionQuality. PR 30 rejects it.
+ * MagickSetImageCompressionQuality. The value needs a range check.
  */
 static void
 test_quality_out_of_range(void)
@@ -89,7 +89,7 @@ test_quality_out_of_range(void)
 
 /*
  * Finding H5. The parameter name is matched on four bytes and then indexed at
- * offset 15, which reads past the end of a short token. PR 11 fixes it.
+ * offset 15, which reads past the end of a short token.
  *
  * The case asserts the worker answers. Under a sanitizer build it reports the
  * read directly.
@@ -113,7 +113,7 @@ test_short_parameter_starting_with_opti(void)
 
 /*
  * Finding H9. A parameter with no equals sign makes the parser read one byte
- * past the terminator. PR 11 fixes it.
+ * past the terminator.
  */
 static void
 test_parameter_without_equals(void)
@@ -135,7 +135,7 @@ test_parameter_without_equals(void)
 /*
  * Finding C3. A short eurl makes the decoded length negative, and the pointer
  * arithmetic that follows runs on it. Decryption happens before any signature
- * check, so this needs no valid signature. PR 14 fixes it.
+ * check, so this needs no valid signature.
  */
 static void
 test_short_eurl(void)
@@ -168,7 +168,7 @@ test_empty_eurl(void)
 
 /*
  * Finding H6. apr_uri_parse leaves path NULL for a URL with no path, and
- * strrchr dereferences it. The legacy /dims/ handler reaches it. PR 13 checks
+ * strrchr dereferences it. The legacy /dims/ handler reaches it. Checking
  * the pointer first.
  */
 static void
@@ -188,7 +188,7 @@ test_source_url_without_path(void)
 
 /*
  * Finding H7. The Content-Disposition filename comes from the source URL and
- * is not escaped, so a quote breaks out of the parameter. PR 26 escapes it.
+ * is not escaped, so a quote breaks out of the parameter. The filename needs escaping.
  */
 static void
 test_content_disposition_is_escaped(void)

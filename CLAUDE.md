@@ -116,7 +116,11 @@ credit; it does not replace the header.
 Add a new case to the matching go-dims test file first where the behavior applies to both
 projects, so the two suites stay in step.
 
-## Reference
+## Working notes
 
-The review of the current code is in `specs/code-review.md`. The remediation plan is in
-`specs/plan.md`. Both are ignored by git.
+`specs/` holds the code review and the remediation plan. It is ignored by git.
+
+Never reference it from code, comments, commit messages, or pull requests. A
+reader who clones the repository does not have it, so the reference is a dead
+end. Describe the defect instead of pointing at a document that is not there.
+

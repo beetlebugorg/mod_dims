@@ -323,6 +323,9 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
         client_config->min_src_cache_control = -1;
         client_config->max_src_cache_control = -1;
 
+        /* Each case falls into the next on purpose: the directive takes a
+         * variable number of arguments, and a shorter list means the later
+         * ones keep the defaults set above. */
         switch(argc) {
             case 8:
                 if(strcmp(argv[7], "-") != 0) {
@@ -330,6 +333,7 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
                 } else {
                     client_config->secret_key = NULL;
                 }
+                /* fall through */
             case 7:
                 if(strcmp(argv[6], "-") != 0) {
                     if(atoi(argv[6]) <= 0 && strcmp(argv[6], "0") != 0) {
@@ -340,6 +344,7 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
                         client_config->max_src_cache_control = atoi(argv[6]);
                     }
                 }
+                /* fall through */
             case 6:
                 if(strcmp(argv[5], "-") != 0) {
                     if(atoi(argv[5]) <= 0 && strcmp(argv[5], "0") != 0) {
@@ -350,22 +355,27 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
                         client_config->min_src_cache_control = atoi(argv[5]);
                     }
                 }
+                /* fall through */
             case 5:
                 if(strcmp(argv[4], "trust") == 0) {
                     client_config->trust_src = 1;
                 }
+                /* fall through */
             case 4:
                 if(strcmp(argv[3], "-") != 0) {
                     client_config->edge_control_downstream_ttl = atoi(argv[3]);
                 }
+                /* fall through */
             case 3:
                 if(strcmp(argv[2], "-") != 0) {
                     client_config->cache_control_max_age = atoi(argv[2]);
                 }
+                /* fall through */
             case 2:
                 if(strcmp(argv[1], "-") != 0) {
                     client_config->no_image_url = argv[1];
                 }
+                /* fall through */
             case 1:
                 client_config->id = argv[0];
         }
@@ -599,6 +609,9 @@ dims_curl_debug_cb(CURL *handle,
         default:
             break;
     }
+
+    /* libcurl aborts the transfer on a non-zero return. */
+    return 0;
 }
 
 CURLcode
@@ -681,7 +694,6 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 {
     dims_image_data_t image_data;
     char *fetch_url = url ? (char *) url : d->no_image_url;
-    int extra_time = 0;
     apr_time_t start_time;
 
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
@@ -1022,7 +1034,7 @@ dims_send_image(dims_request_rec *d)
 }
 
 static apr_status_t 
-dims_cleanup(dims_request_rec *d, char *err_msg, int status)
+dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
 {
     if(status != DIMS_IGNORE) {
         d->status = status;
@@ -1188,7 +1200,7 @@ dims_process_image(dims_request_rec *d)
         }
 
         if (should_flatten) {
-            for (int i = 1; i <= images - 1; i++) {
+            for (size_t i = 1; i < images; i++) {
                 MagickSetIteratorIndex(d->wand, i);
                 MagickRemoveImage(d->wand);
             }
@@ -1216,10 +1228,9 @@ dims_process_image(dims_request_rec *d)
                         strcmp(command, "legacy_thumbnail") == 0 ||
                         strcmp(command, "legacy_crop") == 0 ||
                         strcmp(command, "thumbnail") == 0)) {
-                    MagickStatusType flags;
                     RectangleInfo rec;
 
-                    flags = ParseAbsoluteGeometry(args, &rec);
+                    (void) ParseAbsoluteGeometry(args, &rec);
 
                     if(rec.width > 0 && rec.height == 0) {
                         args = apr_psprintf(d->pool, "%ld", rec.width);
@@ -1235,7 +1246,7 @@ dims_process_image(dims_request_rec *d)
                         "Rewriting command %s to 'resize' because a NOIMAGE "
                         "image is being processed.", command);
 
-                    command = "resize"; 
+                    command = (char *) "resize";
                 }
 
                 // Check if the command is present and set flag.
@@ -1246,7 +1257,7 @@ dims_process_image(dims_request_rec *d)
                 dims_operation_func *func =
                         apr_hash_get(ops, command, APR_HASH_KEY_STRING);
                 if(func != NULL) {
-                    char *err = NULL;
+                    const char *err = NULL;
                     apr_status_t code;
 
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
@@ -1267,7 +1278,7 @@ dims_process_image(dims_request_rec *d)
             char *input_format = MagickGetImageFormat(d->wand);
 
             if (!apr_table_get(d->config->ignore_default_output_format, input_format)) {
-                char *err = NULL;
+                const char *err = NULL;
                 apr_status_t code;
 
                 if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
@@ -1283,7 +1294,7 @@ dims_process_image(dims_request_rec *d)
     if(!exc_strip_cmd) {
         dims_operation_func *strip_func = apr_hash_get(ops, "strip", APR_HASH_KEY_STRING);
         if(strip_func != NULL) {
-            char *err = NULL;
+            const char *err = NULL;
             apr_status_t code;
 
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
@@ -1309,6 +1320,7 @@ static apr_status_t
 dims_handle_request(dims_request_rec *d)
 {
     apr_time_t now_time;
+
     d->wand = NewMagickWand();
 
     /* Check to make sure the client id is valid. */
@@ -1423,7 +1435,7 @@ dims_handle_request(dims_request_rec *d)
             d->filename = sub_req->canonical_filename;
         } else {
             const char *req_server;
-            char *req_port;
+            const char *req_port;
             int port;
 
             port = ap_get_server_port(d->r);
@@ -1463,7 +1475,8 @@ dims_handle_request(dims_request_rec *d)
 
         char *fetch_url = NULL;
 
-        char *hostname, *state = "exact";
+        char *hostname;
+        const char *state = "exact";
         apr_uri_t uri;
         int found = 0, done = 0;
 
@@ -1535,13 +1548,11 @@ dims_handle_request(dims_request_rec *d)
 static apr_status_t
 dims_sizer(dims_request_rec *d)
 {
-    apr_time_t now_time;
     
     apr_uri_t uri;
     long width, height;
 
     d->wand = NewMagickWand();
-    now_time = apr_time_now();
     if(!d->image_url ) {
         return DECLINED;
     }
@@ -1585,7 +1596,6 @@ aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_tex
         return NULL;
     }
 
-    int decrypted_length;
     int plaintext_length, out_length;
     char *plaintext = apr_palloc(r->pool, encrypted_length * sizeof(char));
     if (EVP_DecryptUpdate(ctx, (unsigned char *) plaintext, &out_length, encrypted_text, encrypted_length)) {
@@ -1807,7 +1817,7 @@ dims_handler(request_rec *r)
             commands = apr_psprintf(r->pool, "%s/legacy_thumbnail/%ldx%ld", 
                     commands, (long) width, (long) height);
         } else if(bitmap & LEGACY_DIMS_CROP || bitmap & LEGACY_DIMS_RESIZE) {
-            char *cmd = (bitmap & LEGACY_DIMS_RESIZE) ? "resize" : "legacy_crop";
+            const char *cmd = (bitmap & LEGACY_DIMS_RESIZE) ? "resize" : "legacy_crop";
 
             if(width && !height) {
                 commands = apr_psprintf(r->pool, "%s/%s/%ld", 
@@ -1911,7 +1921,7 @@ dims_handler(request_rec *r)
                     if (d->config->encryption_algorithm != NULL &&
                         strncmp((char *)d->config->encryption_algorithm, "AES/GCM/NoPadding", strlen("AES/GCM/NoPadding")) == 0) {
 
-                        fixed_url = aes_128_gcm_decrypt(r, key, eurl);
+                        fixed_url = aes_128_gcm_decrypt(r, key, (unsigned char *) eurl);
                     } else {
                         //Default is AES/ECB/PKCS5Padding
                         unsigned char *encrypted_text = apr_palloc(r->pool, apr_base64_decode_len(eurl));
@@ -2306,5 +2316,6 @@ module AP_MODULE_DECLARE_DATA dims_module =
     dims_create_config,     /* server config */
     NULL,                   /* merge server config */
     dims_commands,          /* command apr_table_t */
-    dims_register_hooks     /* register hooks */
+    dims_register_hooks,    /* register hooks */
+    0                       /* flags */
 };

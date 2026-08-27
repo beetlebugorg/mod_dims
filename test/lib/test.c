@@ -2,7 +2,7 @@
  * The runner. It executes each registered case, catches a failure with
  * longjmp, and reports PASS, FAIL, XFAIL, or XPASS.
  *
- * An expected failure records a finding from specs/code-review.md. When one
+ * An expected failure records a known defect. When one
  * starts passing the run fails, because the finding was either wrong or
  * already fixed.
  *
@@ -73,10 +73,10 @@ dims_test_failf(const char *file, int line, const char *fmt, ...)
 /*
  * Runs one case in a child process.
  *
- * Two findings in specs/code-review.md are crashes: H6 and the crash half of
- * C5. A case that reproduces one must report itself, not take the run down
- * with it. Forking makes a signal just another outcome, so an expected crash
- * reads as xfail and an unexpected one names the case.
+ * Two known defects are crashes: a source URL with no path, and an overlay URL
+ * with no slash. A case that reproduces one must report itself, not take the
+ * run down with it. Forking makes a signal just another outcome, so an
+ * expected crash reads as xfail and an unexpected one names the case.
  *
  * Returns 0 when the run should still pass.
  */

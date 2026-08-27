@@ -13,8 +13,8 @@
  * arm of the guard at src/mod_dims.c:1197-1290, so every command is skipped
  * and the original comes back at its original size.
  *
- * The golden file records the untransformed original. PR 29 adds a second
- * golden under DimsAnimatedImages transform.
+ * The golden file records the untransformed original. A second golden follows the
+ * fix.
  */
 static void
 test_animated_gif_ignores_commands(void)
@@ -34,7 +34,7 @@ test_animated_gif_ignores_commands(void)
     dims_response_free(response);
 }
 
-/* The bytes today, whatever they are, so PR 29 can show what changed. */
+/* The bytes today, whatever they are, so a later fix can show what changed. */
 static void
 test_animated_gif_passthrough(void)
 {
@@ -93,7 +93,7 @@ test_portrait_source(void)
  * Content-Length must describe the body. Finding H3 predicted a divergence
  * because the header comes from MagickGetImageLength and the body from
  * MagickGetImagesBlob. The harness measured no divergence on these fixtures,
- * so the finding is downgraded: the fix in PR 25 is still right, because a
+ * so the finding is downgraded: the fix is still right, because a
  * correct Content-Length uses the length actually written, but it closes a
  * latent defect rather than a reproducible one. These two cases guard the
  * property from here on.

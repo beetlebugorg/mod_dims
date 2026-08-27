@@ -49,15 +49,15 @@ test_quality(void)
 
 /*
  * Finding M8. quality parses with base 0, so a leading zero is read as octal.
- * 070 becomes 56. The two calls below must disagree once PR 30 parses base 10,
- * and they agree today.
+ * 070 becomes 56. The two calls below must agree once the value is parsed as
+ * decimal, and they disagree today.
  */
 static void
 test_quality_leading_zero(void)
 {
     dims_request_rec *octal = dims_fixture_request("pexels-photo-1539116.jpeg", NULL);
     dims_request_rec *decimal = dims_fixture_request("pexels-photo-1539116.jpeg", NULL);
-    char *error = NULL;
+    const char *error = NULL;
 
     dims_quality_operation(octal, apr_pstrdup(octal->pool, "070"), &error);
     dims_quality_operation(decimal, apr_pstrdup(decimal->pool, "70"), &error);
@@ -72,7 +72,7 @@ test_quality_leading_zero(void)
 
 /*
  * Finding M8, the range half. Nothing checks that the value is between 1 and
- * 100. PR 30 rejects anything outside it.
+ * 100.
  */
 static void
 test_quality_out_of_range(void)
@@ -92,7 +92,7 @@ test_quality_only_lowers(void)
 {
     dims_request_rec *d = dims_fixture_request("pexels-photo-1539116.jpeg", NULL);
     size_t before = MagickGetImageCompressionQuality(d->wand);
-    char *error = NULL;
+    const char *error = NULL;
 
     dims_quality_operation(d, apr_pstrdup(d->pool, "100"), &error);
 

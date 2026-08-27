@@ -3,7 +3,7 @@
 # Distributions name the file differently: MagickWand-6.Q16, MagickWand-im6,
 # or plain MagickWand. Try each until one answers, and refuse version 7,
 # because the source includes <wand/magick-wand.h>, which version 7 removed.
-# PR 6 moves to version 7.
+# Moving to version 7 is a separate change.
 #
 # Defines the imported targets Dims::MagickWand and Dims::MagickCore.
 

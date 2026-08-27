@@ -1,5 +1,5 @@
 # Asserts every shipped configuration loads the module by the name the build
-# produces. Rule 4 of the compatibility contract in specs/plan.md.
+# produces. A deployed httpd.conf names libmod_dims.so and must keep working.
 
 set(EXPECTED "modules/libmod_dims.so")
 

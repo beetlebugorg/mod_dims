@@ -6,7 +6,7 @@
  * Every guard case asserts 403 specifically, not merely "not 200". A refusal
  * and an unreachable host both fail to return an image, and only the status
  * tells them apart. Today the guard does not exist and these return 500, so
- * each is an expected failure. They are the acceptance criteria for PR 16.
+ * each is an expected failure until the guard exists.
  *
  * Copyright (c) 2025 Jeremy Collins (go-dims)
  * Copyright (c) 2026 Jeremy Collins (ported to mod_dims)
@@ -15,7 +15,7 @@
 
 #include "../lib/common.h"
 
-/* The status the guard returns once PR 16 lands. */
+/* The status the guard returns once it exists. */
 #define DIMS_REFUSED 403
 
 /* Builds an unsigned /dims3/ path for an arbitrary source URL. */
@@ -76,7 +76,7 @@ test_fetch_image_refuses_host_outside_allowlist(void)
 /*
  * Finding C1. A signed request skips the allowlist entirely. See
  * src/mod_dims.c:1489-1491. The host is reachable, so a 200 means the
- * allowlist was not applied. PR 16 gates that on DimsAllowlistSigned.
+ * allowlist was not applied.
  */
 static void
 test_signed_request_applies_allowlist(void)
