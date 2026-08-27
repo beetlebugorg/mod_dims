@@ -46,7 +46,23 @@ find_package(MagickWand7 REQUIRED)
 add_library(mod_dims MODULE
     src/configuration.c
     src/mod_dims.c
-    src/mod_dims_ops.c)
+    src/operations/autolevel.c
+    src/operations/brightness.c
+    src/operations/crop.c
+    src/operations/flip-flop.c
+    src/operations/format.c
+    src/operations/geometry.c
+    src/operations/grayscale.c
+    src/operations/invert.c
+    src/operations/legacy.c
+    src/operations/quality.c
+    src/operations/resize.c
+    src/operations/rotate.c
+    src/operations/sepia.c
+    src/operations/sharpen.c
+    src/operations/strip.c
+    src/operations/thumbnail.c
+    src/operations/watermark.c)
 
 # The artifact keeps the name the autotools build produced. Every shipped
 # configuration and every deployed httpd.conf carries
