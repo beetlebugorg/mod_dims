@@ -56,15 +56,21 @@ is how each pull request proves it closed its finding.
 
 ## The golden files
 
-Golden bytes depend on the ImageMagick build and the architecture, so the
-directory name carries both:
+Golden bytes depend on the ImageMagick build, so the directory name carries the
+distribution and the ImageMagick version:
 
 ```
-golden/debian12-im6.9_x86_64/grid.TestResize.golden.png
+golden/debian12-im6.9/grid.TestResize.golden.png
 ```
 
 `lib/environment.c` builds the name. Regenerating on a different build writes a
 new directory rather than overwriting someone else's.
+
+The name carries no architecture. amd64 and arm64 were measured to produce all
+90 files byte for byte identical, so they share one set, and the arm64 CI job
+runs the same cases against the same baselines. Two sets would let the
+architectures drift apart with nothing to notice, because each would only ever
+be compared against itself.
 
 Only the pull requests `specs/plan.md` names may change a golden file, and each
 one attaches before and after images. A golden change anywhere else is a bug.

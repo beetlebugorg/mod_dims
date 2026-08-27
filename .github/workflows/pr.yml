@@ -71,16 +71,25 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # them and upload them, so they can be committed and the job can move
-      # to running the suite like amd64.
-      - name: Generate the arm64 baselines
-        run: make -C test test-update
+      # The golden files carry no architecture in their name, because amd64
+      # and arm64 were measured to produce all 90 byte for byte identical.
+      # This job is what keeps that true: it runs the same cases against the
+      # same baselines, so a divergence fails here instead of hiding in a
+      # second set nothing compares.
+      - name: Run the suite
+        run: make -C test test
 
-      - name: Upload them
+      - name: Show the module log on failure
+        if: failure()
+        run: make -C test logs
+
+      - name: Collect the images a golden case rejected
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: arm64-golden
-          path: test/golden/
+          name: failed-golden-images-arm64
+          path: test/golden/**/*.failed.*
+          if-no-files-found: ignore
 
   sanitizers:
     name: Sanitizers
