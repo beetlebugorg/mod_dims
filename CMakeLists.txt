@@ -38,10 +38,9 @@ pkg_check_modules(APRUTIL REQUIRED IMPORTED_TARGET apr-util-1)
 pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
 pkg_check_modules(CRYPTO REQUIRED IMPORTED_TARGET libcrypto)
 
-# ImageMagick 6 names its pkg-config file after the quantum depth. Version 7
-# is not usable yet: the source includes <wand/magick-wand.h>, which only
-# version 6 provides. PR 6 moves to version 7.
-find_package(MagickWand6 REQUIRED)
+# ImageMagick 7. Version 6 is refused: it does not provide the headers the
+# module includes.
+find_package(MagickWand7 REQUIRED)
 # -- The module
 
 add_library(mod_dims MODULE

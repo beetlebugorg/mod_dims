@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <paths.h>
 
-#include <magick/exception.h>
+#include <MagickCore/exception.h>
 
 #define MAGICK_CHECK(func, rec) \
     do { \
@@ -516,13 +516,26 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         }
     }
 
-    // Opacity.
-    PixelWand *pColorize = NewPixelWand();
-    PixelWand *pGivenAlpha = NewPixelWand();
-    PixelSetColor(pColorize, "transparent");
-    PixelSetAlpha(pGivenAlpha, opacity);
-    MagickColorizeImage(overlay_wand, pColorize, pGivenAlpha);
+    /*
+     * Reduce the overlay's opacity.
+     *
+     * ImageMagick 6 colorized with a transparent color and passed the wanted
+     * alpha as the third argument, which that version read as an opacity.
+     * Version 7 reads the same argument as a per channel blend, so the overlay
+     * came out fully opaque.
+     *
+     * The alpha has to be multiplied, not replaced. MagickSetImageAlpha would
+     * set every pixel to the same alpha, including the transparent background,
+     * which puts a translucent rectangle behind the overlay. Masking to the
+     * alpha channel and multiplying leaves a transparent pixel transparent.
+     */
+    MagickSetImageAlphaChannel(overlay_wand, OnAlphaChannel);
+    {
+        ChannelType previous = MagickSetImageChannelMask(overlay_wand, AlphaChannel);
 
+        MagickEvaluateImage(overlay_wand, MultiplyEvaluateOperator, opacity);
+        MagickSetImageChannelMask(overlay_wand, previous);
+    }
     // Size.
     float original_width = (float) MagickGetImageWidth(d->wand);
     float original_height = (float) MagickGetImageHeight(d->wand);
@@ -562,8 +575,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
     MAGICK_CHECK(MagickCompositeImageGravity(d->wand, overlay_wand, OverCompositeOp, gravity), d);
 
     DestroyMagickWand(overlay_wand);
-    DestroyPixelWand(pColorize);
-    DestroyPixelWand(pGivenAlpha);
 
     return DIMS_SUCCESS;
 }
