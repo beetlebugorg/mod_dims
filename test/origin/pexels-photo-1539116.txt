@@ -1,0 +1,4 @@
+Author: Adhitya Andanu
+Source: https://www.pexels.com/photo/photo-of-rain-drops-1539116/
+
+Added fake EXIF data for testing purposes.

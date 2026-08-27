@@ -34,7 +34,6 @@ for i in .configured .deps compile aclocal.m4 autom4te.cache \
     depcomp install-sh libtool ltmain.sh missing stamp-h1 \
     Makefile.in Makefile \
     src/Makefile.in src/Makefile \
-    test/Makefile.in test/Makefile \
     ; do
     test -z "$i" || rm -rf "$i" 
 done

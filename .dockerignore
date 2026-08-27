@@ -1,0 +1,5 @@
+.git
+specs
+test/golden
+**/*.o
+test/dims_test

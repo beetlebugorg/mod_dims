@@ -1,0 +1,3 @@
+*.o
+dims_test
+golden/**/*.failed.*

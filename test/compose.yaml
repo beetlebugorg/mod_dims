@@ -1,0 +1,34 @@
+# Two services and no network access. The origin serves the fixture images so
+# every test is deterministic and nothing reaches the internet.
+services:
+  origin:
+    image: httpd:2.4.62
+    volumes:
+      - ./origin:/usr/local/apache2/htdocs:ro
+      - ./conf/origin.conf:/usr/local/apache2/conf/extra/origin.conf:ro
+    command: >
+      sh -c "sed -i 's|^Listen 80$$|Listen 8080|' /usr/local/apache2/conf/httpd.conf &&
+             echo 'Include conf/extra/origin.conf' >> /usr/local/apache2/conf/httpd.conf &&
+             httpd-foreground"
+    networks:
+      dims:
+        aliases:
+          # The same service under a name the allowlist does not carry. A test
+          # that points here reaches a working origin and must still be
+          # refused, so a refusal cannot be confused with an unreachable host.
+          - notallowed
+
+  dims:
+    build:
+      context: ..
+      dockerfile: test/Dockerfile
+    depends_on:
+      - origin
+    command: ["httpd-foreground"]
+    networks: [dims]
+    volumes:
+      - ./golden:/golden
+
+networks:
+  dims:
+    internal: true
