@@ -65,7 +65,7 @@ test_last_modified_is_forwarded(void)
 
 /*
  * Finding M3. dims_write_header_cb never skips the space after the colon, so
- * every forwarded value keeps a leading space. PR 11 fixes it.
+ * every forwarded value keeps a leading space.
  */
 static void
 test_forwarded_header_has_no_leading_space(void)
@@ -107,7 +107,7 @@ test_etag_is_stable(void)
 
 /*
  * Finding M7. Conditional requests are never read, so a client holding a
- * valid ETag gets a full body back. PR 27 adds the 304.
+ * valid ETag gets a full body back. Answering with 304 is the fix.
  */
 static void
 test_conditional_request_returns_304(void)

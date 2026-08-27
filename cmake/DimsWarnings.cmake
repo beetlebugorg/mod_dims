@@ -1,11 +1,11 @@
 # The warning and hardening flags every target shares.
 #
-# The old build set neither. Four findings in specs/code-review.md are things
+# The old build set neither. Several real defects are things
 # the compiler reports as soon as these are on: H10, M15, M20, and Q13.
 #
-# PR 4 fixes what these report and then turns on -Werror.
+# DIMS_WERROR turns them into errors once the module compiles clean.
 
-option(DIMS_WERROR "Treat warnings as errors" OFF)
+option(DIMS_WERROR "Treat warnings as errors" ON)
 
 function(dims_set_warnings target)
     target_compile_options(${target} PRIVATE
@@ -40,7 +40,7 @@ function(dims_set_hardening target)
     endif()
 endfunction()
 
-# A sanitizer build. Three findings in specs/code-review.md are reads of
+# A sanitizer build. Several known defects are reads of
 # uninitialized or out of bounds memory, which produce a wrong answer only
 # sometimes and are invisible to a normal run: C4, M9, and H10.
 #

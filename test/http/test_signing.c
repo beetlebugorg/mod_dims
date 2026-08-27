@@ -90,7 +90,7 @@ test_expired_signature_rejected(void)
 /*
  * Finding C6. strncasecmp compares six characters, so a digest that agrees on
  * the first six and differs after them is accepted. Twenty-four bits gate the
- * fetch. PR 19 gives /dims5/ a full-length HMAC.
+ * fetch. A full-length HMAC is the fix.
  */
 static void
 test_signature_is_full_length(void)
@@ -178,7 +178,7 @@ test_unsigned_parameters_are_refused(void)
  * Finding C4 is an uninitialized read, not a wrong answer, so it is not
  * observable from outside. This case is a regression guard: the form that
  * carries no query string at all must still answer. Confirming C4 itself needs
- * a build with -fsanitize=address, which PR 5 adds to CI.
+ * a build with -fsanitize=address, which CI runs.
  */
 static void
 test_no_query_string_answers(void)

@@ -29,7 +29,7 @@ dims_run_operation_with_query(const char *name, const char *image,
                               const char *query, long want_width, long want_height)
 {
     dims_request_rec *d = dims_fixture_request(image, query);
-    char *error = NULL;
+    const char *error = NULL;
     apr_status_t code;
     unsigned char *blob;
     size_t length = 0;
@@ -87,7 +87,7 @@ apr_status_t
 dims_operation_status(const char *image, dims_operation_func *operation, const char *args)
 {
     dims_request_rec *d = dims_fixture_request(image, NULL);
-    char *error = NULL;
+    const char *error = NULL;
     apr_status_t code;
 
     if (d == NULL) {
@@ -105,7 +105,7 @@ dims_operation_status_with_query(const char *image, dims_operation_func *operati
                                  const char *args, const char *query)
 {
     dims_request_rec *d = dims_fixture_request(image, query);
-    char *error = NULL;
+    const char *error = NULL;
     apr_status_t code;
 
     if (d == NULL) {

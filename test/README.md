@@ -1,7 +1,7 @@
 # The mod_dims test harness
 
 The harness records what mod_dims returns, byte for byte, and fails when that
-changes. It is the thing every other pull request in `specs/plan.md` depends on.
+changes. Every other change to the module depends on it.
 
 ## Running it
 
@@ -41,10 +41,10 @@ compares bytes. A width change reports `width: want 100, got 50`, not `bytes
 differ`.
 
 **A missing golden file is a failure.** It is never a silent pass. That is the
-defect `../go-dims/specs/code-review.md` records as Q2.
+defect a missing baseline would otherwise become: a case that checks nothing.
 
 **A case that fails today is an expected failure, not a deleted case.** Mark it
-with the finding ID from `specs/code-review.md`:
+with a short identifier for the defect it records:
 
 ```c
 { "TestSignatureIsFullLength", test_signature_is_full_length, "C6" },
@@ -72,12 +72,12 @@ runs the same cases against the same baselines. Two sets would let the
 architectures drift apart with nothing to notice, because each would only ever
 be compared against itself.
 
-Only the pull requests `specs/plan.md` names may change a golden file, and each
+A change that moves a golden file needs a reason in the pull request, and each
 one attaches before and after images. A golden change anywhere else is a bug.
 
 ## Where the cases come from
 
 Most are ported from go-dims by name, so the two projects verify one
-specification instead of two that drift. `specs/plan.md` has the port table.
+specification instead of two that drift.
 The go-dims cases are MIT licensed; `NOTICE` records the credit and every
 ported file keeps its header.

@@ -14,12 +14,13 @@ typedef void (*dims_test_fn)(void);
 
 typedef struct dims_test {
     /* The go-dims test name where the case is a port, so the two suites line
-     * up. See specs/plan.md for the port table. */
+     * up. */
     const char *name;
     dims_test_fn fn;
-    /* NULL when the case must pass. Otherwise the finding ID from
-     * specs/code-review.md that the case records. An expected failure that
-     * passes is reported as XPASS and fails the run. */
+    /* NULL when the case must pass. Otherwise a short identifier for the
+     * defect the case records, so a known failure is visible without being
+     * noisy. An expected failure that passes is reported as XPASS and fails
+     * the run: the defect was either misdiagnosed or already fixed. */
     const char *xfail;
 } dims_test;
 

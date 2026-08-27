@@ -55,8 +55,8 @@ test_watermark(void)
  * opacity, size, and gravity are read whether or not their token was present,
  * so a short argument list uses uninitialized memory. Finding M9. The values
  * turn out to be stable across requests, so the defect is not observable from
- * outside; confirming it needs valgrind or -fsanitize=memory, which PR 5 adds
- * to CI. This case guards the property that two identical requests agree.
+ * outside; confirming it needs valgrind or -fsanitize=memory, which CI runs.
+ * This case guards the property that two identical requests agree.
  */
 static void
 test_watermark_short_arguments_are_stable(void)
@@ -76,7 +76,7 @@ test_watermark_short_arguments_are_stable(void)
 /*
  * Finding C5, the crash half. strrchr returns NULL when the overlay has no
  * slash, and the next line dereferences it. See src/mod_dims_ops.c:378.
- * PR 13 checks the result.
+ * Checking the result.
  */
 static void
 test_watermark_overlay_without_slash(void)
