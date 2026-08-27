@@ -78,7 +78,7 @@ set_tests_properties(ShippedConfigLoadsTheModule PROPERTIES LABELS "contract")
 
 # -- The in-process layer
 #
-# dims_unit_test links src/mod_dims_ops.c and calls each operation directly.
+# dims_unit_test links the operation sources and calls each one directly.
 # It needs no httpd and no network: stub_httpd.c supplies the three symbols
 # the operations reach for, and the overlay comes from the fixture directory.
 #
@@ -102,7 +102,23 @@ add_executable(dims_unit_test
     lib/environment.c
     lib/golden.c
     lib/test.c
-    ${CMAKE_SOURCE_DIR}/src/mod_dims_ops.c)
+    ${CMAKE_SOURCE_DIR}/src/operations/autolevel.c
+    ${CMAKE_SOURCE_DIR}/src/operations/brightness.c
+    ${CMAKE_SOURCE_DIR}/src/operations/crop.c
+    ${CMAKE_SOURCE_DIR}/src/operations/flip-flop.c
+    ${CMAKE_SOURCE_DIR}/src/operations/format.c
+    ${CMAKE_SOURCE_DIR}/src/operations/geometry.c
+    ${CMAKE_SOURCE_DIR}/src/operations/grayscale.c
+    ${CMAKE_SOURCE_DIR}/src/operations/invert.c
+    ${CMAKE_SOURCE_DIR}/src/operations/legacy.c
+    ${CMAKE_SOURCE_DIR}/src/operations/quality.c
+    ${CMAKE_SOURCE_DIR}/src/operations/resize.c
+    ${CMAKE_SOURCE_DIR}/src/operations/rotate.c
+    ${CMAKE_SOURCE_DIR}/src/operations/sepia.c
+    ${CMAKE_SOURCE_DIR}/src/operations/sharpen.c
+    ${CMAKE_SOURCE_DIR}/src/operations/strip.c
+    ${CMAKE_SOURCE_DIR}/src/operations/thumbnail.c
+    ${CMAKE_SOURCE_DIR}/src/operations/watermark.c)
 
 target_include_directories(dims_unit_test PRIVATE
     ${APXS_INCLUDE_DIR}
