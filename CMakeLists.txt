@@ -44,6 +44,7 @@ find_package(MagickWand7 REQUIRED)
 # -- The module
 
 add_library(mod_dims MODULE
+    src/configuration.c
     src/mod_dims.c
     src/mod_dims_ops.c)
 
