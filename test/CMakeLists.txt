@@ -38,6 +38,7 @@ target_compile_definitions(dims_test PRIVATE _GNU_SOURCE)
 
 dims_set_warnings(dims_test)
 dims_set_hardening(dims_test)
+dims_set_sanitizers(dims_test)
 
 # Ask the binary which cases it carries and register each one. The list comes
 # from the binary itself, so a case cannot be added to a file and silently
@@ -74,3 +75,60 @@ add_test(NAME ShippedConfigLoadsTheModule
         -DDIMS_SOURCE_DIR=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckLoadModule.cmake)
 set_tests_properties(ShippedConfigLoadsTheModule PROPERTIES LABELS "contract")
+
+# -- The in-process layer
+#
+# dims_unit_test links src/mod_dims_ops.c and calls each operation directly.
+# It needs no httpd and no network: stub_httpd.c supplies the three symbols
+# the operations reach for, and the overlay comes from the fixture directory.
+#
+# These cases carry the label "unit", so they run without the compose
+# services:
+#
+#   ctest --test-dir build -L unit
+
+add_executable(dims_unit_test
+    unit/main.c
+    unit/fixture.c
+    unit/operation.c
+    unit/stub_httpd.c
+    unit/test_adjustments.c
+    unit/test_crop.c
+    unit/test_output.c
+    unit/test_resize.c
+    unit/test_rotate.c
+    unit/test_thumbnail.c
+    unit/test_watermark.c
+    lib/environment.c
+    lib/golden.c
+    lib/test.c
+    ${CMAKE_SOURCE_DIR}/src/mod_dims_ops.c)
+
+target_include_directories(dims_unit_test PRIVATE
+    ${APXS_INCLUDE_DIR}
+    ${CMAKE_SOURCE_DIR}/src)
+
+target_link_libraries(dims_unit_test PRIVATE
+    PkgConfig::APR
+    PkgConfig::APRUTIL
+    PkgConfig::CURL
+    PkgConfig::CRYPTO
+    Dims::MagickWand
+    Dims::MagickCore)
+
+target_compile_definitions(dims_unit_test PRIVATE _GNU_SOURCE)
+
+dims_set_warnings(dims_unit_test)
+dims_set_hardening(dims_unit_test)
+dims_set_sanitizers(dims_unit_test)
+
+file(GLOB DIMS_UNIT_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/unit/test_*.c")
+foreach(source IN LISTS DIMS_UNIT_SOURCES)
+    file(STRINGS "${source}" entries REGEX "^    \\{ \"Test[A-Za-z0-9]+\",")
+    foreach(entry IN LISTS entries)
+        string(REGEX MATCH "\"(Test[A-Za-z0-9]+)\"" _ "${entry}")
+        set(case "${CMAKE_MATCH_1}")
+        add_test(NAME unit.${case} COMMAND dims_unit_test --run=${case})
+        set_tests_properties(unit.${case} PROPERTIES LABELS "unit")
+    endforeach()
+endforeach()
