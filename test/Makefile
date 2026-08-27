@@ -25,6 +25,7 @@ export DIMS_GID := $(shell id -g)
 IN_CONTAINER := $(COMPOSE) exec -T -w /build/mod_dims dims
 
 build:
+	$(MAKE) -C .. toolchain
 	$(COMPOSE) build dims
 
 up: build

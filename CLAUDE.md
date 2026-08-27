@@ -77,9 +77,17 @@ For the README, `docs/`, comments, error messages, and pull request bodies.
 
 Work targets `main`. `master` is version 3.3.31 and takes hotfixes only.
 
-Never commit to `master` as part of this work. When a hotfix lands on `master`, merge
-`master` into `main`. Do not cherry-pick: a cherry-pick leaves the merge base behind and
-every open branch then rebases onto a moving target.
+Every pull request bases on `main`. Do not stack one pull request on another.
+
+A stacked pull request points at a branch, and merging its parent into `main`
+does not carry it along: the parent branch is already absorbed, so merging the
+child into it changes nothing that ships. GitHub only retargets a child when
+the parent branch is deleted. Waiting for `main` to move and branching again
+costs a few minutes and cannot go wrong.
+
+Never commit to `master` as part of this work. When a hotfix lands on `master`,
+merge `master` into `main`. Do not cherry-pick: a cherry-pick leaves the merge
+base behind and every open branch then rebases onto a moving target.
 
 Write `main` into every workflow trigger, badge, and documentation link.
 

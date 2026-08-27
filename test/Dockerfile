@@ -1,55 +1,18 @@
 # The test image. It builds mod_dims, keeps the build tree, and serves it, so
 # ctest runs where the compose services are reachable.
 #
-# This is not the shipped image. docker/Dockerfile builds that, and it is
-# rebuilt separately.
+# The toolchain comes from the builder image, which is where ImageMagick is
+# compiled. See Dockerfile.builder.
 #
-# ImageMagick is built from source rather than taken from the distribution,
-# for one reason: quantum depth. Every packaged build is Q16, and this service
-# has always run Q8. The quantum depth sets how many bytes a channel takes in
-# the pixel cache, so Q16 doubles the memory every request holds. It also
-# changes every output byte, so it is not a detail that can be settled later.
-ARG HTTPD_VERSION=2.4.62
-ARG IMAGEMAGICK_VERSION=7.1.2-30
-ARG IMAGEMAGICK_SHA256=3034a64f22398e15ee3dd1e6b1aa83d838cfc47df1bb246ae0eca9590e6ace72
+# The tag names the ImageMagick version on purpose. The golden files record
+# what that exact toolchain produces, so moving to a new one has to be a
+# visible change to this line rather than a silent pull of a moving tag.
+#
+# Build the toolchain locally with `make builder-local` and point this at
+# mod_dims:builder-local to try a change before publishing it.
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30
 
-FROM httpd:${HTTPD_VERSION} AS build
-
-ARG IMAGEMAGICK_VERSION
-ARG IMAGEMAGICK_SHA256
-ARG PREFIX=/usr/local/imagemagick
-
-RUN apt-get -y update && \
-    apt-get install -y --no-install-recommends \
-        build-essential cmake ca-certificates pkg-config wget \
-        libapr1-dev libaprutil1-dev \
-        libcurl4-openssl-dev libssl-dev \
-        libjpeg62-turbo-dev libpng-dev libtiff-dev libwebp-dev \
-        liblcms2-dev libfreetype6-dev libxml2-dev zlib1g-dev && \
-
-    rm -rf /var/lib/apt/lists/*
-# Q8 with no HDRI, which is what this service runs. HDRI stores channels as
-# floats and would undo the point of Q8.
-RUN wget -q -O im.tar.gz \
-      "https://github.com/ImageMagick/ImageMagick/archive/refs/tags/${IMAGEMAGICK_VERSION}.tar.gz" && \
-    echo "${IMAGEMAGICK_SHA256}  im.tar.gz" | sha256sum -c - && \
-    tar xf im.tar.gz && \
-    cd "ImageMagick-${IMAGEMAGICK_VERSION}" && \
-    ./configure \
-        --prefix=${PREFIX} \
-        --with-quantum-depth=8 \
-        --disable-hdri \
-        --without-x \
-        --disable-openmp \
-        --with-jpeg --with-png --with-tiff --with-webp \
-        --with-lcms --with-freetype --with-xml \
-        --without-magick-plus-plus && \
-    make -j"$(nproc)" && make install && \
-    cd .. && rm -rf "ImageMagick-${IMAGEMAGICK_VERSION}" im.tar.gz
-
-
-ENV PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig
-ENV LD_LIBRARY_PATH=${PREFIX}/lib
+FROM ${BUILDER_IMAGE}
 
 WORKDIR /build/mod_dims
 COPY . /build/mod_dims
@@ -60,12 +23,6 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
     ln -sf /build/mod_dims/build/test/dims_test /usr/local/bin/dims_test && \
     ln -sf /build/mod_dims/build/test/dims_unit_test /usr/local/bin/dims_unit_test && \
     chmod -R a+rwX /build/mod_dims/build
-
-# The golden files record what this build produces, so the name says which
-# build it was. Only major.minor: the patch level does not change output.
-RUN printf '%s-q8\n' \
-      "$(echo "${IMAGEMAGICK_VERSION}" | sed -E 's/^([0-9]+\.[0-9]+).*/\1/')" \
-      > /etc/dims-magick-version
 
 ENV LC_ALL=C
 
