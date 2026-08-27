@@ -31,6 +31,9 @@ A pull request describes the change. It does not address a reader.
 - No greeting, no closing, no apology, no commentary about the work.
 - No emoji. No attribution, sign-off, or tool reference.
 - The title follows the commit message rules: one short line, imperative mood.
+- Do not wrap lines. Write each paragraph as one line and let the renderer wrap
+  it. Hard wrapping reflows badly in a browser and makes an edit rewrite the
+  whole paragraph. Code blocks keep their own line breaks.
 
 Use this body structure. Drop a heading that has nothing under it.
 
