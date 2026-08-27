@@ -1,0 +1,93 @@
+name: Pull Request
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Run the suite
+        run: make -C test test
+
+      - name: Show the module log on failure
+        if: failure()
+        run: make -C test logs
+
+      - name: Collect the images a golden case rejected
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-golden-images
+          path: test/golden/**/*.failed.*
+          if-no-files-found: ignore
+
+  golden:
+    name: Golden files are deterministic
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Regenerating must reproduce the bytes already in the tree. A diff here
+      # means the output is not deterministic, which makes every golden case
+      # meaningless.
+      - name: Regenerate every golden file
+        run: make -C test test-update
+
+      - name: Fail when regenerating changed anything
+        run: |
+          if ! git diff --quiet -- test/golden; then
+            echo "Regenerating the golden files changed them."
+            echo "The output is not deterministic, so every golden case is meaningless."
+            git diff --stat -- test/golden
+            exit 1
+          fi
+          echo "every golden file reproduced exactly"
+
+  arm64:
+    name: Build on arm64
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Compile only. The golden files record what one ImageMagick build
+      # produces on one architecture, and only amd64 baselines are in the tree.
+      # PR 8 settles the toolchain, and arm64 baselines follow it.
+      - name: Build
+        run: make -C test build
+
+  sanitizers:
+    name: Sanitizers
+    runs-on: ubuntu-24.04
+    # Findings C4, M9, and H10 are reads of uninitialized or out of bounds
+    # memory. This job is where they surface. It does not block until the fixes
+    # land, because the module reports them today.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Run the in-process cases under the sanitizers
+        run: make -C test sanitize
