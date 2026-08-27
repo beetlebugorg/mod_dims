@@ -53,6 +53,7 @@
 module dims_module; 
 
 #define DIMS_CURL_SHARED_KEY "dims_curl_shared"
+#define DIMS_POST_CONFIG_KEY "dims_post_config"
 
 #define MAGICK_CHECK(func, d) \
     do {\
@@ -2044,18 +2045,39 @@ dims_handler(request_rec *r)
 static int
 dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
 {
-    dims_config_rec *config = (dims_config_rec *) 
-            ap_get_module_config(s->module_config, &dims_module);
     apr_status_t status;
     apr_size_t retsize;
+    void *first_pass = NULL;
+
+    /*
+     * httpd runs post_config twice. The first pass is a dry run, and the pool
+     * it hands over is cleared afterwards. That takes the shared memory with
+     * it and leaves the global handle pointing at freed memory, so the second
+     * pass was destroying a block that no longer existed. glibc happened to
+     * report success. musl reports the error, and the server then refuses to
+     * start.
+     *
+     * Skip the first pass, which is what httpd's own modules do. The shared
+     * memory is then created once, against a pool that lives as long as the
+     * server.
+     */
+    apr_pool_userdata_get(&first_pass, DIMS_POST_CONFIG_KEY, s->process->pool);
+    if (first_pass == NULL) {
+        apr_pool_userdata_set((const void *) 1, DIMS_POST_CONFIG_KEY,
+                              apr_pool_cleanup_null, s->process->pool);
+        return OK;
+    }
 
     ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
-
-    MagickWandGenesis();
-    MagickSetResourceLimit(AreaResource, config->area_size);
-    MagickSetResourceLimit(DiskResource, config->disk_size);
-    MagickSetResourceLimit(MemoryResource, config->memory_size);
-    MagickSetResourceLimit(MapResource, config->map_size);
+    /*
+     * ImageMagick is started in the child, never here. Starting it in the
+     * parent leaves every worker inheriting semaphores and cache state across
+     * the fork, which ImageMagick 7 does not survive: the first request into a
+     * worker segfaults. The resource limits go with it, because they are
+     * per process and the process that matters is the one doing the work.
+     *
+     * See dims_child_init.
+     */
 
     ops = apr_hash_make(p);
     apr_hash_set(ops, "strip", APR_HASH_KEY_STRING, dims_strip_operation);
@@ -2080,19 +2102,6 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     status = apr_atomic_init(p);
     if (status != APR_SUCCESS)
         return HTTP_INTERNAL_SERVER_ERROR;
-
-    /* If there was a memory block already assigned, destroy it */
-    if (shm) {
-        status = apr_shm_destroy(shm);
-        if (status != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                         "mod_dims : Couldn't destroy old memory block\n");
-            return status;
-        } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
-                 "mod_dims : Old Shared memory block, destroyed.");
-        }
-    }
 
     /* Create shared memory block */
     status = apr_shm_create(&shm, sizeof(dims_stats_rec), NULL, p);
@@ -2183,7 +2192,17 @@ dims_child_cleanup(void *data)
 static void
 dims_child_init(apr_pool_t *p, server_rec *s)
 {
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            s->module_config, &dims_module);
+
     MagickWandGenesis();
+
+    /* Every limit is per process, so the total a host can use is this
+     * multiplied by the number of workers. */
+    MagickSetResourceLimit(AreaResource, config->area_size);
+    MagickSetResourceLimit(DiskResource, config->disk_size);
+    MagickSetResourceLimit(MemoryResource, config->memory_size);
+    MagickSetResourceLimit(MapResource, config->map_size);
     curl_global_init(CURL_GLOBAL_ALL);
 
     dims_curl_rec *locks =
