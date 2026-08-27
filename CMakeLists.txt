@@ -76,6 +76,7 @@ target_link_options(mod_dims PRIVATE "LINKER:--allow-shlib-undefined")
 
 dims_set_warnings(mod_dims)
 dims_set_hardening(mod_dims)
+dims_set_sanitizers(mod_dims)
 
 # -- Install
 #

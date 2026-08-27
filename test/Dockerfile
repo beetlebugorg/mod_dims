@@ -26,7 +26,9 @@ COPY . /build/mod_dims
 RUN cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
     cmake --build build -j"$(nproc)" && \
     cp build/libmod_dims.so /usr/local/apache2/modules/libmod_dims.so && \
-    ln -sf /build/mod_dims/build/test/dims_test /usr/local/bin/dims_test
+    ln -sf /build/mod_dims/build/test/dims_test /usr/local/bin/dims_test && \
+    ln -sf /build/mod_dims/build/test/dims_unit_test /usr/local/bin/dims_unit_test && \
+    chmod -R a+rwX /build/mod_dims/build
 
 # Only major.minor: the patch level does not change encoder output.
 RUN dpkg-query -W -f='${Version}' libmagickwand-dev | \
@@ -45,6 +47,12 @@ ENV TMPDIR=/tmp/
 # The loopback guard case needs a real image on 127.0.0.1, or a refusal cannot
 # be told apart from an unreachable address.
 COPY test/origin/grid.png /usr/local/apache2/htdocs/grid.png
+
+# The container runs as the invoking user. httpd cannot drop privileges when
+# it did not start as root, so the User and Group directives go away, and the
+# pid file moves somewhere any uid can write.
+RUN sed -i -E 's@^(User|Group) @# \1 @' /usr/local/apache2/conf/httpd.conf && \
+    printf 'PidFile /tmp/httpd.pid\nServerName dims\n' >> /usr/local/apache2/conf/httpd.conf
 
 COPY test/conf/dims-test.conf /usr/local/apache2/conf/extra/dims-test.conf
 RUN sed -i 's|^Listen 80$|Listen 8000|' /usr/local/apache2/conf/httpd.conf && \
