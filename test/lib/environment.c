@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/utsname.h>
 
 /* Reads one key from /etc/os-release into buf. Returns 0 on success. */
 static int
@@ -59,7 +58,6 @@ dims_test_environment(void)
     char version[32] = "0";
     char magick[64] = "unknown";
     const char *from_env;
-    struct utsname host;
 
     if (environment[0] != '\0') {
         return environment;
@@ -92,12 +90,8 @@ dims_test_environment(void)
     if (from_env != NULL && from_env[0] != '\0') {
         snprintf(magick, sizeof(magick), "%s", from_env);
     }
-    if (uname(&host) != 0) {
-        snprintf(host.machine, sizeof(host.machine), "unknown");
-    }
 
-    snprintf(environment, sizeof(environment), "%s%s-im%s_%s",
-             distro, version, magick, host.machine);
+    snprintf(environment, sizeof(environment), "%s%s-im%s", distro, version, magick);
 
     return environment;
 }
