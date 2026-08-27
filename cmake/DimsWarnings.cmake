@@ -39,3 +39,20 @@ function(dims_set_hardening target)
             "LINKER:-z,now")
     endif()
 endfunction()
+
+# A sanitizer build. Three findings in specs/code-review.md are reads of
+# uninitialized or out of bounds memory, which produce a wrong answer only
+# sometimes and are invisible to a normal run: C4, M9, and H10.
+#
+#   cmake -B build-asan -DDIMS_SANITIZE=address,undefined
+option(DIMS_SANITIZE "Build with the named sanitizers, for example address,undefined" "")
+
+function(dims_set_sanitizers target)
+    if(DIMS_SANITIZE)
+        target_compile_options(${target} PRIVATE
+            -fsanitize=${DIMS_SANITIZE}
+            -fno-omit-frame-pointer
+            -g)
+        target_link_options(${target} PRIVATE -fsanitize=${DIMS_SANITIZE})
+    endif()
+endfunction()

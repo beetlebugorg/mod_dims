@@ -1,5 +1,10 @@
 # Two services and no network access. The origin serves the fixture images so
 # every test is deterministic and nothing reaches the internet.
+#
+# The dims service runs as the invoking user, not root. That keeps three
+# things simple at once: golden files land owned by whoever ran the suite, the
+# httpd worker and the test binaries share one identity so the overlay cache
+# under TMPDIR works for both, and nothing in the tree ends up needing a chown.
 services:
   origin:
     image: httpd:2.4.62
@@ -22,6 +27,7 @@ services:
     build:
       context: ..
       dockerfile: test/Dockerfile
+    user: "${DIMS_UID:-1000}:${DIMS_GID:-1000}"
     depends_on:
       - origin
     command: ["httpd-foreground"]
