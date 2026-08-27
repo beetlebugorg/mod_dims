@@ -64,6 +64,12 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: true
           tags: ${{ env.REGISTRY }}:${{ steps.version.outputs.tag }}-${{ matrix.arch }}
+          # No provenance attestation. With it, each per architecture tag is an
+          # index holding the image plus an unknown/unknown manifest. Joining
+          # two of those collides on the attestations and drops an
+          # architecture: the first publish produced an index with amd64 and an
+          # attestation, and no arm64 at all.
+          provenance: false
 
   # One name that resolves to whichever architecture asks for it.
   manifest:
@@ -98,3 +104,19 @@ jobs:
             "${REGISTRY}:${tag}-amd64" \
             "${REGISTRY}:${tag}-arm64"
           docker buildx imagetools inspect "${REGISTRY}:${tag}"
+
+      # A joined manifest that lost an architecture still pulls on the one it
+      # kept, so nothing downstream would notice until an arm64 runner fell
+      # back to building the toolchain itself. Check both are there.
+      - name: Check both architectures are in the manifest
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          manifest=$(docker buildx imagetools inspect "${REGISTRY}:${tag}" --raw)
+          for arch in amd64 arm64; do
+            echo "$manifest" | grep -q "\"architecture\": \"${arch}\"" || {
+              echo "the manifest has no ${arch} entry"
+              echo "$manifest"
+              exit 1
+            }
+            echo "${arch} present"
+          done
