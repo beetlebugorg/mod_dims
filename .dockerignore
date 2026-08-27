@@ -1,5 +1,4 @@
 .git
+build
 specs
 test/golden
-**/*.o
-test/dims_test

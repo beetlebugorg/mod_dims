@@ -1,0 +1,44 @@
+# An example mod_dims configuration. Copy it, edit it, and include it from
+# httpd.conf:
+#
+#     Include conf/extra/mod_dims.conf
+#
+# Installing the module does not edit httpd.conf. That is deliberate: a build
+# step must not change a running server's configuration.
+
+<IfModule !mod_dims.c>
+    LoadModule dims_module modules/libmod_dims.so
+</IfModule>
+
+# Timeouts, in milliseconds.
+DimsDownloadTimeout 60000
+DimsImagemagickTimeout 20000
+
+# DimsAddClient <appId> <noImageUrl> <max-age> <downstream-ttl> <trust> <minSrc> <maxSrc> <secret>
+#
+# The secret is the key for /dims4/ signatures. Keep it out of version control.
+DimsAddClient CLIENT http://example.com/no-image.png 604800 604800 trust 300 86400 changeme
+
+# Shown when a source image cannot be fetched or processed.
+DimsDefaultImageURL http://example.com/no-image.png
+
+DimsCacheExpire 604800
+DimsNoImageCacheExpire 60
+
+# Hosts that /dims3/ may fetch from. A leading *. matches subdomains only, not
+# the apex. Signed /dims4/ requests skip this list entirely, which
+# specs/code-review.md records as finding C1.
+DimsAddWhitelist images.example.com
+DimsAddWhitelist *.cdn.example.com
+
+<Location /dims3/>
+    SetHandler dims3
+</Location>
+
+<Location /dims4/>
+    SetHandler dims4
+</Location>
+
+<Location /dims-status/>
+    SetHandler dims-status
+</Location>

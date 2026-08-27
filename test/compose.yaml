@@ -27,7 +27,7 @@ services:
     command: ["httpd-foreground"]
     networks: [dims]
     volumes:
-      - ./golden:/golden
+      - ./golden:/build/mod_dims/test/golden
 
 networks:
   dims:

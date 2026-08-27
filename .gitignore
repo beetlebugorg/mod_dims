@@ -1,27 +1,5 @@
-# Files the autotools build generates. Anchored to the root: an unanchored
-# pattern matches at every depth, which silently swallowed test/Makefile.
-/Makefile
-/Makefile.in
-/aclocal.m4
-/autom4te.cache/
-/compile
-/config.guess
-/config.h
-/config.h.in
-/config.log
-/config.status
-/config.sub
-/configure
-/depcomp
-/install-sh
-/INSTALL
-/libtool
-/ltmain.sh
-/m4/
-/missing
-/stamp-h1
-/src/Makefile
-/src/Makefile.in
+# The CMake build directory.
+/build/
 
 # The code review and the remediation plan.
 specs/
