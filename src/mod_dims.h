@@ -37,6 +37,10 @@
 
 #include <curl/curl.h>
 
+/* The version httpd reports and the status handler prints. */
+#define MODULE_RELEASE "$Revision: $"
+#define MODULE_VERSION "3.3.31"
+
 #define LEGACY_DIMS_RESIZE 1
 #define LEGACY_DIMS_REFORMAT 2
 #define LEGACY_DIMS_CROP 4
