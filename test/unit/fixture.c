@@ -110,11 +110,21 @@ dims_fixture_export(dims_request_rec *d, size_t *length)
      * PNG carries a tIME chunk holding the moment it was written, so two runs
      * of the same operation produce different bytes. The HTTP layer never sees
      * it: dims_process_image runs strip on every request, which removes it.
-     *
-     * Excluding the chunk keeps the golden files stable without stripping
-     * everything, so TestStripTrue and TestStripFalse still differ.
      */
     MagickSetOption(d->wand, "png:exclude-chunk", "date,time");
+
+    /*
+     * MagickThumbnailImage attaches the Thumbnail spec properties, two of
+     * which describe the source file rather than the image it produced:
+     * Thumb::MTime is the file's modification time, and Thumb::URI is its
+     * path. git sets the modification time at checkout, so the same operation
+     * on the same bytes produces a different file on every machine.
+     *
+     * Both are dropped here. Thumb::Image::Width and the rest describe the
+     * original image and stay.
+     */
+    MagickDeleteImageProperty(d->wand, "Thumb::MTime");
+    MagickDeleteImageProperty(d->wand, "Thumb::URI");
 
     MagickResetIterator(d->wand);
     blob = MagickGetImagesBlob(d->wand, length);
