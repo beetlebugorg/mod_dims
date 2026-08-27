@@ -53,26 +53,27 @@ static DimsGravity gravities[] = {
 };
 
 /*
- * ImageMagick 6 marks ParseSizeGeometry deprecated. It applies the geometry
- * flags against the image's own dimensions, which is exactly what resize and
- * thumbnail need, and version 6 ships nothing else that does the same thing.
- * Any replacement would change what every request returns, so the call stays
- * and the warning is suppressed in one place rather than at three call sites.
- * The move to ImageMagick 7 has to settle this properly.
+ * ParseSizeGeometry, written out.
+ *
+ * ImageMagick 6 deprecated it and ImageMagick 7 removed it. Its whole body was
+ * these two calls: seed the rectangle from the image, then let the geometry
+ * string modify it. Both survive into version 7, so writing it out here is
+ * what makes the module portable.
+ *
+ * This is deliberately landed while still building against version 6, so the
+ * golden files prove the two are the same. They do: no baseline moves.
  */
 static MagickStatusType
 dims_parse_size_geometry(const Image *image, const char *geometry,
                          RectangleInfo *region)
 {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    return ParseSizeGeometry(image, geometry, region);
-#pragma GCC diagnostic pop
-}
+    SetGeometry(image, region);
 
+    return ParseMetaGeometry(geometry, &region->x, &region->y, &region->width,
+                             &region->height);
+}
 /*
 apr_status_t
-dims_smart_crop_operation (dims_request_rec *d, char *args, const char **err) {
     MagickStatusType flags;
     RectangleInfo rec;
     ExceptionInfo ex_info;
