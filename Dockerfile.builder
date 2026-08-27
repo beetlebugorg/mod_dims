@@ -18,9 +18,15 @@
 # that exact tag. A rebuild of the toolchain is then a visible change to a
 # file, not something that quietly moves every golden image.
 
+# The base is pinned by digest, not by tag. The tag on this image names the
+# ImageMagick version, and the golden files trust that name to mean one
+# toolchain. A moving base would let a rebuild publish different encoders
+# under the same name, and every baseline would shift with nothing in the
+# diff to show why.
 ARG HTTPD_VERSION=2.4.62
+ARG HTTPD_DIGEST=sha256:4c7788695c832bf415a662dfb5160f1895e65fc65c025e85f436ee2c9e7d7f3e
 
-FROM httpd:${HTTPD_VERSION}
+FROM httpd:${HTTPD_VERSION}@${HTTPD_DIGEST}
 
 ARG IMAGEMAGICK_VERSION=7.1.2-30
 ARG IMAGEMAGICK_SHA256=3034a64f22398e15ee3dd1e6b1aa83d838cfc47df1bb246ae0eca9590e6ace72
@@ -30,16 +36,30 @@ LABEL org.opencontainers.image.title="mod_dims builder"
 LABEL org.opencontainers.image.description="httpd, APR, libcurl, and ImageMagick 7 at quantum depth 8"
 LABEL org.opencontainers.image.source="https://github.com/beetlebugorg/mod_dims"
 
+# The delegates are the encoders. Their versions decide the bytes in every
+# golden file, so they are pinned.
+#
+# Debian drops a version from the archive when a security update replaces it,
+# so this build fails when that happens. That is the point: a loud failure that
+# says "bump these and review the golden diff" beats a quiet rebuild that
+# changes every baseline.
+#
+# libwebp 1.2.4-0.2+deb12u1 carries the fix for CVE-2023-4863, the heap
+# overflow reachable from a crafted lossless image.
 RUN apt-get -y update && \
     apt-get install -y --no-install-recommends \
         build-essential cmake ca-certificates pkg-config wget \
         libapr1-dev libaprutil1-dev \
         libcurl4-openssl-dev libssl-dev \
-        libjpeg62-turbo-dev libpng-dev libtiff-dev libwebp-dev \
-        liblcms2-dev libfreetype6-dev libxml2-dev zlib1g-dev && \
+        libjpeg62-turbo-dev=1:2.1.5-2 \
+        libpng-dev=1.6.39-2+deb12u5 \
+        libtiff-dev=4.5.0-6+deb12u4 \
+        libwebp-dev=1.2.4-0.2+deb12u1 \
+        liblcms2-dev=2.14-2+deb12u1 \
+        libfreetype6-dev=2.12.1+dfsg-5+deb12u4 \
+        libxml2-dev=2.9.14+dfsg-1.3~deb12u6 \
+        zlib1g-dev=1:1.2.13.dfsg-1 && \
     rm -rf /var/lib/apt/lists/*
-
-# Q8 with no HDRI. HDRI stores channels as floats and would undo the point
 # of Q8.
 RUN wget -q -O im.tar.gz \
       "https://github.com/ImageMagick/ImageMagick/archive/refs/tags/${IMAGEMAGICK_VERSION}.tar.gz" && \
