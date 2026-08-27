@@ -64,18 +64,23 @@ jobs:
           echo "every golden file reproduced exactly"
 
   arm64:
-    name: Build on arm64
+    name: Test on arm64
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
 
-      # Compile only. The golden files record what one ImageMagick build
-      # produces on one architecture, and only amd64 baselines are in the tree.
-      # PR 8 settles the toolchain, and arm64 baselines follow it.
-      - name: Build
-        run: make -C test build
+      # them and upload them, so they can be committed and the job can move
+      # to running the suite like amd64.
+      - name: Generate the arm64 baselines
+        run: make -C test test-update
+
+      - name: Upload them
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-golden
+          path: test/golden/
 
   sanitizers:
     name: Sanitizers
