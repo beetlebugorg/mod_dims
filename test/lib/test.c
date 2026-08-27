@@ -109,6 +109,7 @@ int
 dims_test_main(const dims_test_group *groups, int argc, char **argv)
 {
     const char *filter = NULL;
+    int listing = 0;
     int failures = 0;
     int ran = 0;
     int i;
@@ -116,15 +117,32 @@ dims_test_main(const dims_test_group *groups, int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--update-golden") == 0) {
             updating = 1;
+        } else if (strcmp(argv[i], "--list") == 0) {
+            listing = 1;
         } else if (strncmp(argv[i], "--run=", 6) == 0) {
             filter = argv[i] + 6;
         } else {
-            fprintf(stderr, "usage: dims_test [--update-golden] [--run=SUBSTRING]\n");
+            fprintf(stderr,
+                    "usage: dims_test [--update-golden] [--run=SUBSTRING] [--list]\n");
             return 2;
         }
     }
 
     setvbuf(stdout, NULL, _IOLBF, 0);
+
+    if (listing) {
+        const dims_test_group *group;
+
+        for (group = groups; group->file != NULL; group++) {
+            const dims_test *test;
+
+            for (test = group->tests; test->name != NULL; test++) {
+                printf("%s\t%s\t%s\n", group->file, test->name,
+                       test->xfail ? test->xfail : "-");
+            }
+        }
+        return 0;
+    }
 
     for (; groups->file != NULL; groups++) {
         const dims_test *test;

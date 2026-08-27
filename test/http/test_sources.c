@@ -46,11 +46,35 @@ test_animated_gif_passthrough(void)
  * Finding H2. The SVG branch calls apr_pstrcat on a buffer that is not NUL
  * terminated. See src/mod_dims.c:761-767. The fixture has no XML declaration,
  * which is the branch that runs.
+ *
+ * The case also asserts the response is not the fallback image. Asserting the
+ * dimensions alone does not discriminate: dims_cleanup resizes the fallback to
+ * the requested size, so a failed render and a successful one are the same
+ * shape.
  */
 static void
 test_svg_source(void)
 {
-    dims_run_golden("TestSvgSource", "sample.svg", "resize/100x100/format/png", 100, 100);
+    dims_response *fallback = dims_request_ops("resize/100x100/format/png",
+                                               "missing.png");
+    dims_response *rendered = dims_request_ops("resize/100x100/format/png",
+                                               "sample.svg");
+    dims_image_size size;
+
+    CHECK_INT(rendered->status, 200, "an SVG source");
+
+    size = dims_must_size(rendered->body, rendered->body_len);
+    CHECK_INT(size.width, 100, "width");
+    CHECK_INT(size.height, 100, "height");
+
+    CHECK(fallback->body_len != rendered->body_len ||
+              memcmp(fallback->body, rendered->body, rendered->body_len) != 0,
+          "the SVG did not render: the response is the fallback image");
+
+    assert_golden("sample.TestSvgSource", rendered->body, rendered->body_len, ".png");
+
+    dims_response_free(fallback);
+    dims_response_free(rendered);
 }
 
 static void

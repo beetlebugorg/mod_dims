@@ -22,7 +22,8 @@ static const char *
 golden_dir(void)
 {
     const char *from_env = getenv("DIMS_TEST_GOLDEN_DIR");
-    return (from_env != NULL && from_env[0] != '\0') ? from_env : "/golden";
+    return (from_env != NULL && from_env[0] != '\0') ? from_env
+                                                : "/build/mod_dims/test/golden";
 }
 
 /* Creates the environment directory. Returns 0 on success. */
