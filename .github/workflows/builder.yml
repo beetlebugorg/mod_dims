@@ -1,4 +1,4 @@
-name: Builder image
+name: Toolchain
 
 # The toolchain mod_dims builds against: httpd, APR, libcurl, and ImageMagick
 # compiled at quantum depth 8. Publishing it keeps ImageMagick out of every
@@ -50,7 +50,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read the ImageMagick version
+      - name: Read the toolchain tag
         id: version
         run: |
           version=$(sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' docker/Dockerfile.builder)
@@ -72,9 +72,9 @@ jobs:
           # attestation, and no arm64 at all.
           provenance: false
 
-  # One name that resolves to whichever architecture asks for it.
+  # The tag both architectures resolve through.
   manifest:
-    name: Publish the manifest
+    name: Manifest
     needs: [build]
     runs-on: ubuntu-24.04
     permissions:
@@ -90,14 +90,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read the ImageMagick version
+      - name: Read the toolchain tag
         id: version
         run: |
           version=$(sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' docker/Dockerfile.builder)
           revision=$(sed -n 's/^ARG BUILDER_REVISION=//p' docker/Dockerfile.builder)
           echo "tag=builder-im${version}-r${revision}" >> "$GITHUB_OUTPUT"
 
-      - name: Join the architectures
+      - name: Merge the manifest
         run: |
           tag="${{ steps.version.outputs.tag }}"
           docker buildx imagetools create \
@@ -110,7 +110,7 @@ jobs:
       # A joined manifest that lost an architecture still pulls on the one it
       # kept, so nothing downstream would notice until an arm64 runner fell
       # back to building the toolchain itself. Check both are there.
-      - name: Check both architectures are in the manifest
+      - name: Check the manifest
         run: |
           tag="${{ steps.version.outputs.tag }}"
           manifest=$(docker buildx imagetools inspect "${REGISTRY}:${tag}" --raw)
