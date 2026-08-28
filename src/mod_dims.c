@@ -532,18 +532,21 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
     }
 
     /*
-     * With no error image configured every failure answers 404, whatever it
-     * was. dims_http_status disagrees, and is right: a malformed geometry is
-     * a bad request and a timeout is not a missing file.
+     * With no error image to send, the status is all the caller gets, so it
+     * has to be the right one. dims_http_status is the same mapping the
+     * response writer uses.
      *
-     * Changing this changes what a caller sees, so it waits for the directive
-     * that lets an operator opt in.
+     * This answered 404 for every failure until now, whatever it was: a
+     * malformed geometry, a timeout, an unknown application id. A 404 tells a
+     * caller to stop retrying, which is wrong for a timeout, and tells a
+     * developer the image is missing, which is wrong for a bad request.
      */
     if (status != DIMS_SUCCESS) {
-        return HTTP_NOT_FOUND;
+        return dims_http_status(d->status);
     }
 
     return DECLINED;
+
 }
 
 /**

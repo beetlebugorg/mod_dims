@@ -19,6 +19,7 @@ add_executable(dims_test
     http/test_rotate.c
     http/test_signing.c
     http/test_sources.c
+    http/test_no_error_image.c
     http/test_status.c
     http/test_thumbnail.c
     http/test_watermark.c

@@ -37,6 +37,9 @@ const char *dims_origin_url(void);
 /* Issues GET against the service. path starts with a slash. */
 dims_response *dims_get(const char *path);
 
+/* The same, against a URL given in full. */
+dims_response *dims_get_absolute(const char *url);
+
 /* Issues GET with extra request headers, each "Name: value". */
 dims_response *dims_get_with_headers(const char *path, const char *const *headers,
                                      size_t header_count);
