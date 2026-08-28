@@ -8,6 +8,67 @@
 
 #include "../lib/common.h"
 
+static const char *
+animated_url(void)
+{
+    const char *from_env = getenv("DIMS_TEST_ANIMATED_URL");
+    return (from_env != NULL && from_env[0] != '\0') ? from_env
+                                                     : "http://dims:8006";
+}
+
+/* The server that runs the commands over every frame. */
+static dims_response *
+animated_request(const char *commands, const char *fixture)
+{
+    char *url = dims_fixture_url(fixture);
+    char *path = dims_sign_dims4(commands, url, NULL, NULL);
+    char full[2048];
+    dims_response *response;
+
+    snprintf(full, sizeof(full), "%s%s", animated_url(), path);
+    response = dims_get_absolute(full);
+
+    free(path);
+    free(url);
+
+    return response;
+}
+
+/* Under transform every command runs, and every frame survives. */
+static void
+test_animated_gif_transformed(void)
+{
+    dims_response *response = animated_request("resize/100x100", "animated.gif");
+    dims_image_size size;
+
+    CHECK_INT(response->status, 200, "an animated GIF under transform");
+    size = dims_must_size(response->body, response->body_len);
+
+    dims_test_logf("came back %ldx%ld with %ld frames", size.width, size.height,
+                   size.frames);
+    CHECK_INT(size.width, 100, "width");
+    CHECK_INT(size.height, 100, "height");
+    CHECK(size.frames > 1, "every frame must survive, got %ld", size.frames);
+
+    assert_golden("animated.TestAnimatedGifTransformed", response->body,
+                  response->body_len, ".gif");
+    dims_response_free(response);
+}
+
+/* A single frame source is untouched by the directive. */
+static void
+test_single_frame_under_transform(void)
+{
+    dims_response *response = animated_request("resize/100x100", "grid.png");
+    dims_image_size size;
+
+    CHECK_INT(response->status, 200, "a single frame source under transform");
+    size = dims_must_size(response->body, response->body_len);
+    CHECK_INT(size.width, 100, "width");
+
+    dims_response_free(response);
+}
+
 /*
  * A multi-frame image with no watermark command matches neither
  * arm of the guard at src/mod_dims.c:1197-1290, so every command is skipped
@@ -124,7 +185,9 @@ test_content_length_matches_body_png(void)
 
 const dims_test dims_tests_sources[] = {
     { "TestAnimatedGifAppliesCommands", test_animated_gif_ignores_commands,
-      "a multi-frame image skips every command" },
+      "passthrough is the default" },
+    { "TestAnimatedGifTransformed", test_animated_gif_transformed, NULL },
+    { "TestSingleFrameUnderTransform", test_single_frame_under_transform, NULL },
     { "TestAnimatedGifPassthrough", test_animated_gif_passthrough, NULL },
     { "TestSvgSource", test_svg_source, NULL },
     { "TestCmykSource", test_cmyk_source, NULL },

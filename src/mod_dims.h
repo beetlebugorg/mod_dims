@@ -62,6 +62,15 @@ typedef enum {
     DIMS_NETWORK_REFUSED
 } dims_status_t;
 
+/* How a multi-frame source is handled. Set from DimsAnimatedImages. */
+typedef enum {
+    /* Skip every command and return the source unchanged. */
+    DIMS_ANIMATED_PASSTHROUGH = 0,
+
+    /* Run the commands over every frame. */
+    DIMS_ANIMATED_TRANSFORM
+} dims_animated_mode;
+
 /* How a failure at the origin reaches the caller. Set from
  * DimsOriginStatusMode. */
 typedef enum {
@@ -167,6 +176,9 @@ struct dims_config_rec {
      * DimsOverlayCacheMaxEntries and DimsOverlayCacheMaxAge. */
     int overlay_cache_max_entries;
     long overlay_cache_max_age;
+
+    /* How a multi-frame source is handled. Set from DimsAnimatedImages. */
+    int animated_mode;
 
     int curl_queue_size;
     char *secret_key;

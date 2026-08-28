@@ -682,6 +682,82 @@ dims_set_optimal_geometry(dims_request_rec *d)
     }
 }
 
+
+/*
+ * Runs every command in the request against the wand's current image.
+ *
+ * Reports the first failure and the message with it. The caller ends the
+ * request, because a multi-frame source runs this once per frame.
+ */
+static apr_status_t
+dims_run_commands(dims_request_rec *d, apr_hash_t *ops, int *exc_strip_cmd,
+                  int *output_format_provided, const char **err)
+{
+    const char *cmds = d->unparsed_commands;
+    while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
+        char *command = ap_getword(d->pool, &cmds, '/');
+
+        if (strcmp(command, "format") == 0) {
+            *output_format_provided = 1;
+        }
+
+        if(strlen(command) > 0) {
+            char *args = ap_getword(d->pool, &cmds, '/');
+
+            /* If the NOIMAGE image is being used for some reason then
+            * we don't want to crop it.
+            */
+            if(d->use_no_image &&
+                    (strcmp(command, "crop") == 0 ||
+                    strcmp(command, "legacy_thumbnail") == 0 ||
+                    strcmp(command, "legacy_crop") == 0 ||
+                    strcmp(command, "thumbnail") == 0)) {
+                RectangleInfo rec;
+
+                (void) ParseAbsoluteGeometry(args, &rec);
+
+                if(rec.width > 0 && rec.height == 0) {
+                    args = apr_psprintf(d->pool, "%ld", rec.width);
+                } else if(rec.height > 0 && rec.width == 0) {
+                    args = apr_psprintf(d->pool, "x%ld", rec.height);
+                } else if(rec.width > 0 && rec.height > 0) {
+                    args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
+                } else {
+                    return DIMS_BAD_ARGUMENTS;
+                }
+
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                    "Rewriting command %s to 'resize' because a NOIMAGE "
+                    "image is being processed.", command);
+
+                command = (char *) "resize";
+            }
+
+            // Check if the command is present and set flag.
+            if(strcmp(command, "strip") == 0) {
+                *exc_strip_cmd = 1;
+            }
+
+            dims_operation_func *func =
+                    apr_hash_get(ops, command, APR_HASH_KEY_STRING);
+            if(func != NULL) {
+                apr_status_t code;
+
+                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                    "Executing command %s(%s), on request %s",
+                    command, args, d->r->uri);
+
+                if((code = func(d, args, err)) != DIMS_SUCCESS) {
+                    return code;
+                }
+            }
+        }
+    }
+
+
+    return DIMS_SUCCESS;
+}
+
 /*
  * Runs the commands and writes the response.
  *
@@ -710,6 +786,9 @@ dims_process_image(dims_request_rec *d)
             (void *) progress_rec);
 
     int exc_strip_cmd = 0;
+    int output_format_provided = 0;
+    const char *err = NULL;
+    apr_status_t code;
 
     /* Convert image to RGB from CMYK. */
     if(MagickGetImageColorspace(d->wand) == CMYKColorspace) {
@@ -771,69 +850,42 @@ dims_process_image(dims_request_rec *d)
     }
 
     if (images == 1 || should_flatten) {
-        bool output_format_provided = false;
-        const char *cmds = d->unparsed_commands;
-        while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
-            char *command = ap_getword(d->pool, &cmds, '/');
+        code = dims_run_commands(d, ops, &exc_strip_cmd, &output_format_provided,
+                &err);
+        if (code != DIMS_SUCCESS) {
+            return dims_cleanup(d, err, code);
+        }
+    } else if (d->config->animated_mode == DIMS_ANIMATED_TRANSFORM) {
+        /*
+         * A frame after the first is stored as a difference against the one
+         * before it, so a command has to see the whole frame. Coalescing
+         * builds those, at the cost of holding every frame in full.
+         */
+        MagickWand *coalesced = MagickCoalesceImages(d->wand);
 
-            if (strcmp(command, "format") == 0) {
-                output_format_provided = true;
-            }
-
-            if(strlen(command) > 0) {
-                char *args = ap_getword(d->pool, &cmds, '/');
-
-                /* If the NOIMAGE image is being used for some reason then
-                * we don't want to crop it.
-                */
-                if(d->use_no_image &&
-                        (strcmp(command, "crop") == 0 ||
-                        strcmp(command, "legacy_thumbnail") == 0 ||
-                        strcmp(command, "legacy_crop") == 0 ||
-                        strcmp(command, "thumbnail") == 0)) {
-                    RectangleInfo rec;
-
-                    (void) ParseAbsoluteGeometry(args, &rec);
-
-                    if(rec.width > 0 && rec.height == 0) {
-                        args = apr_psprintf(d->pool, "%ld", rec.width);
-                    } else if(rec.height > 0 && rec.width == 0) {
-                        args = apr_psprintf(d->pool, "x%ld", rec.height);
-                    } else if(rec.width > 0 && rec.height > 0) {
-                        args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
-                    } else {
-                        return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
-                    }
-
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                        "Rewriting command %s to 'resize' because a NOIMAGE "
-                        "image is being processed.", command);
-
-                    command = (char *) "resize";
-                }
-
-                // Check if the command is present and set flag.
-                if(strcmp(command, "strip") == 0) {
-                    exc_strip_cmd = 1;
-                }
-
-                dims_operation_func *func =
-                        apr_hash_get(ops, command, APR_HASH_KEY_STRING);
-                if(func != NULL) {
-                    const char *err = NULL;
-                    apr_status_t code;
-
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                        "Executing command %s(%s), on request %s",
-                        command, args, d->r->uri);
-
-                    if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                        return dims_cleanup(d, err, code);
-                    }
-                }
-            }
+        if (coalesced == NULL) {
+            return dims_cleanup(d, "Unable to coalesce the source frames",
+                    DIMS_FAILURE);
         }
 
+        DestroyMagickWand(d->wand);
+        d->wand = coalesced;
+
+        SetImageProgressMonitor(GetImageFromMagickWand(d->wand),
+                dims_imagemagick_progress_cb, (void *) progress_rec);
+
+        MagickResetIterator(d->wand);
+        while (MagickNextImage(d->wand) != MagickFalse) {
+            code = dims_run_commands(d, ops, &exc_strip_cmd,
+                    &output_format_provided, &err);
+            if (code != DIMS_SUCCESS) {
+                return dims_cleanup(d, err, code);
+            }
+        }
+    }
+
+    if (images == 1 || should_flatten ||
+            d->config->animated_mode == DIMS_ANIMATED_TRANSFORM) {
         // Set output format if not provided in the request.
         if (!output_format_provided && d->config->default_output_format) {
             char *input_format = MagickGetImageFormat(d->wand);

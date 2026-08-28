@@ -61,6 +61,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
      * so a bound costs a caller nothing. */
     config->overlay_cache_max_entries = 1024;
     config->overlay_cache_max_age = 86400;
+    config->animated_mode = DIMS_ANIMATED_PASSTHROUGH;
 
     return (void *) config;
 }
@@ -369,6 +370,23 @@ dims_config_set_allowlist_signed(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 static const char *
+dims_config_set_animated_images(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+
+    if (strcasecmp(arg, "passthrough") == 0) {
+        config->animated_mode = DIMS_ANIMATED_PASSTHROUGH;
+    } else if (strcasecmp(arg, "transform") == 0) {
+        config->animated_mode = DIMS_ANIMATED_TRANSFORM;
+    } else {
+        return "DimsAnimatedImages must be passthrough or transform";
+    }
+
+    return NULL;
+}
+
+static const char *
 dims_config_set_overlay_cache_max_entries(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -536,6 +554,13 @@ const command_rec dims_directives[] =
                   "Whether the host allowlist applies to a signed request and "
                   "to a redirect. Set log to record what enforcing would "
                   "refuse, or enforce to refuse it. The default is log."),
+    AP_INIT_TAKE1("DimsAnimatedImages",
+                  dims_config_set_animated_images, NULL, RSRC_CONF,
+                  "How a source with more than one frame is handled. Set "
+                  "passthrough to return it unchanged, or transform to run the "
+                  "commands over every frame. Every frame costs memory and "
+                  "time, so transform is the slower and larger answer. The "
+                  "default is passthrough."),
     AP_INIT_TAKE1("DimsOverlayCacheMaxEntries",
                   dims_config_set_overlay_cache_max_entries, NULL, RSRC_CONF,
                   "Largest number of overlay images to keep on disk. The oldest "
