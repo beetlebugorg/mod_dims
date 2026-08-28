@@ -330,6 +330,43 @@ test_content_disposition_is_escaped(void)
     dims_response_free(response);
     free(signature);
 }
+/*
+ * A filename with CRLF in it would split the response into two. Everything
+ * outside printable ASCII is dropped before the value reaches the header.
+ */
+static void
+test_content_disposition_drops_control_characters(void)
+{
+    const char *raw_url = "http://origin:8080/grid.png";
+    char *signature = dims_signature_dims4(DIMS_TEST_EXPIRES, DIMS_TEST_SECRET,
+                                           "resize/100x100/", raw_url, NULL, 0);
+    char path[1024];
+    dims_response *response;
+    const char *value;
+
+    snprintf(path, sizeof(path),
+             "/dims4/%s/%s/%s/resize/100x100/?url=http%%3A%%2F%%2Forigin%%3A8080%%2F"
+             "grid.png%%0d%%0aX-Injected%%3A%%20yes&download=1",
+             DIMS_TEST_CLIENT, signature, DIMS_TEST_EXPIRES);
+
+    response = dims_get(path);
+
+    CHECK(response->transport_error == NULL, "the worker must answer: %s",
+          response->transport_error ? response->transport_error : "");
+    CHECK(dims_header_value(response, "X-Injected") == NULL,
+          "a header the filename asked for must not appear");
+
+    value = dims_header_raw(response, "Content-Disposition");
+    if (value != NULL) {
+        dims_test_logf("%s", value);
+        CHECK(strstr(value, "\r") == NULL && strstr(value, "\n") == NULL,
+              "the value must hold no line break");
+    }
+
+    dims_response_free(response);
+    free(signature);
+}
+
 const dims_test dims_tests_errors[] = {
     { "TestUnknownClient", test_unknown_client, NULL },
     { "TestMissingSource", test_missing_source, NULL },
@@ -350,7 +387,8 @@ const dims_test dims_tests_errors[] = {
     { "TestEndpointUnderAnotherLocation", test_endpoint_under_another_location,
       NULL },
     { "TestSourceUrlWithoutPath", test_source_url_without_path, NULL },
-    { "TestContentDispositionIsEscaped", test_content_disposition_is_escaped,
-      "the disposition filename is not escaped" },
+    { "TestContentDispositionIsEscaped", test_content_disposition_is_escaped, NULL },
+    { "TestContentDispositionDropsControlCharacters",
+      test_content_disposition_drops_control_characters, NULL },
     DIMS_TEST_END
 };

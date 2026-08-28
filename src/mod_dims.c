@@ -126,6 +126,43 @@ char *url_encode(char *str) {
 
 
 
+/*
+ * Writes Content-Disposition with the filename quoted safely.
+ *
+ * The filename is the last path segment of the source URL, after
+ * ap_unescape_url, so it may hold a quote, a backslash, or CRLF. RFC 6266
+ * gives a quoted-string, so a quote and a backslash are escaped and anything
+ * outside printable ASCII is dropped.
+ */
+static void
+dims_set_disposition(dims_request_rec *d, const char *kind, const char *filename)
+{
+    char safe[256];
+    size_t out = 0;
+    const unsigned char *in;
+
+    for (in = (const unsigned char *) filename;
+            *in != '\0' && out + 2 < sizeof(safe); in++) {
+        if (*in < 0x20 || *in > 0x7E) {
+            continue;
+        }
+
+        if (*in == '"' || *in == '\\') {
+            safe[out++] = '\\';
+        }
+
+        safe[out++] = (char) *in;
+    }
+    safe[out] = '\0';
+
+    if (out == 0) {
+        return;
+    }
+
+    apr_table_set(d->r->headers_out, "Content-Disposition",
+            apr_psprintf(d->pool, "%s; filename=\"%s\"", kind, safe));
+}
+
 /**
  * Fetch remote image.  If successful the MagicWand will
  * have the new image loaded.
@@ -273,8 +310,8 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
         /*
          * ImageMagick wants the declaration before it will read an SVG, and an
-         * SVG that starts at <svg has none. The length comes from the bytes
-         * received, never from a search for a terminator.
+         * SVG that starts at <svg does not have one. The length comes from
+         * the bytes received, never from a search for a terminator.
          */
         if (image_data.used >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
             actual_image_len = xml_header_len + image_data.used;
@@ -452,11 +489,9 @@ dims_send_image(dims_request_rec *d)
     }
 
     if(d->filename && d->config->include_disposition) {
-        char *disposition = apr_psprintf(d->pool, "inline; filename=\"%s\"", d->filename);
-        apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
+        dims_set_disposition(d, "inline", d->filename);
     } else if(d->content_disposition_filename && d->send_content_disposition) {
-        char *disposition = apr_psprintf(d->pool, "attachment; filename=\"%s\"", d->content_disposition_filename);
-        apr_table_set(d->r->headers_out, "Content-Disposition", disposition);
+        dims_set_disposition(d, "attachment", d->content_disposition_filename);
     }
 
     if(expire_time) {
@@ -486,17 +521,15 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->headers_out, "Last-Modified", d->last_modified);
     }
 
-    MagickSizeType image_size = 0;
-    MagickGetImageLength(d->wand, &image_size);
-
+    /* The length written, not a second measurement of the wand.
+     * MagickGetImagesBlob serializes every image; MagickGetImageLength reports
+     * the current one, so a multi-frame source made the two disagree. */
     if (blob != NULL) {
-        char content_length[256] = "";
-        snprintf(content_length, sizeof(content_length), "%zu", (size_t)image_size);
-        apr_table_set(d->r->headers_out, "Content-Length", content_length);
+        ap_set_content_length(d->r, (apr_off_t) length);
 
         ap_rwrite(blob, length, d->r);
     } else {
-        apr_table_set(d->r->headers_out, "Content-Length", "0");
+        ap_set_content_length(d->r, 0);
     }
 
     ap_rflush(d->r);
