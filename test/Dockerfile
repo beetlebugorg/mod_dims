@@ -49,4 +49,4 @@ RUN sed -i 's|^Listen 80$|Listen 8000|' /usr/local/apache2/conf/httpd.conf && \
     sed -i 's|^#LoadModule authz_core_module|LoadModule authz_core_module|' /usr/local/apache2/conf/httpd.conf && \
     echo "Include conf/extra/dims-test.conf" >> /usr/local/apache2/conf/httpd.conf
 
-EXPOSE 8000
+EXPOSE 8000 8001

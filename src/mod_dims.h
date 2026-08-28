@@ -49,16 +49,32 @@
 #define LEGACY_DIMS_GIF 512
 #define LEGACY_DIMS_PNG 1024
 
-#define DIMS_IGNORE -1
-#define DIMS_SUCCESS 0
-#define DIMS_FAILURE 1
-#define DIMS_DOWNLOAD_TIMEOUT 2
-#define DIMS_IMAGEMAGICK_TIMEOUT 4
-#define DIMS_BAD_CLIENT 8
-#define DIMS_BAD_URL 16
-#define DIMS_BAD_ARGUMENTS 32
-#define DIMS_HOSTNAME_NOT_IN_WHITELIST 64
-#define DIMS_FILE_NOT_FOUND 128
+/*
+ * How a request ended.
+ *
+ * These were defined as powers of two, which says they combine. Nothing ever
+ * combined them: every use is == or !=, and DIMS_SUCCESS is zero, so it could
+ * never have been a flag. An enumeration says what was always true.
+ */
+typedef enum {
+    /* Leave the status already on the request alone. Only dims_cleanup reads
+     * this, when it is reporting a failure that set the status itself. */
+    DIMS_IGNORE = -1,
+
+    DIMS_SUCCESS = 0,
+    DIMS_FAILURE,
+    DIMS_DOWNLOAD_TIMEOUT,
+    DIMS_IMAGEMAGICK_TIMEOUT,
+    DIMS_BAD_CLIENT,
+    DIMS_BAD_URL,
+    DIMS_BAD_ARGUMENTS,
+    DIMS_HOSTNAME_NOT_IN_WHITELIST,
+    DIMS_FILE_NOT_FOUND
+} dims_status_t;
+
+/* The HTTP status a dims_status_t maps to, and a short reason for the log. */
+int dims_http_status(int status);
+const char *dims_status_name(int status);
 
 typedef struct dims_request_rec dims_request_rec;
 typedef struct dims_config_rec dims_config_rec;

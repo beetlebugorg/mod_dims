@@ -113,14 +113,14 @@ write_header(void *chunk, size_t size, size_t count, void *data)
     return length;
 }
 
-dims_response *
-dims_get_with_headers(const char *path, const char *const *headers, size_t header_count)
+/* Shared by both entry points. url is complete. */
+static dims_response *
+request_url(const char *url, const char *const *headers, size_t header_count)
 {
     dims_response *response = calloc(1, sizeof(*response));
     struct curl_slist *list = NULL;
     CURL *handle;
     CURLcode code;
-    char url[4096];
     size_t i;
 
     if (response == NULL) {
@@ -128,7 +128,6 @@ dims_get_with_headers(const char *path, const char *const *headers, size_t heade
         return NULL;
     }
 
-    snprintf(url, sizeof(url), "%s%s", dims_base_url(), path);
 
     handle = curl_easy_init();
     if (handle == NULL) {
@@ -169,9 +168,11 @@ dims_get_with_headers(const char *path, const char *const *headers, size_t heade
 dims_response *
 dims_get(const char *path)
 {
-    return dims_get_with_headers(path, NULL, 0);
-}
+    char url[4096];
 
+    snprintf(url, sizeof(url), "%s%s", dims_base_url(), path);
+    return request_url(url, NULL, 0);
+}
 const char *
 dims_header_value(const dims_response *response, const char *name)
 {
@@ -283,4 +284,19 @@ dims_wait_for_service(const char *url, int seconds)
 
     curl_easy_cleanup(handle);
     return 1;
+}
+
+dims_response *
+dims_get_absolute(const char *url)
+{
+    return request_url(url, NULL, 0);
+}
+
+dims_response *
+dims_get_with_headers(const char *path, const char *const *headers, size_t header_count)
+{
+    char url[4096];
+
+    snprintf(url, sizeof(url), "%s%s", dims_base_url(), path);
+    return request_url(url, headers, header_count);
 }
