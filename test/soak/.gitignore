@@ -1,0 +1,6 @@
+# Downloaded fixtures and run output. The images come from pexels at run time.
+origin/
+results.tsv
+results-*.tsv
+urls.txt
+*.log
