@@ -167,6 +167,93 @@ test_empty_eurl(void)
 }
 
 /*
+ * A parameter with no equals sign. The parser measured the token and read one
+ * byte past its terminator, which for the last parameter is past the copy.
+ */
+static void
+test_signed_parameter_without_equals(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char *path = dims_sign_dims4("resize/100x100", url, "download", NULL);
+    dims_response *response = dims_get(path);
+
+    CHECK(response->transport_error == NULL,
+          "the worker must answer, not die: %s",
+          response->transport_error ? response->transport_error : "");
+    dims_test_logf("a signed request with a valueless parameter returns %ld",
+                   response->status);
+    CHECK(response->status == 200,
+          "a parameter with no value must not change the signature, got %ld",
+          response->status);
+
+    dims_response_free(response);
+    free(path);
+    free(url);
+}
+
+/*
+ * A signed request with no query string at all. _keys is absent, so the
+ * tokenizer state that walks it was read before anything assigned it.
+ */
+static void
+test_signed_request_without_a_query_string(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char *path = dims_sign_dims4("resize/100x100", url, NULL, NULL);
+    char *question = strchr(path, '?');
+    char in_path[2048];
+    dims_response *response;
+
+    /* Move the source URL from ?url= into the path, which is the form that
+     * leaves the request with no query string at all. */
+    CHECK(question != NULL, "the signed path carries a query string");
+    if (question == NULL) {
+        free(path);
+        free(url);
+        return;
+    }
+    *question = '\0';
+
+    snprintf(in_path, sizeof(in_path), "%s%s", path, url);
+    response = dims_get(in_path);
+
+    CHECK(response->transport_error == NULL,
+          "the worker must answer, not die: %s",
+          response->transport_error ? response->transport_error : "");
+    dims_test_logf("a signed request with no query string returns %ld",
+                   response->status);
+    CHECK(response->status != 500,
+          "a request with no query string must not fault, got %ld",
+          response->status);
+
+    dims_response_free(response);
+    free(path);
+    free(url);
+}
+
+/*
+ * The handlers index a fixed seven bytes into the URI. A location under
+ * another name satisfies the handler check with a shorter URI and left them
+ * reading past its end.
+ */
+static void
+test_endpoint_under_another_location(void)
+{
+    /* Three bytes. The handlers read from byte seven. */
+    dims_response *response = dims_get("/i/");
+
+    CHECK(response->transport_error == NULL,
+          "the worker must answer, not die: %s",
+          response->transport_error ? response->transport_error : "");
+    dims_test_logf("dims4 under /i/ returns %ld", response->status);
+    CHECK(response->status >= 400,
+          "a location the handlers cannot read must be refused, got %ld",
+          response->status);
+
+    dims_response_free(response);
+}
+
+/*
  * DimsAddClient stores a secret of "-" as NULL. The eurl branch hashes that
  * secret with SHA1 before anything checks it, so a client configured without
  * one read from address zero and killed the worker.
@@ -257,8 +344,12 @@ const dims_test dims_tests_errors[] = {
     { "TestShortEurl", test_short_eurl, NULL },
     { "TestEmptyEurl", test_empty_eurl, NULL },
     { "TestEurlWithoutAClientSecret", test_eurl_without_a_client_secret, NULL },
-    { "TestSourceUrlWithoutPath", test_source_url_without_path,
-      "a URL with no path leaves path NULL" },
+    { "TestSignedParameterWithoutEquals", test_signed_parameter_without_equals, NULL },
+    { "TestSignedRequestWithoutAQueryString",
+      test_signed_request_without_a_query_string, NULL },
+    { "TestEndpointUnderAnotherLocation", test_endpoint_under_another_location,
+      NULL },
+    { "TestSourceUrlWithoutPath", test_source_url_without_path, NULL },
     { "TestContentDispositionIsEscaped", test_content_disposition_is_escaped,
       "the disposition filename is not escaped" },
     DIMS_TEST_END

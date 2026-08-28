@@ -39,10 +39,7 @@ aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_tex
     int plaintext_length, out_length;
     char *plaintext;
 
-    /*
-     * One AES block is the shortest thing this can decrypt, and a negative
-     * length reaches EVP_DecryptUpdate as a size_t near its maximum.
-     */
+    /* One AES block is the shortest thing this can decrypt. */
     if (encrypted_text == NULL || encrypted_length < DIMS_AES_BLOCK_BYTES) {
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
                 "eurl decodes to %d bytes, which is shorter than one AES block",
@@ -51,13 +48,8 @@ aes_128_decrypt(request_rec *r, unsigned char *key, unsigned char *encrypted_tex
         return NULL;
     }
 
-    /*
-     * The allocation was exactly encrypted_length, which is too small twice
-     * over. EVP_DecryptUpdate is documented to write up to one block past the
-     * input length, and the terminator below needs a byte of its own. The
-     * old buffer had room for neither, so a plaintext that filled the block
-     * put the terminator past the end.
-     */
+    /* EVP_DecryptUpdate may write up to one block past the input length, and
+     * the terminator below needs a byte of its own. */
     plaintext = apr_palloc(r->pool,
             (apr_size_t) encrypted_length + DIMS_AES_BLOCK_BYTES + 1);
     if (EVP_DecryptUpdate(ctx, (unsigned char *) plaintext, &out_length, encrypted_text, encrypted_length)) {
@@ -114,17 +106,8 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
 
     /*
      * The value has to hold an IV, at least one byte of ciphertext, and a tag.
-     *
-     * Anything shorter made ciphertext_length negative. tag then pointed
-     * before the buffer, apr_palloc received the negative length promoted to a
-     * size near its maximum, and EVP_DecryptUpdate received it as a length.
-     * The caller chooses this input and no signature is checked before it, so
-     * every one of those runs on a value a stranger picked.
-     *
-     * Measured on this toolchain, two libraries happen to catch it: apr_palloc
-     * returns NULL for the huge size, and EVP_DecryptUpdate returns an error
-     * for a negative length. The module should not depend on either. Check the
-     * length here, where the arithmetic is.
+     * Anything shorter makes ciphertext_length negative, and it reaches a
+     * pointer offset, an allocation size, and a decryption length.
      *
      * decoded_length is compared with what the decoder was told to expect,
      * because the caller chooses the input and the two can disagree.

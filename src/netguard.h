@@ -64,8 +64,7 @@ dims_net_result dims_address_allowed(const struct sockaddr *addr, socklen_t len,
  *
  * The match walks the name from the left, dropping one label at a time. An
  * exact entry matches the whole name. An entry recorded as a glob matches a
- * name below it. An empty allowlist matches nothing, which is what the module
- * has always done.
+ * name below it. An empty allowlist matches nothing.
  */
 int dims_host_allowed(apr_table_t *whitelist, const char *hostname);
 

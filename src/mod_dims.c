@@ -7,24 +7,22 @@
  *
  * Code Flow Logic:
  *
- *  dims_handler - called by apache, determines if request should be processed
- *    \            and does initial request setup.  
- *     dims_handle_request - validates against whitelist, client list and loads image.
- *       \
- *        dims_process_image - parses operations (resize, etc) and executes them
- *          \                  using imagemagick api. 
- *           dims_send_image - sends image to connection w/appropriate headers
+ *  dims_handler        handler.c, routes the request and reads its parts
+ *  dims_handle_request handler.c, checks the client, the signature, and the host
+ *  dims_fetch_remote_image  this file, loads the source image
+ *  dims_process_image  this file, runs the commands
+ *  dims_send_image     this file, writes the response
  *
- * Any errors during processing will call 'dims_cleanup' which will free
- * any memory and return the 'no image' image to the connection.
- * 
- * Copyright 2009 AOL LLC 
+ * A failure anywhere calls dims_cleanup, which sends the error image.
+ *
+
+ * Copyright 2009 AOL LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
- * the License at 
- *         
- *         http://www.apache.org/licenses/LICENSE-2.0 
+ * the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -71,14 +69,11 @@ apr_hash_t *ops;
 
 
 
-/**
- * This callback is called by the MagicWand API during transformation
- * operations.  How often it's called is dependent on the operation 
- * being performed but in general it's called enough that timeout
- * resolution is close enough.  For instance this won't be called if 
- * ImageMagick is busy loading up the pixel cache.
+/*
+ * Called by MagickWand during an operation, often enough to time one out.
+ * ImageMagick does not call it while it loads the pixel cache.
  */
-MagickBooleanType 
+MagickBooleanType
 dims_imagemagick_progress_cb(const char *text, const MagickOffsetType offset,
                              const MagickSizeType span, void *client_data)
 {
@@ -90,11 +85,11 @@ dims_imagemagick_progress_cb(const char *text, const MagickOffsetType offset,
 
     if(diff > p->d->config->imagemagick_timeout) {
         p->d->status = DIMS_IMAGEMAGICK_TIMEOUT;
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, p->d->r, 
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, p->d->r,
                 "Imagemagick operation, '%s', "
                 "timed out after %d ms. "
                 "(max: %d), on request: %s",
-                text, (int) diff, 
+                text, (int) diff,
                 (int) p->d->config->imagemagick_timeout,
                 p->d->r->uri);
         return MagickFalse;
@@ -135,7 +130,7 @@ char *url_encode(char *str) {
  * Fetch remote image.  If successful the MagicWand will
  * have the new image loaded.
  */
-int 
+int
 dims_fetch_remote_image(dims_request_rec *d, const char *url)
 {
     dims_image_data_t image_data;
@@ -155,7 +150,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 "No error image is configured, on request: %s", d->r->uri);
         return 1;
     }
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
             "Loading image from %s", fetch_url);
 
     /* Allow file:/// references for NOIMAGE urls. */
@@ -169,7 +164,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         start_time = apr_time_now();
         status = apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool);
         if(status != 0) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
                     "mod_dims error, 'NOIMAGE image not found at %s', "
                     "on request: %s ", filename, d->r->uri);
             return 1;
@@ -179,7 +174,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
         start_time = apr_time_now();
         if(MagickReadImage(d->wand, filename) == MagickFalse) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
                     "mod_dims error, 'Failed to load NOIMAGE image from %s', "
                     "on request: %s ", filename, d->r->uri);
             return 1;
@@ -190,17 +185,10 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         dims_net_result guard;
 
         /*
-         * How far the allowlist reaches on this fetch.
-         *
-         * The error image comes from the configuration, not from the caller,
-         * so the allowlist never applies to it.
-         *
-         * Everything else follows DimsAllowlistSigned. The default logs what
-         * enforcing would refuse and lets the fetch through, which is what
-         * keeps this a drop-in upgrade: a signed request has never consulted
-         * the allowlist, and a redirect has never been re-checked against it.
-         * The address and protocol checks below run on every fetch whatever
-         * this holds.
+         * How far the allowlist reaches on this fetch. The error image comes
+         * from the configuration, so it skips the allowlist. Everything else
+         * follows DimsAllowlistSigned. The address and protocol checks run
+         * whatever this holds.
          */
         dims_allowlist_mode mode = DIMS_ALLOWLIST_SKIP;
 
@@ -229,8 +217,8 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 free(image_data.data);
             }
 
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "libcurl error, '%s', on request: %s ", 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "libcurl error, '%s', on request: %s ",
                     curl_easy_strerror(code), d->r->uri);
 
             d->status = DIMS_FAILURE;
@@ -272,7 +260,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             if(image_data.data) {
                 free(image_data.data);
             }
-            
+
             return 1;
         }
 
@@ -284,15 +272,9 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         size_t actual_image_len = image_data.used;
 
         /*
-         * ImageMagick wants the declaration before it will read an SVG, and
-         * an SVG that starts at <svg has none.
-         *
-         * The length is carried rather than recomputed. This used apr_pstrcat,
-         * which reads the download buffer as a string: it ran off the end of
-         * the allocation looking for a terminator, and the concatenated result
-         * was whatever length that search happened to find. The buffer is
-         * terminated now, but the size still comes from the bytes received,
-         * not from a search.
+         * ImageMagick wants the declaration before it will read an SVG, and an
+         * SVG that starts at <svg has none. The length comes from the bytes
+         * received, never from a search for a terminator.
          */
         if (image_data.used >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
             actual_image_len = xml_header_len + image_data.used;
@@ -311,10 +293,10 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 
             if(image_data.data) {
                 free(image_data.data);
-            } 
+            }
 
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "ImageMagick error, '%s', on request: %s ", 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "ImageMagick error, '%s', on request: %s ",
                     MagickGetException(d->wand, &et), d->r->uri);
 
             return 1;
@@ -332,7 +314,7 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
 }
 
 apr_status_t
-dims_send_image(dims_request_rec *d) 
+dims_send_image(dims_request_rec *d)
 {
     char buf[128];
     unsigned char *blob;
@@ -368,14 +350,8 @@ dims_send_image(dims_request_rec *d)
     ap_content_type_tolower(content_type);
     ap_set_content_type(d->r, content_type);
 
-    /*
-     * A fetch that reached the origin reports whatever the origin said, which
-     * is why an origin error becomes the caller's error. dims_http_status
-     * covers the cases the module decided itself.
-     *
-     * DimsOriginStatusMode map replaces the forwarded status with one of
-     * three. It is the only value that changes what a caller sees.
-     */
+    /* A fetch that reached the origin reports what the origin said.
+     * dims_origin_status overrides that under DimsOriginStatusMode map. */
     d->r->status = dims_origin_status(d);
 
     if (d->r->status == 0) {
@@ -422,7 +398,7 @@ dims_send_image(dims_request_rec *d)
 
                 // if the max-age value is between the min and max, use the src value
                 if( (d->client_config->min_src_cache_control == -1 ||
-                        src_max_age >= d->client_config->min_src_cache_control) && 
+                        src_max_age >= d->client_config->min_src_cache_control) &&
                         (d->client_config->max_src_cache_control == -1 ||
                         src_max_age <= d->client_config->max_src_cache_control)) {
 
@@ -555,7 +531,7 @@ dims_send_image(dims_request_rec *d)
     snprintf(buf, 128, "%ld", (apr_time_now() - d->start_time) / 1000);
     apr_table_set(d->r->notes, "DIMS_TOTAL_TIME", buf);
 
-    if(d->status != DIMS_DOWNLOAD_TIMEOUT && 
+    if(d->status != DIMS_DOWNLOAD_TIMEOUT &&
             d->status != DIMS_IMAGEMAGICK_TIMEOUT) {
         snprintf(buf, 128, "%ld", d->imagemagick_time);
         apr_table_set(d->r->notes, "DIMS_IM_TIME", buf);
@@ -595,8 +571,7 @@ dims_free_request(dims_request_rec *d)
  * Ends a failed request.
  *
  * Records the status, frees the wand, logs the reason, and sends the error
- * image when one is configured. The name is dims_cleanup for history; what it
- * does is send an error.
+ * image when one is configured.
  */
 apr_status_t
 dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
@@ -620,16 +595,8 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
         dims_free_request(d);
     }
 
-    /*
-     * With no error image to send, the status is all the caller gets, so it
-     * has to be the right one. dims_http_status is the same mapping the
-     * response writer uses.
-     *
-     * This answered 404 for every failure until now, whatever it was: a
-     * malformed geometry, a timeout, an unknown application id. A 404 tells a
-     * caller to stop retrying, which is wrong for a timeout, and tells a
-     * developer the image is missing, which is wrong for a bad request.
-     */
+    /* With no error image to send, the status is all the caller gets. This is
+     * the mapping the response writer uses. */
     if (status != DIMS_SUCCESS) {
         int mapped = dims_origin_status(d);
 
@@ -644,15 +611,9 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
  * Parse through the requested commands and set
  * the optimal image size on the MagicWand.
  *
- * This is used while reading an image to improve
- * performance when generating thumbnails from very
- * large images.
- *
- * An example speed is taking 1817x3000 sized image and
- * reducing it to a 78x110 thumbnail:
- *
- *   without MagickSetSize: 396ms
- *   with MagickSetSize:    105ms
+ * ImageMagick reads at this size, which is what makes a thumbnail of a very
+ * large image cheap. A 1817x3000 source down to 78x110 takes 105ms with it
+ * and 396ms without.
  */
 void
 dims_set_optimal_geometry(dims_request_rec *d)
@@ -687,27 +648,20 @@ dims_set_optimal_geometry(dims_request_rec *d)
     }
 }
 
-/**
- * This is the main code for processing images.  It will parse
- * the command string into individual commands and execute them.  
- * When it's finished it will write the content type header and
- * image data to connection and flush the connection.
+/*
+ * Runs the commands and writes the response.
  *
- * Commands should always come in pairs, the command name followed
- * by the commands arguments delimited by '/'.  Example:
+ * A command is a name and its arguments, separated by a slash. The pairs run
+ * in the order they appear:
  *
  *      thumbnail/78x110/quality/70
- *
- * This would first execute the thumbnail command then it would
- * set the quality of the image to 70 before writing the image
- * to the connection.
  */
 apr_status_t
-dims_process_image(dims_request_rec *d) 
+dims_process_image(dims_request_rec *d)
 {
     apr_time_t start_time = apr_time_now();
 
-    /* Hook in the progress monitor.  It gets passed a 
+    /* Hook in the progress monitor.  It gets passed a
      * dims_progress_rec which keeps track of the start time.
      */
     dims_progress_rec *progress_rec = (dims_progress_rec *) apr_palloc(
@@ -718,7 +672,7 @@ dims_process_image(dims_request_rec *d)
     /* Setting the progress monitor from the MagickWand API does not
      * seem to work.  The monitor never gets called.
      */
-    SetImageProgressMonitor(GetImageFromMagickWand(d->wand), dims_imagemagick_progress_cb, 
+    SetImageProgressMonitor(GetImageFromMagickWand(d->wand), dims_imagemagick_progress_cb,
             (void *) progress_rec);
 
     int exc_strip_cmd = 0;
@@ -780,14 +734,14 @@ dims_process_image(dims_request_rec *d)
             if (strcmp(command, "format") == 0) {
                 output_format_provided = true;
             }
-    
+
             if(strlen(command) > 0) {
                 char *args = ap_getword(d->pool, &cmds, '/');
 
                 /* If the NOIMAGE image is being used for some reason then
                 * we don't want to crop it.
                 */
-                if(d->use_no_image && 
+                if(d->use_no_image &&
                         (strcmp(command, "crop") == 0 ||
                         strcmp(command, "legacy_thumbnail") == 0 ||
                         strcmp(command, "legacy_crop") == 0 ||
@@ -806,7 +760,7 @@ dims_process_image(dims_request_rec *d)
                         return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
                     }
 
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                         "Rewriting command %s to 'resize' because a NOIMAGE "
                         "image is being processed.", command);
 
@@ -824,12 +778,12 @@ dims_process_image(dims_request_rec *d)
                     const char *err = NULL;
                     apr_status_t code;
 
-                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-                        "Executing command %s(%s), on request %s", 
+                    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                        "Executing command %s(%s), on request %s",
                         command, args, d->r->uri);
 
                     if((code = func(d, args, &err)) != DIMS_SUCCESS) {
-                        return dims_cleanup(d, err, code); 
+                        return dims_cleanup(d, err, code);
                     }
                 }
             }
@@ -867,13 +821,13 @@ dims_process_image(dims_request_rec *d)
             if((code = strip_func(d, NULL, &err)) != DIMS_SUCCESS) {
                 return dims_cleanup(d, err, code);
             }
-        }        
+        }
     }
 
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
     /* Disable timeouts at this point since the only thing left
-     * to do is save the image. 
+     * to do is save the image.
      */
     SetImageProgressMonitor(GetImageFromMagickWand(d->wand), NULL, NULL);
 
@@ -888,16 +842,9 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     void *first_pass = NULL;
 
     /*
-     * httpd runs post_config twice. The first pass is a dry run, and the pool
-     * it hands over is cleared afterwards. That takes the shared memory with
-     * it and leaves the global handle pointing at freed memory, so the second
-     * pass was destroying a block that no longer existed. glibc happened to
-     * report success. musl reports the error, and the server then refuses to
-     * start.
-     *
-     * Skip the first pass, which is what httpd's own modules do. The shared
-     * memory is then created once, against a pool that lives as long as the
-     * server.
+     * httpd runs post_config twice, and clears the first pass's pool
+     * afterwards. Skip that pass, so the shared memory is created once
+     * against a pool that lives as long as the server.
      */
     apr_pool_userdata_get(&first_pass, DIMS_POST_CONFIG_KEY, s->process->pool);
     if (first_pass == NULL) {
@@ -924,13 +871,10 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     }
 
     /*
-     * ImageMagick is started in the child, never here. Starting it in the
-     * parent leaves every worker inheriting semaphores and cache state across
-     * the fork, which ImageMagick 7 does not survive: the first request into a
-     * worker segfaults. The resource limits go with it, because they are
-     * per process and the process that matters is the one doing the work.
-     *
-     * See dims_child_init.
+     * ImageMagick starts in the child, never here. A worker that inherits its
+     * semaphores and cache state across the fork segfaults on its first
+     * request. The resource limits go with it, being per process. See
+     * dims_child_init.
      */
 
     ops = apr_hash_make(p);
@@ -1037,14 +981,14 @@ dims_child_init(apr_pool_t *p, server_rec *s)
             (dims_curl_rec *) apr_pcalloc(p, sizeof(dims_curl_rec));
 
     locks->s = s;
-    locks->share = curl_share_init(); 
+    locks->share = curl_share_init();
 
     apr_thread_mutex_create(&locks->share_mutex, APR_THREAD_MUTEX_DEFAULT, p);
     apr_thread_mutex_create(&locks->dns_mutex, APR_THREAD_MUTEX_DEFAULT, p);
 
-    curl_share_setopt(locks->share, CURLSHOPT_LOCKFUNC, lock_share); 
-    curl_share_setopt(locks->share, CURLSHOPT_UNLOCKFUNC, unlock_share); 
-    curl_share_setopt(locks->share, CURLSHOPT_USERDATA, (void *) locks); 
+    curl_share_setopt(locks->share, CURLSHOPT_LOCKFUNC, lock_share);
+    curl_share_setopt(locks->share, CURLSHOPT_UNLOCKFUNC, unlock_share);
+    curl_share_setopt(locks->share, CURLSHOPT_USERDATA, (void *) locks);
     curl_share_setopt(locks->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
 
     /* We have to associate our handle/locks with the process->pool otherwise
@@ -1060,11 +1004,11 @@ dims_child_init(apr_pool_t *p, server_rec *s)
     apr_pool_cleanup_register(p, locks, dims_child_cleanup, dims_child_cleanup);
 }
 
-static void 
+static void
 dims_register_hooks(apr_pool_t *p)
 {
     ap_hook_post_config(dims_init, NULL, NULL, APR_HOOK_MIDDLE);
-    ap_hook_child_init(dims_child_init, NULL, NULL,APR_HOOK_MIDDLE); 
+    ap_hook_child_init(dims_child_init, NULL, NULL,APR_HOOK_MIDDLE);
     ap_hook_handler(dims_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 

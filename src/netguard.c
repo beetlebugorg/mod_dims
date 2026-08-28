@@ -20,11 +20,8 @@ typedef struct {
     const char *name;
 } dims_v4_block;
 
-/*
- * Ranges no image origin holds. The service refuses these whatever
- * DimsAllowPrivateAddresses says, because allowing them buys nothing and
- * costs the instance metadata endpoint.
- */
+/* Ranges no image origin holds. Refused whatever DimsAllowPrivateAddresses
+ * says. */
 static const dims_v4_block dims_v4_reserved[] = {
     { 0x00000000U,  8, "this network" },
     { 0x64400000U, 10, "carrier grade NAT" },
@@ -205,8 +202,7 @@ dims_host_allowed(apr_table_t *whitelist, const char *hostname)
     /*
      * Walk the name from the left, dropping one label each time. The first
      * pass must match an entry recorded as "exact"; every pass after it must
-     * match one recorded as "glob". This is the match the module has always
-     * made, moved here so the redirect check and the sizer make the same one.
+     * match one recorded as "glob".
      */
     const char *state = "exact";
     int found = 0, done = 0;
@@ -272,9 +268,8 @@ dims_validate_image_url(dims_request_rec *d, const char *url, dims_allowlist_mod
 
 /*
  * Runs once per connection, after the name resolves and before the socket
- * opens. That placement is what makes the check hold: a name that resolves to
- * a refused address is refused whatever it is called, and every redirect hop
- * arrives here on its own.
+ * opens. A name that resolves to a refused address is refused whatever it is
+ * called, and every redirect hop arrives here on its own.
  */
 static curl_socket_t
 dims_opensocket_cb(void *clientp, curlsocktype purpose, struct curl_sockaddr *address)
@@ -315,21 +310,15 @@ dims_netguard_install(CURL *handle, dims_request_rec *d, dims_allowlist_mode mod
 {
     d->net_apply_allowlist = (int) mode;
 
-    /*
-     * Clear what a previous fetch on this request refused. A source that the
-     * guard turned away is followed by a fetch of the error image, and a stale
-     * refusal would stop that one on its first header.
-     */
+    /* Clear what a previous fetch on this request refused, so the error image
+     * fetch behind it is not stopped by a stale refusal. */
     d->net_refusal = DIMS_NET_OK;
 
     curl_easy_setopt(handle, CURLOPT_OPENSOCKETFUNCTION, dims_opensocket_cb);
     curl_easy_setopt(handle, CURLOPT_OPENSOCKETDATA, d);
 
-    /*
-     * The address callback already refuses every non-HTTP target that resolves,
-     * but a scheme libcurl handles without a socket would never reach it.
-     * Naming the two protocols closes that on the handle itself.
-     */
+    /* A scheme libcurl handles without a socket never reaches the address
+     * callback, so name the two protocols on the handle. */
 #if LIBCURL_VERSION_NUM >= 0x075500 /* 7.85.0 */
     curl_easy_setopt(handle, CURLOPT_PROTOCOLS_STR, "http,https");
     curl_easy_setopt(handle, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
@@ -409,12 +398,8 @@ dims_netguard_log_configuration(server_rec *s, dims_config_rec *config)
 {
     const char *name = (s->server_hostname != NULL) ? s->server_hostname : "";
 
-    /*
-     * A warning, not a notice. The default httpd LogLevel is warn, so anything
-     * quieter is invisible, and a permissive guard an operator cannot see is
-     * the thing this message exists to prevent. It costs one line per server
-     * at startup and nothing per request.
-     */
+    /* A warning, because the default httpd LogLevel is warn and anything
+     * quieter is invisible. */
     if (config->allow_private_addresses) {
         ap_log_error(APLOG_MARK, APLOG_WARNING, 0, s,
                      "mod_dims will connect to private addresses on %s. "

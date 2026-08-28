@@ -102,6 +102,7 @@ add_executable(dims_unit_test
     unit/test_rotate.c
     unit/test_encryption.c
     unit/test_netguard.c
+    unit/test_param.c
     unit/test_url.c
     unit/test_thumbnail.c
     unit/test_watermark.c

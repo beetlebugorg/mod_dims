@@ -12,13 +12,7 @@
 char *
 dims_path_image_url(apr_pool_t *pool, char *subject, char **start)
 {
-    /*
-     * Both schemes are searched, and whichever appears first in the path wins.
-     *
-     * The module looked for "http:/" alone. "https:/" does not contain it, so
-     * a TLS source in the path was never found and the request failed as a bad
-     * URL. Only the query parameter forms reached an https origin.
-     */
+    /* Both schemes are searched. Whichever appears first in the path wins. */
     static const char *const schemes[] = { "http:/", "https:/", NULL };
     const char *scheme = NULL;
     char *at = NULL;
@@ -50,15 +44,39 @@ dims_path_image_url(apr_pool_t *pool, char *subject, char **start)
 
     /*
      * One slash means httpd collapsed the pair, so put it back. Two means the
-     * caller escaped it and the URL is already whole.
+     * URL is already whole.
      *
-     * The repair copies, which matters: the caller truncates subject at *start
-     * to keep the commands, and a URL pointing into subject would lose its
-     * tail. A URL that needs no repair is already past that point.
+     * Both forms copy, because the caller truncates subject at *start and a
+     * URL pointing into it would lose its tail.
      */
     if (at[length] == '/') {
         return apr_pstrdup(pool, at);
     }
 
     return apr_psprintf(pool, "%.*s//%s", (int) (length - 1), at, at + length);
+}
+
+const char *
+dims_param_value(const char *token, const char *name)
+{
+    size_t length;
+
+    if (token == NULL || name == NULL) {
+        return NULL;
+    }
+
+    length = strlen(name);
+    if (strncmp(token, name, length) != 0) {
+        return NULL;
+    }
+
+    /* Past the equals sign the name carries. */
+    return token + length;
+}
+
+int
+dims_endpoint_prefix(const char *uri)
+{
+    return uri != NULL && (strncmp(uri, "/dims3/", DIMS_ENDPOINT_PREFIX_LEN) == 0 ||
+                           strncmp(uri, "/dims4/", DIMS_ENDPOINT_PREFIX_LEN) == 0);
 }

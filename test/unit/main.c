@@ -22,6 +22,7 @@ extern const dims_test dims_tests_unit_output[];
 extern const dims_test dims_tests_unit_watermark[];
 extern const dims_test dims_tests_unit_encryption[];
 extern const dims_test dims_tests_unit_netguard[];
+extern const dims_test dims_tests_unit_param[];
 extern const dims_test dims_tests_unit_url[];
 
 static const dims_test_group groups[] = {
@@ -34,6 +35,7 @@ static const dims_test_group groups[] = {
     { "unit/test_watermark.c", dims_tests_unit_watermark },
     { "unit/test_encryption.c", dims_tests_unit_encryption },
     { "unit/test_netguard.c", dims_tests_unit_netguard },
+    { "unit/test_param.c", dims_tests_unit_param },
     { "unit/test_url.c", dims_tests_unit_url },
     { NULL, NULL }
 };
