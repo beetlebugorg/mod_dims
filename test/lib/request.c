@@ -293,6 +293,13 @@ dims_get_absolute(const char *url)
 }
 
 dims_response *
+dims_get_absolute_with_headers(const char *url, const char *const *headers,
+                               size_t header_count)
+{
+    return request_url(url, headers, header_count);
+}
+
+dims_response *
 dims_get_with_headers(const char *path, const char *const *headers, size_t header_count)
 {
     char url[4096];

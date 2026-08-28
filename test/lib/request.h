@@ -44,6 +44,11 @@ dims_response *dims_get_absolute(const char *url);
 dims_response *dims_get_with_headers(const char *path, const char *const *headers,
                                      size_t header_count);
 
+/* The same, against a URL given in full. */
+dims_response *dims_get_absolute_with_headers(const char *url,
+                                              const char *const *headers,
+                                              size_t header_count);
+
 /* Case insensitive lookup. Returns NULL when the header is absent. */
 const char *dims_header_value(const dims_response *response, const char *name);
 

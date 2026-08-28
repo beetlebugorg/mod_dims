@@ -105,10 +105,7 @@ test_etag_is_stable(void)
     dims_response_free(second);
 }
 
-/*
- * Conditional requests are never read, so a client holding a
- * valid ETag gets a full body back. Answering with 304 is the fix.
- */
+/* A matching If-None-Match returns 304 with an empty body. */
 static void
 test_conditional_request_returns_304(void)
 {
@@ -126,6 +123,95 @@ test_conditional_request_returns_304(void)
 
     second = dims_get_with_headers(path, headers, 1);
     CHECK_INT(second->status, 304, "a request with a matching ETag");
+    CHECK_INT((long) second->body_len, 0, "the body length of a 304");
+
+    dims_response_free(first);
+    dims_response_free(second);
+    free(path);
+    free(url);
+}
+
+/* RFC 9110 gives the ETag as a quoted string. */
+static void
+test_etag_is_quoted(void)
+{
+    dims_response *response = dims_request_ops("resize/100x100", "grid.png");
+    const char *etag = dims_header_value(response, "ETag");
+    size_t len;
+
+    CHECK(etag != NULL, "ETag must be sent");
+    len = strlen(etag);
+    CHECK(len >= 2 && etag[0] == '"' && etag[len - 1] == '"',
+          "the ETag must be a quoted string, got %s", etag);
+
+    dims_response_free(response);
+}
+
+/* An ETag the server did not issue does not match. The response has the body. */
+static void
+test_conditional_request_with_another_etag(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char *path = dims_sign_dims4("resize/100x100", url, NULL, NULL);
+    const char *headers[1];
+    dims_response *response;
+
+    headers[0] = "If-None-Match: \"not-the-one\"";
+    response = dims_get_with_headers(path, headers, 1);
+
+    CHECK_INT(response->status, 200, "a request with an ETag that does not match");
+    CHECK(response->body_len > 0, "the body must be sent");
+
+    dims_response_free(response);
+    free(path);
+    free(url);
+}
+
+/* If-Modified-Since matches against the Last-Modified the source sent. */
+static void
+test_conditional_request_by_date(void)
+{
+    dims_response *first = dims_request_ops("resize/100x100", "grid.png");
+    const char *modified = dims_header_value(first, "Last-Modified");
+    char header[512];
+    const char *headers[1];
+    char *url = dims_fixture_url("grid.png");
+    char *path = dims_sign_dims4("resize/100x100", url, NULL, NULL);
+    dims_response *second;
+
+    CHECK(modified != NULL, "the first response must have Last-Modified");
+    snprintf(header, sizeof(header), "If-Modified-Since: %s", modified);
+    headers[0] = header;
+
+    second = dims_get_with_headers(path, headers, 1);
+    CHECK_INT(second->status, 304, "a request with a matching Last-Modified");
+
+    dims_response_free(first);
+    dims_response_free(second);
+    free(path);
+    free(url);
+}
+
+/* The 304 has the same Cache-Control as the full response. */
+static void
+test_conditional_response_has_cache_control(void)
+{
+    dims_response *first = dims_request_ops("resize/100x100", "grid.png");
+    const char *etag = dims_header_value(first, "ETag");
+    char header[512];
+    const char *headers[1];
+    char *url = dims_fixture_url("grid.png");
+    char *path = dims_sign_dims4("resize/100x100", url, NULL, NULL);
+    dims_response *second;
+
+    CHECK(etag != NULL, "the first response must have an ETag");
+    snprintf(header, sizeof(header), "If-None-Match: %s", etag);
+    headers[0] = header;
+
+    second = dims_get_with_headers(path, headers, 1);
+    CHECK_INT(second->status, 304, "a request with a matching ETag");
+    CHECK_STR(dims_header_value(second, "Cache-Control"),
+              dims_header_value(first, "Cache-Control"), "Cache-Control");
 
     dims_response_free(first);
     dims_response_free(second);
@@ -190,6 +276,29 @@ test_content_length_matches_a_multi_frame_body(void)
     dims_response_free(response);
 }
 
+/*
+ * The module never sets r->mtime. A source that sends neither Last-Modified
+ * nor ETag must return 200, not 304.
+ */
+static void
+test_conditional_request_without_a_validator(void)
+{
+    char *url = dims_fixture_url("nocache.png");
+    char *path = dims_sign_dims4("resize/100x100", url, NULL, NULL);
+    const char *headers[1];
+    dims_response *response;
+
+    headers[0] = "If-Modified-Since: Wed, 21 Oct 2015 07:28:00 GMT";
+    response = dims_get_with_headers(path, headers, 1);
+
+    CHECK_INT(response->status, 200, "a source that sends neither Last-Modified nor ETag");
+    CHECK(response->body_len > 0, "the body must be sent");
+
+    dims_response_free(response);
+    free(path);
+    free(url);
+}
+
 const dims_test dims_tests_cache_headers[] = {
     { "TestTrustedSourceMaxAge", test_trusted_source_max_age, NULL },
     { "TestSourceMaxAgeAboveTheWindow", test_source_max_age_above_the_window, NULL },
@@ -199,8 +308,16 @@ const dims_test dims_tests_cache_headers[] = {
       test_forwarded_header_has_no_leading_space, NULL },
     { "TestEtagIsSent", test_etag_is_sent, NULL },
     { "TestEtagIsStable", test_etag_is_stable, NULL },
+    { "TestEtagIsQuoted", test_etag_is_quoted, NULL },
     { "TestConditionalRequestReturns304", test_conditional_request_returns_304,
-      "conditional requests are never read" },
+      NULL },
+    { "TestConditionalRequestWithAnotherEtag",
+      test_conditional_request_with_another_etag, NULL },
+    { "TestConditionalRequestByDate", test_conditional_request_by_date, NULL },
+    { "TestConditionalRequestWithoutAValidator",
+      test_conditional_request_without_a_validator, NULL },
+    { "TestConditionalResponseHasCacheControl",
+      test_conditional_response_has_cache_control, NULL },
     { "TestRedirectHeadersDoNotSurvive", test_redirect_headers_do_not_survive,
       NULL },
     { "TestContentLengthMatchesAMultiFrameBody",
