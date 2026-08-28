@@ -9,6 +9,7 @@
 #include "handler.h"
 #include "configuration.h"
 #include "curl.h"
+#include "netguard.h"
 #include "encryption.h"
 #include "status.h"
 #include "pipeline.h"
@@ -178,15 +179,11 @@ dims_handle_request(dims_request_rec *d)
         char *fetch_url = NULL;
 
         char *hostname;
-        const char *state = "exact";
         apr_uri_t uri;
-        int found = 0, done = 0;
+        int found = 0;
 
-        /* Check to make sure the URLs hostname is in the whitelist.  Wildcards
-         * are handled by repeatedly checking the hash for a match after removing
-         * each part of the hostname until a match is found.  If a match is found
-         * and it's value is set to "glob" the match will be accepted.
-         */
+        /* The hostname must be on the allowlist. dims_host_allowed makes the
+         * match; the redirect check and the sizer make the same one. */
         if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
             return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
         }
@@ -201,22 +198,16 @@ dims_handle_request(dims_request_rec *d)
         }
 
         hostname = uri.hostname;
-        if ( d->use_secret_key == 1 ) {
-            done = found = 1;
-        }
-        while(!done) {
-            char *value = (char *) apr_table_get(d->config->whitelist, hostname);
-            if(value && strcmp(value, state) == 0) {
-                done = found = 1;
-            } else {
-                hostname = strstr(hostname, ".");
-                if(!hostname) {
-                    done = 1;
-                } else {
-                    hostname++;
-                }
-                state = "glob";
-            }
+
+        /*
+         * A signed request has never consulted the allowlist. Refusing one now
+         * would change which URLs /dims4/ accepts, so it waits for the
+         * operator to set DimsAllowlistSigned to enforce.
+         */
+        if ( d->use_secret_key == 1 && !d->config->allowlist_signed ) {
+            found = 1;
+        } else {
+            found = dims_host_allowed(d->config->whitelist, hostname);
         }
 
         if(found) {
@@ -277,6 +268,20 @@ dims_sizer(dims_request_rec *d)
     if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
         return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
     }
+
+    /*
+     * The sizer took any URL from any caller and reported whether it decoded
+     * as an image, which made it a scanner. It carries no signature, so the
+     * allowlist is the only gate it can have, and it applies here whatever
+     * DimsAllowlistSigned holds.
+     */
+    if(!dims_host_allowed(d->config->whitelist, uri.hostname)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                "Requested URL has hostname that is not in the "
+                "whitelist. (%s)", uri.hostname ? uri.hostname : "");
+        return dims_cleanup(d, NULL, DIMS_HOSTNAME_NOT_IN_WHITELIST);
+    }
+
     if(dims_fetch_remote_image(d, d->image_url ) != 0) {
         return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
     }
@@ -311,8 +316,13 @@ dims_sizer(dims_request_rec *d)
 apr_status_t
 dims_handler(request_rec *r)
 {
-    dims_request_rec *d = (dims_request_rec *) 
-            apr_palloc(r->pool, sizeof(dims_request_rec));
+    /*
+     * apr_pcalloc, not apr_palloc. The list below sets one field at a time,
+     * so every field it does not name holds whatever the pool handed over.
+     * Zeroing first makes a forgotten field NULL or zero rather than garbage.
+     */
+    dims_request_rec *d = (dims_request_rec *)
+            apr_pcalloc(r->pool, sizeof(dims_request_rec));
 
     d->r = r;
     d->pool = r->pool;
@@ -337,6 +347,8 @@ dims_handler(request_rec *r)
     d->optimize_resize = d->config->optimize_resize;
     d->send_content_disposition = 0;
     d->content_disposition_filename = NULL;
+    d->net_apply_allowlist = DIMS_ALLOWLIST_SKIP;
+    d->net_refusal = DIMS_NET_OK;
 
     /* Set initial notes to be logged by mod_log_config. */
     apr_table_setn(r->notes, "DIMS_STATUS", "0");

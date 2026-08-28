@@ -63,6 +63,9 @@ dims_fixture_request(const char *image, const char *query)
         r->log = log;
     }
     /* The defaults dims_create_config sets. */
+    config->whitelist = apr_table_make(pool, 5);
+    config->allow_private_addresses = 1;
+    config->allowlist_signed = 0;
     config->strip_metadata = 1;
     config->imagemagick_timeout = 20000;
     config->download_timeout = 10000;

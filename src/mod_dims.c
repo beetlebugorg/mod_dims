@@ -38,6 +38,7 @@
 #include "configuration.h"
 #include "encryption.h"
 #include "curl.h"
+#include "netguard.h"
 #include "status.h"
 #include "handler.h"
 #include "pipeline.h"
@@ -185,7 +186,42 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
     } else {
-        CURLcode code = dims_get_image_data(d, fetch_url, &image_data);
+        CURLcode code;
+        dims_net_result guard;
+
+        /*
+         * How far the allowlist reaches on this fetch.
+         *
+         * The error image comes from the configuration, not from the caller,
+         * so the allowlist never applies to it.
+         *
+         * Everything else follows DimsAllowlistSigned. The default logs what
+         * enforcing would refuse and lets the fetch through, which is what
+         * keeps this a drop-in upgrade: a signed request has never consulted
+         * the allowlist, and a redirect has never been re-checked against it.
+         * The address and protocol checks below run on every fetch whatever
+         * this holds.
+         */
+        dims_allowlist_mode mode = DIMS_ALLOWLIST_SKIP;
+
+        if (url != NULL) {
+            mode = d->config->allowlist_signed ? DIMS_ALLOWLIST_ENFORCE
+                                               : DIMS_ALLOWLIST_LOG;
+        }
+
+        guard = dims_validate_image_url(d, fetch_url, mode);
+        if (guard != DIMS_NET_OK) {
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Refusing to fetch %s: %s, on request: %s",
+                    fetch_url, dims_net_reason(guard), d->r->uri);
+
+            d->status = DIMS_NETWORK_REFUSED;
+            d->fetch_http_status = HTTP_BAD_REQUEST;
+
+            return 1;
+        }
+
+        code = dims_get_image_data(d, fetch_url, &image_data, mode);
 
         start_time = apr_time_now();
         if(code != 0) {
@@ -201,6 +237,19 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             d->fetch_http_status = 500;
             if(code == CURLE_OPERATION_TIMEDOUT) {
                 d->status = DIMS_DOWNLOAD_TIMEOUT;
+            }
+
+            /* The guard stops a transfer by failing the socket or the header
+             * callback, so libcurl reports a transport error. Say what really
+             * happened instead. The redirect cap is libcurl's own limit, set
+             * by the guard, so it reports the same way. */
+            if (code == CURLE_TOO_MANY_REDIRECTS) {
+                d->net_refusal = DIMS_NET_TOO_MANY_REDIRECTS;
+            }
+
+            if (d->net_refusal != DIMS_NET_OK) {
+                d->status = DIMS_NETWORK_REFUSED;
+                d->fetch_http_status = HTTP_BAD_REQUEST;
             }
 
             d->download_time = (apr_time_now() - start_time) / 1000;
@@ -849,6 +898,22 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     }
 
     ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
+
+    /* Say which tiers of the network guard the operator left permissive, on
+     * every server, so the setting is visible without reading the config. */
+    {
+        server_rec *server;
+
+        for (server = s; server != NULL; server = server->next) {
+            dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+                    server->module_config, &dims_module);
+
+            if (config != NULL) {
+                dims_netguard_log_configuration(server, config);
+            }
+        }
+    }
+
     /*
      * ImageMagick is started in the child, never here. Starting it in the
      * parent leaves every worker inheriting semaphores and cache state across

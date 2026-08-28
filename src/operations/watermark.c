@@ -5,6 +5,8 @@
  */
 
 #include "operations.h"
+#include "../curl.h"
+#include "../netguard.h"
 
 #include <openssl/sha.h>
 #include <paths.h>
@@ -114,10 +116,20 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
     // Write to disk.
     } else {
         dims_image_data_t image_data;
+        dims_allowlist_mode mode = d->config->allowlist_signed
+                ? DIMS_ALLOWLIST_ENFORCE : DIMS_ALLOWLIST_LOG;
+
+        /* The overlay URL comes from the query string and no signature covers
+         * it, so it reaches the same guard the source image reaches. */
+        if (dims_validate_image_url(d, overlay_url, mode) != DIMS_NET_OK) {
+            *err = "Refused to fetch the overlay image!";
+            return DIMS_FAILURE;
+        }
+
         /* The result is not read. A failed fetch leaves image_data empty and
          * MagickReadImageBlob reports it, which is the only reason this does
          * not crash. Checking the code belongs with the wider error handling. */
-        (void) dims_get_image_data(d, overlay_url, &image_data);
+        (void) dims_get_image_data(d, overlay_url, &image_data, mode);
 
         if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
             if (image_data.data) {

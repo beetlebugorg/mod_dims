@@ -7,6 +7,7 @@
  */
 
 #include "curl.h"
+#include "netguard.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -116,6 +117,13 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
         header++;
     }
 
+    /* A redirect target arrives here before libcurl follows it. The address
+     * callback covers a hop that resolves somewhere refused; this covers a hop
+     * that resolves fine and is simply not a host the operator named. */
+    if(key && value && strcasecmp(key, "Location") == 0) {
+        dims_netguard_check_redirect(d, value);
+    }
+
     if(key && value && strcmp(key, "Cache-Control") == 0) {
         d->cache_control = value;
     } else if(key && value && strcmp(key, "Edge-Control") == 0) {
@@ -124,6 +132,12 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
         d->last_modified = value;
     } else if(key && value && strcmp(key, "ETag") == 0) {
         d->etag = value;
+    }
+
+    /* Returning short aborts the transfer, which is how a refused redirect
+     * stops before libcurl follows it. */
+    if (d->net_refusal != DIMS_NET_OK) {
+        return 0;
     }
 
     return realsize;
@@ -150,7 +164,8 @@ dims_curl_debug_cb(CURL *handle,
 }
 
 CURLcode
-dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data)
+dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data,
+                    dims_allowlist_mode mode)
 {
     CURL *curl_handle;
     CURLcode code;
@@ -196,6 +211,11 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     }
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
+
+    /* Every fetch passes the guard, including the sizer and the watermark
+     * overlay. Both reach this function without going through the allowlist
+     * check in the handler. */
+    dims_netguard_install(curl_handle, d, mode);
     curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_DEBUGFUNCTION, dims_curl_debug_cb);
     curl_easy_setopt(curl_handle, CURLOPT_DEBUGDATA, d);

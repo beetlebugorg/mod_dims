@@ -70,7 +70,10 @@ typedef enum {
     DIMS_BAD_URL,
     DIMS_BAD_ARGUMENTS,
     DIMS_HOSTNAME_NOT_IN_WHITELIST,
-    DIMS_FILE_NOT_FOUND
+    DIMS_FILE_NOT_FOUND,
+
+    /* The network guard refused the target. */
+    DIMS_NETWORK_REFUSED
 } dims_status_t;
 
 /* The HTTP status a dims_status_t maps to, and a short reason for the log. */
@@ -93,7 +96,6 @@ typedef struct {
 
 typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, const char **err);
 void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsigned long cropHeight);
-CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data);
 
 dims_operation_func 
     dims_strip_operation,
@@ -139,6 +141,15 @@ struct dims_config_rec {
 
     /* Largest source image to accept, in bytes. Zero means no limit. */
     size_t max_source_bytes;
+
+    /* Whether a fetch may reach a private address. Set from
+     * DimsAllowPrivateAddresses. Loopback and link local are refused whatever
+     * this holds. */
+    int allow_private_addresses;
+
+    /* Whether the allowlist applies to a signed request. Set from
+     * DimsAllowlistSigned: 0 logs what it would refuse, 1 refuses. */
+    int allowlist_signed;
 
     int curl_queue_size;
     char *secret_key;
@@ -221,6 +232,13 @@ struct dims_request_rec {
     
     /* Use a whitelist, or use a secret key passed on the URI */
     int use_secret_key;
+
+    /* Whether the allowlist follows this fetch to every redirect hop. */
+    int net_apply_allowlist;
+
+    /* What the network guard refused, as a dims_net_result. Zero means it
+     * refused nothing. */
+    int net_refusal;
 
     /* Should Content-Disposition header bet set. */
     int send_content_disposition;

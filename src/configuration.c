@@ -9,6 +9,7 @@
 #include "configuration.h"
 
 #include <ctype.h>
+#include <strings.h>
 
 void *
 dims_create_config(apr_pool_t *p, server_rec *s)
@@ -44,6 +45,14 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->secret_key = apr_pstrdup(p,"m0d1ms");
     config->encryption_algorithm = "AES/ECB/PKCS5Padding";
     config->max_expiry_period= 0; // never expire
+
+    /*
+     * Both defaults reproduce what the module did before the guard existed.
+     * The tier that no deployment depends on, loopback and link local, is
+     * refused whatever these hold.
+     */
+    config->allow_private_addresses = 1;
+    config->allowlist_signed = 0;
 
     return (void *) config;
 }
@@ -326,6 +335,32 @@ dims_config_set_max_source_bytes(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 static const char *
+dims_config_set_allow_private_addresses(cmd_parms *cmd, void *dummy, int arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->allow_private_addresses = arg;
+    return NULL;
+}
+
+static const char *
+dims_config_set_allowlist_signed(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+
+    if (strcasecmp(arg, "log") == 0) {
+        config->allowlist_signed = 0;
+    } else if (strcasecmp(arg, "enforce") == 0) {
+        config->allowlist_signed = 1;
+    } else {
+        return "DimsAllowlistSigned must be log or enforce";
+    }
+
+    return NULL;
+}
+
+static const char *
 dims_config_set_no_image_url(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -423,6 +458,17 @@ const command_rec dims_directives[] =
                   "Largest source image to accept, in bytes. A source larger than "
                   "this is refused before it is decoded. The default is 0, which "
                   "means no limit."),
+    AP_INIT_FLAG("DimsAllowPrivateAddresses",
+                  dims_config_set_allow_private_addresses, NULL, RSRC_CONF,
+                  "Whether a fetch may reach a private address, meaning "
+                  "10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, and IPv6 unique "
+                  "local. The default is On. Loopback, link local, multicast, "
+                  "and the reserved ranges are refused whatever this is set to."),
+    AP_INIT_TAKE1("DimsAllowlistSigned",
+                  dims_config_set_allowlist_signed, NULL, RSRC_CONF,
+                  "Whether the host allowlist applies to a signed request and "
+                  "to a redirect. Set log to record what enforcing would "
+                  "refuse, or enforce to refuse it. The default is log."),
     AP_INIT_TAKE1("DimsDownloadTimeout",
                   dims_config_set_download_timeout, NULL, RSRC_CONF,
                   "Timeout for downloading remote images."

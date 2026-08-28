@@ -49,6 +49,7 @@ add_library(mod_dims MODULE
     src/encryption.c
     src/error.c
     src/handler.c
+    src/netguard.c
     src/status.c
     src/mod_dims.c
     src/operations/autolevel.c

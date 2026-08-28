@@ -7,6 +7,7 @@
 #define DIMS_TEST_STUB_HTTPD_H
 
 #include "mod_dims.h"
+#include "netguard.h"
 
 #include <ctype.h>
 

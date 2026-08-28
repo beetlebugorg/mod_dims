@@ -43,6 +43,24 @@ ap_log_rerror_(const char *file, int line, int module_index, int level,
     fputc('\n', stderr);
 }
 
+/* The guard reports its configuration through this at startup. */
+void
+ap_log_error_(const char *file, int line, int module_index, int level,
+              apr_status_t status, const server_rec *s, const char *fmt, ...)
+{
+    va_list args;
+
+    if (!log_enabled) {
+        return;
+    }
+
+    fprintf(stderr, "      [module] ");
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    fputc('\n', stderr);
+}
+
 /*
  * httpd's unescaper, reduced to what the watermark parser needs. It decodes
  * in place and returns OK, which is what the real one does for a valid
@@ -77,7 +95,8 @@ ap_unescape_url(char *url)
  * The URL's last path segment names the fixture.
  */
 CURLcode
-dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data)
+dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *data,
+                    dims_allowlist_mode mode)
 {
     const char *name = strrchr(fetch_url, '/');
     char path[1024];
