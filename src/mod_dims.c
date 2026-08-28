@@ -141,6 +141,19 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
     char *fetch_url = url ? (char *) url : d->no_image_url;
     apr_time_t start_time;
 
+    /*
+     * Passing no URL asks for the error image, and there may not be one:
+     * DimsDefaultImageURL and the per client setting are both optional.
+     *
+     * Nothing to fetch is a failure, not a crash. The file:/// check below
+     * reads fetch_url, so without this the worker dies whenever a source
+     * fetch fails on a server with no error image configured.
+     */
+    if (fetch_url == NULL) {
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                "No error image is configured, on request: %s", d->r->uri);
+        return 1;
+    }
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
             "Loading image from %s", fetch_url);
 
