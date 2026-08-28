@@ -108,7 +108,6 @@ typedef struct {
 int dims_origin_status(dims_request_rec *d);
 
 typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, const char **err);
-void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsigned long cropHeight);
 
 dims_operation_func 
     dims_strip_operation,
@@ -119,7 +118,6 @@ dims_operation_func
     dims_quality_operation,
     dims_format_operation,
     dims_legacy_thumbnail_operation,
-    dims_smart_crop_operation,
     dims_brightness_operation,
     dims_flipflop_operation,
     dims_sepia_operation,
@@ -180,11 +178,9 @@ struct dims_config_rec {
     /* How a multi-frame source is handled. Set from DimsAnimatedImages. */
     int animated_mode;
 
-    int curl_queue_size;
     char *secret_key;
     const char *encryption_algorithm;
     long max_expiry_period;
-    char *cache_dir;
     char *default_image_prefix;
 
     char *user_agent_override;

@@ -98,11 +98,6 @@ dims_imagemagick_progress_cb(const char *text, const MagickOffsetType offset,
     return MagickTrue;
 }
 
-/* Converts a hex character to its integer value */
-char from_hex(char ch) {
-    return isdigit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
-}
-
 /* Converts an integer value to its hex character*/
 char to_hex(char code) {
     static char hex[] = "0123456789abcdef";

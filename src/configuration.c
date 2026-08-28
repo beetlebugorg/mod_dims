@@ -36,13 +36,11 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->disable_encoded_fetch = 0;
     config->default_output_format = NULL;
 
-    config->area_size = 128 * 1024 * 1024;         //  128mb max.
-    config->memory_size = 512 * 1024 * 1024;       //  512mb max.
-    config->map_size = 1024 * 1024 * 1024;         // 1024mb max.
-    config->disk_size = 2048UL * 1024UL * 1024UL;  // 2048mb max.
+    config->area_size = (MagickSizeType) DIMS_AREA_SIZE_MB * 1024 * 1024;
+    config->memory_size = (MagickSizeType) DIMS_MEMORY_SIZE_MB * 1024 * 1024;
+    config->map_size = (MagickSizeType) DIMS_MAP_SIZE_MB * 1024 * 1024;
+    config->disk_size = (MagickSizeType) DIMS_DISK_SIZE_MB * 1024 * 1024;
 
-    config->curl_queue_size = 10;
-    config->cache_dir = NULL;
     config->secret_key = apr_pstrdup(p,"m0d1ms");
     config->encryption_algorithm = "AES/ECB/PKCS5Padding";
     config->max_expiry_period= 0; // never expire
@@ -589,20 +587,20 @@ const command_rec dims_directives[] =
                   "The default is 3000."),
     AP_INIT_TAKE1("DimsImagemagickMemorySize",
                   dims_config_set_imagemagick_memory_size, NULL, RSRC_CONF,
-                  "Maximum amount of memory in megabytes to use for pixel cache."
-                  "The default is 512mb."),
+                  "Maximum amount of memory in megabytes to use for pixel cache. "
+                  "The default is " DIMS_MB_TEXT(DIMS_MEMORY_SIZE_MB) "."),
     AP_INIT_TAKE1("DimsImagemagickAreaSize",
                   dims_config_set_imagemagick_area_size, NULL, RSRC_CONF,
-                  "Maximum amount of memory in megabytes that any one image can use."
-                  "The default is 128mb."),
+                  "Maximum amount of memory in megabytes that any one image can "
+                  "use. The default is " DIMS_MB_TEXT(DIMS_AREA_SIZE_MB) "."),
     AP_INIT_TAKE1("DimsImagemagickMapSize",
                   dims_config_set_imagemagick_map_size, NULL, RSRC_CONF,
-                  "Maximum amount of memory map in megabytes to use for the pixel cache."
-                  "The default is 1024mb."),
+                  "Maximum amount of memory map in megabytes to use for the "
+                  "pixel cache. The default is " DIMS_MB_TEXT(DIMS_MAP_SIZE_MB) "."),
     AP_INIT_TAKE1("DimsImagemagickDiskSize",
                   dims_config_set_imagemagick_disk_size, NULL, RSRC_CONF,
-                  "Maximum amount of disk space in megabytes to use for the pixel cache."
-                  "The default is 1024mb."),
+                  "Maximum amount of disk space in megabytes to use for the "
+                  "pixel cache. The default is " DIMS_MB_TEXT(DIMS_DISK_SIZE_MB) "."),
     AP_INIT_TAKE1("DimsSecretMaxExpiryPeriod",
                 dims_config_set_secretkeyExpiryPeriod, NULL, RSRC_CONF,
                 "How long in the future (in seconds) can the expiry date on the URL be requesting. 0 = forever"
