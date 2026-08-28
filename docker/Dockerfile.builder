@@ -23,14 +23,14 @@
 # toolchain. A moving base would let a rebuild publish different encoders
 # under the same name, and every baseline would shift with nothing in the
 # diff to show why.
-ARG HTTPD_VERSION=2.4.62
-ARG HTTPD_DIGEST=sha256:4c7788695c832bf415a662dfb5160f1895e65fc65c025e85f436ee2c9e7d7f3e
+ARG HTTPD_VERSION=2.4.68
+ARG HTTPD_DIGEST=sha256:979c38c2228d28c2edfd45c6e27dcee1c7b4a101a5526721ae8ece454e89e99e
 
 FROM httpd:${HTTPD_VERSION}@${HTTPD_DIGEST}
 
 # Bump this when any pinned version below changes. The tag names the
 # ImageMagick version and this number, so two toolchains cannot share a name.
-ARG BUILDER_REVISION=2
+ARG BUILDER_REVISION=3
 
 ARG IMAGEMAGICK_VERSION=7.1.2-30
 ARG IMAGEMAGICK_SHA256=3034a64f22398e15ee3dd1e6b1aa83d838cfc47df1bb246ae0eca9590e6ace72
@@ -43,6 +43,11 @@ LABEL org.opencontainers.image.source="https://github.com/beetlebugorg/mod_dims"
 # The delegates are the encoders. Their versions decide the bytes in every
 # golden file, so each one is built from source at a pinned version with a
 # checksum, into the same prefix as ImageMagick.
+#
+# Dependabot does not see these. It reads FROM lines and workflow actions, and
+# a version in an ARG with its checksum in a RUN is neither. Check them by
+# hand. Bumping one means fetching the release, recording its sha256, raising
+# BUILDER_REVISION, republishing the toolchain, and reviewing the golden diff.
 #
 # Building them rather than taking the distribution's packages does two
 # things. The version that ImageMagick compiles against is the version it
@@ -162,8 +167,3 @@ RUN wget -q -O im.tar.gz \
     make -j"$(nproc)" && make install && \
     cd .. && rm -rf "ImageMagick-${IMAGEMAGICK_VERSION}" im.tar.gz
 
-# The golden files record what this toolchain produces, so the name says which
-# toolchain it was. Only major.minor: the patch level does not change output.
-RUN printf '%s-q8\n' \
-      "$(echo "${IMAGEMAGICK_VERSION}" | sed -E 's/^([0-9]+\.[0-9]+).*/\1/')" \
-      > /etc/dims-magick-version

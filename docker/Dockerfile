@@ -10,9 +10,9 @@
 #
 # It starts with no environment set. Every DIMS_ variable below has a default.
 
-ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r2
-ARG HTTPD_VERSION=2.4.62
-ARG HTTPD_DIGEST=sha256:4c7788695c832bf415a662dfb5160f1895e65fc65c025e85f436ee2c9e7d7f3e
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r3
+ARG HTTPD_VERSION=2.4.68
+ARG HTTPD_DIGEST=sha256:979c38c2228d28c2edfd45c6e27dcee1c7b4a101a5526721ae8ece454e89e99e
 
 FROM ${BUILDER_IMAGE} AS build
 
