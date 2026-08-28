@@ -62,8 +62,11 @@ dims_fixture_request(const char *image, const char *query)
         log->level = APLOG_WARNING;
         r->log = log;
     }
-    /* The defaults dims_create_config sets. */
+    /* The defaults dims_create_config sets. The overlay host is on the
+     * allowlist, the same as the http harness, so the watermark cases reach
+     * the composite rather than the allowlist refusal. */
     config->whitelist = apr_table_make(pool, 5);
+    apr_table_set(config->whitelist, "origin", "exact");
     config->allow_private_addresses = 1;
     config->allowlist_signed = 0;
     config->strip_metadata = 1;

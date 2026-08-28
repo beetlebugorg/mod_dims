@@ -16,7 +16,8 @@ A leading `*.` matches a name below the domain. `*.cdn.example.net` matches
 An empty allowlist matches nothing.
 
 The allowlist applies to `/dims3/`. A `/dims4/` request skips it unless
-`DimsAllowlistSigned` says otherwise.
+`DimsAllowlistSigned` says otherwise. The watermark overlay follows the same
+rule as the source image.
 
 ## DimsAllowlistSigned
 
@@ -99,8 +100,10 @@ DimsOverlayCacheMaxAge 86400
 
 How long an overlay stays on disk, in seconds. `0` means it never expires.
 
-An overlay URL is not covered by a signature unless `_keys` lists it, so any
-caller can add an entry. Both bounds exist for that reason.
+An overlay must pass the allowlist, but an unsigned request can still add an
+allowlisted entry. Both bounds exist for that reason. A cache hit is checked
+against the allowlist again, so an entry one host wrote does not serve on a
+host whose allowlist refuses it.
 
 ## DimsProfileDir
 
