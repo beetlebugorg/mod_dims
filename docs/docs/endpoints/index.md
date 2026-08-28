@@ -11,8 +11,7 @@ Four handlers, each set on a location.
 | [`dims-local`](/endpoints/local) | a file on disk | nothing |
 
 `/dims5/` is the one to use. Its signature covers the commands, the image URL,
-and every query parameter apart from five, and it compares a full HMAC-SHA256
-rather than the first six characters of an MD5.
+and every query parameter apart from five, and it uses HMAC-SHA256.
 
 ## Commands
 
