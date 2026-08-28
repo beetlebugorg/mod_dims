@@ -59,6 +59,7 @@ RUN apt-get update && \
 
 COPY --from=build /build/mod_dims/build/libmod_dims.so /usr/local/apache2/modules/
 COPY --from=build /usr/local/imagemagick /usr/local/imagemagick
+COPY profiles/ /usr/local/share/mod_dims/profiles/
 COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
 
 ENV LD_LIBRARY_PATH=/usr/local/imagemagick/lib

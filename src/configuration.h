@@ -22,6 +22,11 @@
 
 #define DIMS_STRINGIFY_(x) #x
 #define DIMS_MB_TEXT(x) DIMS_STRINGIFY_(x) "mb"
+
+/* Where the ICC profiles are installed. */
+#ifndef DIMS_PROFILE_DIR
+#define DIMS_PROFILE_DIR "/usr/local/share/mod_dims/profiles"
+#endif
 #include "module.h"
 
 /* Builds a dims_config_rec with the documented defaults. httpd calls this
