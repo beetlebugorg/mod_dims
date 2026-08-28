@@ -16,6 +16,16 @@ updates:
     labels:
       - dependencies
 
+  # The documentation site. It is the one place with a lock file.
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ""
+    labels:
+      - dependencies
+
   # The base image is pinned by tag and digest together. Dependabot moves both,
   # which is the point: a digest that stayed while the tag moved would name a
   # different image under the same version.

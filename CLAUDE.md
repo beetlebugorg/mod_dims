@@ -115,8 +115,13 @@ portable between the two, and a test asserts it.
 ## Dependencies
 
 The module links httpd, APR, libcurl, OpenSSL, and ImageMagick. The test harness links
-the same set. Do not add another runtime, another language, or another package manager.
-The build is CMake. The tests are C. There is no Python in this repository.
+the same set. Do not add another runtime, another language, or another package manager
+to the module or the harness. The build is CMake. The tests are C. There is no Python
+in this repository.
+
+`docs/` is the exception. It is a Docusaurus site, so it has Node, npm, and a lock
+file of its own. Nothing in the module build reads it, and nothing in it reads the
+module. A contributor who only touches C never installs Node.
 
 ## Documentation
 
