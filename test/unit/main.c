@@ -20,6 +20,7 @@ extern const dims_test dims_tests_unit_rotate[];
 extern const dims_test dims_tests_unit_adjustments[];
 extern const dims_test dims_tests_unit_output[];
 extern const dims_test dims_tests_unit_watermark[];
+extern const dims_test dims_tests_unit_netguard[];
 
 static const dims_test_group groups[] = {
     { "unit/test_resize.c", dims_tests_unit_resize },
@@ -29,6 +30,7 @@ static const dims_test_group groups[] = {
     { "unit/test_adjustments.c", dims_tests_unit_adjustments },
     { "unit/test_output.c", dims_tests_unit_output },
     { "unit/test_watermark.c", dims_tests_unit_watermark },
+    { "unit/test_netguard.c", dims_tests_unit_netguard },
     { NULL, NULL }
 };
 

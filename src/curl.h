@@ -10,6 +10,7 @@
 #define _DIMS_CURL_H
 
 #include "mod_dims.h"
+#include "netguard.h"
 
 /* Where the shared handle hangs off the process pool. */
 #define DIMS_CURL_SHARED_KEY "dims_curl_shared"
@@ -33,9 +34,12 @@ typedef struct {
  * Downloads fetch_url into data.
  *
  * data->data comes from malloc, not from a pool, so the caller frees it.
+ *
+ * The mode decides whether the host allowlist follows the fetch to every
+ * redirect hop. The address and protocol checks always run.
  */
 CURLcode dims_get_image_data(dims_request_rec *d, char *fetch_url,
-                             dims_image_data_t *data);
+                             dims_image_data_t *data, dims_allowlist_mode mode);
 
 /* Locking for the shared handle. curl calls these. */
 void lock_share(CURL *handle, curl_lock_data data, curl_lock_access access,

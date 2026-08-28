@@ -20,6 +20,11 @@ dims_http_status(int status)
         case DIMS_BAD_ARGUMENTS:
             return HTTP_BAD_REQUEST;
 
+        /* The guard refused the target. go-dims answers 400 for the same
+         * refusal, so the two projects agree on what a caller sees. */
+        case DIMS_NETWORK_REFUSED:
+            return HTTP_BAD_REQUEST;
+
         case DIMS_FILE_NOT_FOUND:
             return HTTP_NOT_FOUND;
 
@@ -49,6 +54,7 @@ dims_status_name(int status)
         case DIMS_BAD_ARGUMENTS:            return "bad arguments";
         case DIMS_HOSTNAME_NOT_IN_WHITELIST: return "hostname not in whitelist";
         case DIMS_FILE_NOT_FOUND:           return "file not found";
+        case DIMS_NETWORK_REFUSED:          return "network guard refused the target";
         default:                            return "unknown";
     }
 }

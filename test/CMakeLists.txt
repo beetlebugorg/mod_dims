@@ -99,11 +99,13 @@ add_executable(dims_unit_test
     unit/test_output.c
     unit/test_resize.c
     unit/test_rotate.c
+    unit/test_netguard.c
     unit/test_thumbnail.c
     unit/test_watermark.c
     lib/environment.c
     lib/golden.c
     lib/test.c
+    ${CMAKE_SOURCE_DIR}/src/netguard.c
     ${CMAKE_SOURCE_DIR}/src/operations/autolevel.c
     ${CMAKE_SOURCE_DIR}/src/operations/brightness.c
     ${CMAKE_SOURCE_DIR}/src/operations/crop.c
