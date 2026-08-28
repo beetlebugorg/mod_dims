@@ -74,9 +74,8 @@ test_watermark_short_arguments_are_stable(void)
 }
 
 /*
- * strrchr returns NULL when the overlay has no slash, and the next line
- * dereferences it. See src/mod_dims_ops.c:378.
- * Checking the result.
+ * An overlay with no slash names no file. The operation refuses it, and the
+ * server answers with the error image, which is a 200.
  */
 static void
 test_watermark_overlay_without_slash(void)
@@ -101,6 +100,6 @@ const dims_test dims_tests_watermark[] = {
     { "TestWatermarkShortArgumentsAreStable",
       test_watermark_short_arguments_are_stable, NULL },
     { "TestWatermarkOverlayWithoutSlash", test_watermark_overlay_without_slash,
-      "an overlay with no slash is dereferenced" },
+      "a failed operation answers 200 with the error image" },
     DIMS_TEST_END
 };

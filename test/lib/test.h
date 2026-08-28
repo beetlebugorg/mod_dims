@@ -28,6 +28,14 @@ typedef struct dims_test {
 #define DIMS_TEST_END \
     { NULL, NULL, NULL }
 
+/*
+ * Runs the LeakSanitizer check, when the binary was built with it.
+ *
+ * A case runs in a forked child that leaves through _exit, which skips the
+ * atexit hook the sanitizer installs. Without this the leak check never runs.
+ */
+void dims_test_check_leaks(void);
+
 /* Each test_*.c exposes one of these. */
 typedef struct dims_test_group {
     const char *file;

@@ -21,14 +21,16 @@
 /* Any key. None of these cases decrypt successfully. */
 static unsigned char key[17] = "0123456789ABCDEF";
 
-static request_rec *
-request(void)
-{
-    dims_request_rec *d = dims_fixture_request("grid.png", NULL);
-
-    /* The wand and the image are not used here. The pool and the log are. */
-    return (d != NULL) ? d->r : NULL;
-}
+/*
+ * The fixture owns a pool, so each case releases it. The wand and the image
+ * are not used here; the pool and the log are.
+ */
+#define WITH_REQUEST(name)                              \
+    dims_request_rec *fixture = dims_fixture_request("grid.png", NULL); \
+    request_rec *name = (fixture != NULL) ? fixture->r : NULL;          \
+    if (name == NULL) {                                 \
+        return;                                         \
+    }
 
 /*
  * A value that decodes to fewer bytes than an IV and a tag made
@@ -45,12 +47,8 @@ test_gcm_rejects_a_short_value(void)
         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         NULL
     };
-    request_rec *r = request();
+    WITH_REQUEST(r);
     int i;
-
-    if (r == NULL) {
-        return;
-    }
 
     for (i = 0; shorter_than_a_header[i] != NULL; i++) {
         char *result = aes_128_gcm_decrypt(r, key,
@@ -59,16 +57,18 @@ test_gcm_rejects_a_short_value(void)
         CHECK(result == NULL, "a %zu character eurl must be refused",
               strlen(shorter_than_a_header[i]));
     }
+
+    dims_fixture_free(fixture);
 }
 
 static void
 test_gcm_rejects_no_value(void)
 {
-    request_rec *r = request();
+    WITH_REQUEST(r);
 
-    if (r != NULL) {
-        CHECK(aes_128_gcm_decrypt(r, key, NULL) == NULL, "no eurl at all");
-    }
+    CHECK(aes_128_gcm_decrypt(r, key, NULL) == NULL, "no eurl at all");
+
+    dims_fixture_free(fixture);
 }
 
 /*
@@ -81,17 +81,15 @@ test_gcm_rejects_a_wrong_tag(void)
 {
     /* 45 bytes of zeros, which is an IV, ciphertext, and a tag by size. */
     static const unsigned char zeros[45] = { 0 };
-    request_rec *r = request();
+    WITH_REQUEST(r);
     char encoded[128];
-
-    if (r == NULL) {
-        return;
-    }
 
     apr_base64_encode(encoded, (const char *) zeros, (int) sizeof(zeros));
 
     CHECK(aes_128_gcm_decrypt(r, key, (unsigned char *) encoded) == NULL,
           "a value whose tag does not verify");
+
+    dims_fixture_free(fixture);
 }
 
 /*
@@ -108,18 +106,15 @@ test_ecb_round_trip_terminates_inside_the_buffer(void)
 {
     const char *plain = "0123456789abcde";  /* 15 bytes, one padded block */
     unsigned char ciphertext[64];
-    request_rec *r = request();
+    WITH_REQUEST(r);
     EVP_CIPHER_CTX *ctx;
     int out_length = 0, final_length = 0;
     char *decrypted;
 
-    if (r == NULL) {
-        return;
-    }
-
     ctx = EVP_CIPHER_CTX_new();
     CHECK(ctx != NULL, "a cipher context");
     if (ctx == NULL) {
+        dims_fixture_free(fixture);
         return;
     }
 
@@ -136,6 +131,8 @@ test_ecb_round_trip_terminates_inside_the_buffer(void)
         CHECK(strcmp(decrypted, plain) == 0, "the round trip: want %s, got %s",
               plain, decrypted);
     }
+
+    dims_fixture_free(fixture);
 }
 
 /* Shorter than one block is not a ciphertext this can decrypt. */
@@ -143,11 +140,7 @@ static void
 test_ecb_rejects_a_short_value(void)
 {
     static const unsigned char shorter_than_a_block[15] = { 0 };
-    request_rec *r = request();
-
-    if (r == NULL) {
-        return;
-    }
+    WITH_REQUEST(r);
 
     CHECK(aes_128_decrypt(r, key, (unsigned char *) shorter_than_a_block,
                           (int) sizeof(shorter_than_a_block)) == NULL,
@@ -157,6 +150,8 @@ test_ecb_rejects_a_short_value(void)
     CHECK(aes_128_decrypt(r, key, (unsigned char *) shorter_than_a_block, -1) == NULL,
           "a negative length");
     CHECK(aes_128_decrypt(r, key, NULL, 16) == NULL, "no value at all");
+
+    dims_fixture_free(fixture);
 }
 
 const dims_test dims_tests_unit_encryption[] = {
