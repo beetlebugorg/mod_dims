@@ -28,6 +28,9 @@ ENV LC_ALL=C
 
 # The loopback guard case needs a real image on 127.0.0.1, or a refusal cannot
 # be told apart from an unreachable address.
+# Run the suite under the same ImageMagick policy the module ships.
+COPY docker/policy.xml /usr/local/imagemagick/etc/ImageMagick-7/policy.xml
+
 COPY test/origin/grid.png /usr/local/apache2/htdocs/grid.png
 
 # A local image under a location the server denies. The local-source

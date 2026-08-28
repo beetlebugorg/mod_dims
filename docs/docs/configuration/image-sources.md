@@ -117,3 +117,16 @@ profile of its own.
 The directory holds `CGATS21_CRPC2.icc` and `sRGB.icc`. `cmake --install`
 writes them. Without them the module logs a warning at startup and a
 profile-less CMYK source is not converted.
+
+## SVG sources
+
+The module reads an SVG source. ImageMagick's SVG renderer reads a local file
+named by an `<image>` `href`, so the module refuses an SVG that references an
+external resource. A self-contained SVG renders. An SVG that names a file, a
+URL, or a relative path in an `href` is refused, and so is one that does not
+parse.
+
+The image the module ships with ImageMagick disables the coders the service
+does not need, such as `PS`, `PDF`, `EPS`, and `MSL`. They can read a file,
+write a file, or run a command. The image coders and the SVG renderer stay
+enabled.

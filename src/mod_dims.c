@@ -31,6 +31,7 @@
 #include "netguard.h"
 #include "status.h"
 #include "pipeline.h"
+#include "svgguard.h"
 #include "util_md5.h"
 #include "profile.h"
 #include <stdbool.h>
@@ -279,6 +280,21 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 free(image_data.data);
             }
 
+            return 1;
+        }
+
+        /* ImageMagick's SVG renderer reads a local file named by an <image>
+         * href, so refuse a source that references an external resource before
+         * the renderer sees it. */
+        const char *svg_reason = NULL;
+        if (!dims_svg_is_safe(d->pool, image_data.data, image_data.used,
+                &svg_reason)) {
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Refusing an SVG source: %s, on request: %s",
+                    svg_reason, d->r->uri);
+            free(image_data.data);
+            d->status = DIMS_BAD_URL;
+            d->fetch_http_status = HTTP_BAD_REQUEST;
             return 1;
         }
 
