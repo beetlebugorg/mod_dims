@@ -164,6 +164,18 @@ verified:
         if (d->config->default_image_prefix != NULL) {
             d->image_url = apr_pstrcat(d->r->pool, d->config->default_image_prefix, d->image_url, NULL);
         } else if (sub_req && sub_req->canonical_filename) {
+            /* The subrequest ran httpd's access control. A caller must not read
+             * a local file the server protects, so honor a denial here. Only an
+             * access-control status is refused; a missing file and every other
+             * result stay on the path below. */
+            if (sub_req->status == HTTP_FORBIDDEN ||
+                    sub_req->status == HTTP_UNAUTHORIZED) {
+                ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                        "Access to local image %s is not allowed: %d",
+                        d->image_url, sub_req->status);
+                dims_free_request(d);
+                return sub_req->status;
+            }
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Looking up image locally: %s", sub_req->canonical_filename);
             d->filename = sub_req->canonical_filename;
         } else {
