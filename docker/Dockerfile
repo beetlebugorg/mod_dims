@@ -76,6 +76,9 @@ COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
 
 ENV LD_LIBRARY_PATH=/usr/local/imagemagick/lib
 
+# The compiled tools, so curl and magick resolve on PATH inside the container.
+ENV PATH=/usr/local/imagemagick/bin:${PATH}
+
 # root owns the installation and the runtime user writes nothing in it. A
 # process an attacker controls must not be able to rewrite its own module and
 # wait for a restart.
