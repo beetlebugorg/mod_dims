@@ -32,7 +32,7 @@ test_watermark_north_west(void)
 }
 
 /*
- * strrchr returns NULL when the overlay carries no slash, and the next line
+ * strrchr returns NULL when the overlay has no slash, and the next line
  * dereferences it. See src/mod_dims_ops.c:378.
  *
  * The case runs the operation directly, so a crash takes the test binary down

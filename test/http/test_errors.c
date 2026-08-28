@@ -206,7 +206,7 @@ test_signed_request_without_a_query_string(void)
 
     /* Move the source URL from ?url= into the path, which is the form that
      * leaves the request with no query string at all. */
-    CHECK(question != NULL, "the signed path carries a query string");
+    CHECK(question != NULL, "the signed path has a query string");
     if (question == NULL) {
         free(path);
         free(url);
@@ -324,7 +324,7 @@ test_content_disposition_is_escaped(void)
     if (value != NULL) {
         dims_test_logf("Content-Disposition: [%s]", value);
         CHECK(strstr(value, "evil\"") == NULL,
-              "the filename carries an unescaped quote: [%s]", value);
+              "the filename has an unescaped quote: [%s]", value);
     }
 
     dims_response_free(response);

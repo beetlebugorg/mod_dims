@@ -89,7 +89,7 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         return DIMS_FAILURE;
     }
 
-    /* strrchr answers NULL when the overlay carries no slash. */
+    /* strrchr answers NULL when the overlay has no slash. */
     filename = strrchr(overlay_url, '/');
     if (filename == NULL || *(filename + 1) == '\0') {
         *err = "Overlay url has no filename!";

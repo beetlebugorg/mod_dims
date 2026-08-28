@@ -114,7 +114,7 @@ test_host_allowed(void)
 }
 
 /*
- * The origin also answers to "notallowed", which the allowlist does not carry.
+ * The origin also answers to "notallowed", which the allowlist does not name.
  * The host is reachable and serves the same image, so a refusal here is the
  * allowlist and nothing else.
  */
@@ -360,7 +360,7 @@ test_enforced_allowlist_serves_the_origin(void)
 
 /*
  * DimsAllowPrivateAddresses off. The origin holds a private address on the
- * compose network, so this refuses the one host the allowlist carries. That
+ * compose network, so this refuses the one host the allowlist names. That
  * is the point: the check runs on the address, after the name resolves.
  */
 static void

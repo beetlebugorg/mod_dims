@@ -1,7 +1,7 @@
 /*
  * Golden file comparison.
  *
- * Derived from ../go-dims/internal/commands/golden_test.go, which carries the
+ * Derived from ../go-dims/internal/commands/golden_test.go, which has the
  * notice below through govips.
  *
  * The MIT License

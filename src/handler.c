@@ -76,7 +76,7 @@ dims_handle_request(dims_request_rec *d)
 
             token = apr_strtok(args, "&", &strtokstate);
             while (token) {
-                /* A parameter with no equals sign carries no value. */
+                /* A parameter with no equals sign has no value. */
                 char *equals = strchr(token, '=');
 
                 if (equals != NULL) {
@@ -281,7 +281,7 @@ dims_sizer(dims_request_rec *d)
         return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
     }
 
-    /* The sizer carries no signature, so the allowlist is its only gate and
+    /* The sizer has no signature, so the allowlist is its only gate and
      * applies whatever DimsAllowlistSigned holds. */
     if(!dims_host_allowed(d->config->whitelist, uri.hostname)) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
@@ -550,7 +550,7 @@ dims_handler(request_rec *r)
             }
         }
 
-        /* The URL sits in the path when no query parameter carried it. */
+        /* The URL sits in the path when no query parameter had it. */
         commands = apr_pstrdup(r->pool, r->uri);
         if(fixed_url == NULL) {
             fixed_url = dims_path_image_url(r->pool, r->uri, NULL);

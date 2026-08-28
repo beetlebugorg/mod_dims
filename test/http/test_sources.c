@@ -104,7 +104,7 @@ test_content_length_matches_body(void)
     dims_response *response = dims_request_ops("resize/100x100", "animated.gif");
     const char *header = dims_header_value(response, "Content-Length");
 
-    CHECK(header != NULL, "the response must carry Content-Length");
+    CHECK(header != NULL, "the response must have Content-Length");
     CHECK_INT(atol(header), (long) response->body_len, "Content-Length");
 
     dims_response_free(response);
@@ -116,7 +116,7 @@ test_content_length_matches_body_png(void)
     dims_response *response = dims_request_ops("resize/100x100", "grid.png");
     const char *header = dims_header_value(response, "Content-Length");
 
-    CHECK(header != NULL, "the response must carry Content-Length");
+    CHECK(header != NULL, "the response must have Content-Length");
     CHECK_INT(atol(header), (long) response->body_len, "Content-Length");
 
     dims_response_free(response);

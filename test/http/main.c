@@ -29,6 +29,7 @@ extern const dims_test dims_tests_status[];
 extern const dims_test dims_tests_no_error_image[];
 extern const dims_test dims_tests_source_limit[];
 extern const dims_test dims_tests_origin_status[];
+extern const dims_test dims_tests_url_structure[];
 
 static const dims_test_group groups[] = {
     { "test_resize.c", dims_tests_resize },
@@ -47,6 +48,7 @@ static const dims_test_group groups[] = {
     { "test_no_error_image.c", dims_tests_no_error_image },
     { "test_source_limit.c", dims_tests_source_limit },
     { "test_origin_status.c", dims_tests_origin_status },
+    { "test_url_structure.c", dims_tests_url_structure },
     { NULL, NULL }
 };
 

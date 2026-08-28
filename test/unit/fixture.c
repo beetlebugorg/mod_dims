@@ -110,7 +110,7 @@ dims_fixture_export(dims_request_rec *d, size_t *length)
     unsigned char *blob;
 
     /*
-     * PNG carries a tIME chunk holding the moment it was written, so two runs
+     * PNG has a tIME chunk with the moment it was written, so two runs
      * of the same operation produce different bytes. The HTTP layer never sees
      * it: dims_process_image runs strip on every request, which removes it.
      */

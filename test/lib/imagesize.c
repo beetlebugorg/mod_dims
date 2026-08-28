@@ -92,7 +92,7 @@ jpeg_size(const unsigned char *body, size_t len, dims_image_size *size)
         }
 
         marker = body[offset + 1];
-        /* Padding and the standalone markers carry no length. */
+        /* Padding and the standalone markers have no length. */
         if (marker == 0xff || marker == 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
             offset += 2;
             continue;
