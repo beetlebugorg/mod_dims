@@ -1,0 +1,11 @@
+# Throwaway load generator. wrk is not a module dependency and never ships in
+# the server image. It is built here only to drive the soak test.
+FROM debian:bookworm-slim
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential libssl-dev zlib1g-dev git unzip ca-certificates && \
+    git clone --depth 1 https://github.com/wg/wrk.git /src && \
+    make -C /src -j"$(nproc)" && \
+    cp /src/wrk /usr/local/bin/wrk && \
+    rm -rf /src /var/lib/apt/lists/*
+ENTRYPOINT ["wrk"]
