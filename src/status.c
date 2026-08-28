@@ -64,8 +64,8 @@ dims_status_handler(request_rec *r)
          * them off instead.
          */
         if (config == NULL || config->status_verbose) {
-            ap_rprintf(r, "\nmod_dims version: %s (%s)\n", MODULE_VERSION,
-                    MODULE_RELEASE);
+            ap_rprintf(r, "\nmod_dims version: %s (%s)\n", DIMS_VERSION,
+                    DIMS_COMMIT);
             ap_rprintf(r, "ImageMagick version: %s\n", GetMagickVersion(NULL));
             ap_rprintf(r, "libcurl version: %s\n", curl_version());
         }

@@ -16,10 +16,15 @@ ARG HTTPD_DIGEST=sha256:4c7788695c832bf415a662dfb5160f1895e65fc65c025e85f436ee2c
 
 FROM ${BUILDER_IMAGE} AS build
 
+# The build context excludes .git, so the commit comes in as an argument.
+# Without it the status page reports "unknown".
+ARG DIMS_COMMIT=unknown
+
 WORKDIR /build/mod_dims
 COPY . /build/mod_dims
 
-RUN cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+RUN cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DDIMS_COMMIT="${DIMS_COMMIT}" && \
     cmake --build build -j"$(nproc)"
 
 FROM httpd:${HTTPD_VERSION}@${HTTPD_DIGEST}

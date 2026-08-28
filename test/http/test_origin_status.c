@@ -11,6 +11,8 @@
 
 #include "../lib/common.h"
 
+#include "version.h"
+
 static const char *
 mapped_url(void)
 {
@@ -247,6 +249,29 @@ test_sizer_applies_the_allowlist(void)
     dims_response_free(response);
 }
 
+/*
+ * The version comes from the project version CMake declares, and the build
+ * identifier is the git commit. It was a CVS keyword that never expanded.
+ */
+static void
+test_status_reports_a_version_and_a_build(void)
+{
+    dims_response *response = dims_get("/dims-status/");
+    const char *body;
+
+    CHECK_INT(response->status, 200, "the status handler");
+    body = (const char *) response->body;
+
+    CHECK(body != NULL && strstr(body, "mod_dims version: " DIMS_VERSION) != NULL,
+          "the page must name the version CMake declared, " DIMS_VERSION);
+    CHECK(body != NULL && strstr(body, "$Revision") == NULL,
+          "the page must not print an unexpanded keyword");
+    CHECK(body != NULL && strstr(body, "(" DIMS_COMMIT ")") != NULL,
+          "the page must name the build, " DIMS_COMMIT);
+
+    dims_response_free(response);
+}
+
 const dims_test dims_tests_origin_status[] = {
     { "TestOriginErrorForwardsByDefault", test_origin_error_forwards_by_default,
       NULL },
@@ -261,6 +286,8 @@ const dims_test dims_tests_origin_status[] = {
       NULL },
     { "TestStatusPrintsVersionsByDefault", test_status_prints_versions_by_default,
       NULL },
+    { "TestStatusReportsAVersionAndABuild",
+      test_status_reports_a_version_and_a_build, NULL },
     { "TestStatusHidesVersionsWhenAsked", test_status_hides_versions_when_asked,
       NULL },
     { "TestSizerReadsAnHttpUrlFromThePath",
