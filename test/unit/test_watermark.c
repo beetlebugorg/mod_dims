@@ -61,38 +61,26 @@ test_watermark_without_overlay(void)
     CHECK(code != DIMS_SUCCESS, "a missing overlay must be refused");
 }
 
-/*
- * opacity, size, and gravity are read whether or not their token
- * was present. A watermark with one argument of three leaves two of them
- * holding whatever the stack held.
- *
- * The operation does fail today, but only because the garbage width and
- * height make MagickScaleImage fail. That is an accident, not validation, and
- * an accident is not a property worth asserting. What this case pins is the
- * property M9 actually threatens: the same request must produce the same
- * outcome every time.
- *
- * Initializing the three and refusing the wrong argument count is the fix.
- * This case then becomes a check that the refusal is stable, which it is.
- */
+/* A watermark needs an opacity, a size, and a gravity. */
 static void
 test_watermark_short_arguments(void)
 {
-    apr_status_t first = dims_operation_status_with_query(
-        "grid.png", dims_watermark_operation, "0.2", OVERLAY);
-    apr_status_t second = dims_operation_status_with_query(
-        "grid.png", dims_watermark_operation, "0.2", OVERLAY);
-    apr_status_t third = dims_operation_status_with_query(
-        "grid.png", dims_watermark_operation, "0.2", OVERLAY);
+    static const char *const short_lists[] = { "", "0.2", "0.2,0.5", NULL };
+    int i;
 
-    dims_test_logf("a watermark with one argument returns %d, %d, %d",
-                   (int) first, (int) second, (int) third);
+    for (i = 0; short_lists[i] != NULL; i++) {
+        apr_status_t code = dims_operation_status_with_query(
+            "grid.png", dims_watermark_operation, short_lists[i], OVERLAY);
 
-    CHECK(first == second && second == third,
-          "the same request must return the same status: %d, %d, %d",
-          (int) first, (int) second, (int) third);
+        CHECK(code == DIMS_BAD_ARGUMENTS, "watermark with \"%s\" must be "
+              "refused, got %d", short_lists[i], (int) code);
+    }
 
+    CHECK_INT(dims_operation_status_with_query("grid.png",
+                  dims_watermark_operation, "0.2,0.5,zz", OVERLAY),
+              DIMS_BAD_ARGUMENTS, "an unknown gravity");
 }
+
 const dims_test dims_tests_unit_watermark[] = {
     { "TestWatermark", test_watermark, NULL },
     { "TestWatermarkNorthWest", test_watermark_north_west, NULL },

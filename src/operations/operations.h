@@ -15,6 +15,8 @@
 
 #include "../mod_dims.h"
 
+#include <stdlib.h>
+
 /*
  * Runs an ImageMagick call and returns from the operation when it fails.
  *

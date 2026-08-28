@@ -152,12 +152,50 @@ test_bad_geometry_reports_the_module_status(void)
     free(url);
 }
 
+/* With no error image the module's own status reaches the client. */
+static void
+test_quality_out_of_range_is_a_bad_request(void)
+{
+    char *url = dims_fixture_url("pexels-photo-1539116.jpeg");
+    char *path = dims_sign_dims4("quality/500", url, NULL, NULL);
+
+    CHECK_INT(status_of(path), 400, "quality/500");
+
+    free(path);
+    free(url);
+}
+
+/* A watermark needs three arguments. */
+static void
+test_watermark_short_argument_list_is_a_bad_request(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char *overlay = dims_fixture_url("overlay.png");
+    char *encoded = dims_urlencode(overlay);
+    char extra[1024];
+    char *path;
+
+    snprintf(extra, sizeof(extra), "overlay=%s", encoded);
+    path = dims_sign_dims4("watermark/0.2", url, extra, "overlay");
+
+    CHECK_INT(status_of(path), 400, "watermark with one argument");
+
+    free(path);
+    free(encoded);
+    free(overlay);
+    free(url);
+}
+
 const dims_test dims_tests_no_error_image[] = {
     { "TestUnknownClientIsAServerError", test_unknown_client_is_a_server_error, NULL },
     { "TestWrongSignatureIsABadRequest", test_wrong_signature_is_a_bad_request, NULL },
     { "TestExpiredSignatureIsABadRequest", test_expired_signature_is_a_bad_request, NULL },
     { "TestMissingSourceIsNotFound", test_missing_source_is_not_found, NULL },
     { "TestOriginFailureIsNotSuccess", test_origin_failure_is_not_success, NULL },
+    { "TestQualityOutOfRangeIsABadRequest",
+      test_quality_out_of_range_is_a_bad_request, NULL },
+    { "TestWatermarkShortArgumentListIsABadRequest",
+      test_watermark_short_argument_list_is_a_bad_request, NULL },
     { "TestBadGeometryReportsTheModuleStatus",
       test_bad_geometry_reports_the_module_status, NULL },
     DIMS_TEST_END
