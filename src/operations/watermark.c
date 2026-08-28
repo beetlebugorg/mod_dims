@@ -9,6 +9,7 @@
 #include "../netguard.h"
 #include "../url.h"
 #include "../overlay_cache.h"
+#include "../svgguard.h"
 
 #include <paths.h>
 #include <unistd.h>
@@ -163,6 +164,13 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         /* A failed transfer leaves data NULL and used zero. */
         if (dims_get_image_data(d, overlay_url, &image_data, mode) != CURLE_OK) {
             *err = "Unable to fetch overlay image from overlay URL!";
+            goto done;
+        }
+
+        /* The overlay reaches the same SVG renderer as the source, so it gets
+         * the same check against an external reference. */
+        if (!dims_svg_is_safe(d->pool, image_data.data, image_data.used, NULL)) {
+            *err = "Refused an overlay that references an external resource!";
             goto done;
         }
 

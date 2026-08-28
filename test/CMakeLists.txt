@@ -106,6 +106,7 @@ add_executable(dims_unit_test
     unit/test_overlay_cache.c
     unit/test_param.c
     unit/test_signature.c
+    unit/test_svgguard.c
     unit/test_url.c
     unit/test_thumbnail.c
     unit/test_watermark.c
@@ -115,6 +116,7 @@ add_executable(dims_unit_test
     ${CMAKE_SOURCE_DIR}/src/netguard.c
     ${CMAKE_SOURCE_DIR}/src/overlay_cache.c
     ${CMAKE_SOURCE_DIR}/src/signature.c
+    ${CMAKE_SOURCE_DIR}/src/svgguard.c
     ${CMAKE_SOURCE_DIR}/src/url.c
     ${CMAKE_SOURCE_DIR}/src/operations/autolevel.c
     ${CMAKE_SOURCE_DIR}/src/operations/brightness.c

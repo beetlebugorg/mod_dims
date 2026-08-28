@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The ImageMagick security policy mod_dims ships.
+
+  mod_dims decodes an attacker supplied image, so it disables the coders it
+  never needs. Each one below can read a file, write a file, or run a command
+  through ImageMagick. The image coders the service does use, and the SVG
+  renderer, stay enabled. The SVG renderer still reads a local file named by an
+  <image> href, so the module refuses an SVG that references an external
+  resource before the renderer sees it.
+-->
+<!DOCTYPE policymap [
+<!ELEMENT policymap (policy)*>
+<!ATTLIST policy domain NMTOKEN #REQUIRED>
+<!ATTLIST policy name NMTOKEN #IMPLIED>
+<!ATTLIST policy pattern CDATA #IMPLIED>
+<!ATTLIST policy rights NMTOKEN #IMPLIED>
+<!ATTLIST policy value CDATA #IMPLIED>
+]>
+<policymap>
+  <!-- Document and PostScript formats. They reach Ghostscript. -->
+  <policy domain="coder" rights="none" pattern="{PS,PS2,PS3,EPS,PDF,XPS}"/>
+
+  <!-- Scripting and file list coders. They read and write arbitrary files. -->
+  <policy domain="coder" rights="none" pattern="{MSL,SCRIPT,SHOW,WIN,PLT}"/>
+
+  <!-- Network and text render coders. -->
+  <policy domain="coder" rights="none" pattern="{URL,HTTP,HTTPS,FTP,EPHEMERAL,TEXT,LABEL,CAPTION,PANGO}"/>
+
+  <!-- The indirect read syntax, magick @file. -->
+  <policy domain="path" rights="none" pattern="@*"/>
+</policymap>

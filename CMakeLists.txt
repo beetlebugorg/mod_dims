@@ -60,6 +60,7 @@ add_library(mod_dims MODULE
     src/profile.c
     src/dims5.c
     src/signature.c
+    src/svgguard.c
     src/url.c
     src/status.c
     src/mod_dims.c

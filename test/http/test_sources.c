@@ -138,6 +138,28 @@ test_svg_source(void)
     dims_response_free(rendered);
 }
 
+/*
+ * ImageMagick's SVG renderer reads a local file named by an <image> href. A
+ * source SVG that references an external resource is refused, so the response
+ * is the error image rather than a render that embeds the file. The fixture
+ * points at /etc/hostname, which a render would try to read.
+ */
+static void
+test_svg_external_reference_is_refused(void)
+{
+    dims_response *fallback = dims_request_ops("resize/100x100/format/png",
+                                               "missing.png");
+    dims_response *refused = dims_request_ops("resize/100x100/format/png",
+                                              "external.svg");
+
+    CHECK(fallback->body_len == refused->body_len &&
+              memcmp(fallback->body, refused->body, refused->body_len) == 0,
+          "an SVG that references an external resource must be refused");
+
+    dims_response_free(fallback);
+    dims_response_free(refused);
+}
+
 static void
 test_cmyk_source(void)
 {
@@ -190,6 +212,8 @@ const dims_test dims_tests_sources[] = {
     { "TestSingleFrameUnderTransform", test_single_frame_under_transform, NULL },
     { "TestAnimatedGifPassthrough", test_animated_gif_passthrough, NULL },
     { "TestSvgSource", test_svg_source, NULL },
+    { "TestSvgExternalReferenceIsRefused",
+      test_svg_external_reference_is_refused, NULL },
     { "TestCmykSource", test_cmyk_source, NULL },
     { "TestPortraitSource", test_portrait_source, NULL },
     { "TestContentLengthMatchesBody", test_content_length_matches_body, NULL },
