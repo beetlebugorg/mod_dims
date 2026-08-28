@@ -27,7 +27,7 @@ services:
   dims:
     build:
       context: ..
-      dockerfile: test/Dockerfile
+      dockerfile: docker/Dockerfile.test
     user: "${DIMS_UID:-1000}:${DIMS_GID:-1000}"
     depends_on:
       - origin
