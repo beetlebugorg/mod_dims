@@ -167,6 +167,30 @@ test_empty_eurl(void)
 }
 
 /*
+ * DimsAddClient stores a secret of "-" as NULL. The eurl branch hashes that
+ * secret with SHA1 before anything checks it, so a client configured without
+ * one read from address zero and killed the worker.
+ *
+ * eurl is decrypted in dims_handler, before any signature is checked, so this
+ * needs no key and no signature. The NOKEY client in the test configuration is
+ * exactly such a client.
+ */
+static void
+test_eurl_without_a_client_secret(void)
+{
+    dims_response *response = dims_get("/dims3/NOKEY/resize/100x100/?eurl=AAAA");
+
+    CHECK(response->transport_error == NULL,
+          "the worker must answer, not die: %s",
+          response->transport_error ? response->transport_error : "");
+    CHECK(response->status >= 400,
+          "a client with no secret cannot decrypt an eurl, got %ld",
+          response->status);
+
+    dims_response_free(response);
+}
+
+/*
  * apr_uri_parse leaves path NULL for a URL with no path, and
  * strrchr dereferences it. The legacy /dims/ handler reaches it. Checking
  * the pointer first.
@@ -232,6 +256,7 @@ const dims_test dims_tests_errors[] = {
     { "TestParameterWithoutEquals", test_parameter_without_equals, NULL },
     { "TestShortEurl", test_short_eurl, NULL },
     { "TestEmptyEurl", test_empty_eurl, NULL },
+    { "TestEurlWithoutAClientSecret", test_eurl_without_a_client_secret, NULL },
     { "TestSourceUrlWithoutPath", test_source_url_without_path,
       "a URL with no path leaves path NULL" },
     { "TestContentDispositionIsEscaped", test_content_disposition_is_escaped,

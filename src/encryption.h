@@ -14,6 +14,13 @@
 
 #include "mod_dims.h"
 
+/* The shortest thing AES-128-ECB can decrypt. */
+#define DIMS_AES_BLOCK_BYTES 16
+
+/* What the GCM input carries before and after the ciphertext. */
+#define DIMS_GCM_IV_BYTES 12
+#define DIMS_GCM_TAG_BYTES 16
+
 /* Reports an OpenSSL error through the request log. Passed to
  * ERR_print_errors_cb. */
 int aes_errors(const char *message, size_t length, void *u);

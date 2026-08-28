@@ -490,6 +490,19 @@ dims_handler(request_rec *r)
                     // Hash secret via SHA-1.
                     unsigned char *secret = (unsigned char *) d->client_config->secret_key;
                     unsigned char hash[SHA_DIGEST_LENGTH];
+
+                    /*
+                     * DimsAddClient stores a secret of "-" as NULL, so a
+                     * client configured without one reaches this with nothing
+                     * to hash. strlen then read from address zero and killed
+                     * the worker, on a query parameter that needs no
+                     * signature.
+                     */
+                    if (secret == NULL) {
+                        return dims_cleanup(d, "Missing Developer Key",
+                                DIMS_BAD_CLIENT);
+                    }
+
                     SHA1(secret, strlen((char *) secret), hash);
 
                     // Convert to hex.

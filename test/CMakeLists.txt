@@ -100,6 +100,7 @@ add_executable(dims_unit_test
     unit/test_output.c
     unit/test_resize.c
     unit/test_rotate.c
+    unit/test_encryption.c
     unit/test_netguard.c
     unit/test_url.c
     unit/test_thumbnail.c
@@ -107,6 +108,7 @@ add_executable(dims_unit_test
     lib/environment.c
     lib/golden.c
     lib/test.c
+    ${CMAKE_SOURCE_DIR}/src/encryption.c
     ${CMAKE_SOURCE_DIR}/src/netguard.c
     ${CMAKE_SOURCE_DIR}/src/url.c
     ${CMAKE_SOURCE_DIR}/src/operations/autolevel.c
