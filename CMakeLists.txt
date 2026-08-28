@@ -51,6 +51,7 @@ add_library(mod_dims MODULE
     src/handler.c
     src/netguard.c
     src/overlay_cache.c
+    src/profile.c
     src/url.c
     src/status.c
     src/mod_dims.c
@@ -109,7 +110,15 @@ dims_set_sanitizers(mod_dims)
 # build called "apxs -i -a", which appended a LoadModule line to the running
 # server's httpd.conf. A build step must not edit an installed configuration.
 
+# Where the profiles are installed, and where the module looks for them.
+set(DIMS_PROFILE_DIR "${CMAKE_INSTALL_PREFIX}/share/mod_dims/profiles"
+    CACHE PATH "Where the ICC colour profiles are installed")
+target_compile_definitions(mod_dims PRIVATE
+    DIMS_PROFILE_DIR="${DIMS_PROFILE_DIR}")
+
 install(TARGETS mod_dims LIBRARY DESTINATION "${APXS_LIBEXEC_DIR}")
+install(DIRECTORY profiles/ DESTINATION "${DIMS_PROFILE_DIR}"
+    FILES_MATCHING PATTERN "*.icc")
 install(FILES conf/mod_dims.conf.example
     DESTINATION "${CMAKE_INSTALL_SYSCONFDIR}/mod_dims"
     RENAME mod_dims.conf.example)

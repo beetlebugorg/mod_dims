@@ -16,6 +16,7 @@
 #include "handler.h"
 #include "netguard.h"
 #include "pipeline.h"
+#include "profile.h"
 #include "status.h"
 
 #include <MagickWand/MagickWand.h>
@@ -158,6 +159,8 @@ dims_child_init(apr_pool_t *p, server_rec *s)
             s->module_config, &dims_module);
 
     MagickWandGenesis();
+
+    dims_profiles_load(p, s, config->profile_dir);
 
     /* Every limit is per process, so the total a host can use is this
      * multiplied by the number of workers. */

@@ -60,6 +60,7 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->overlay_cache_max_entries = 1024;
     config->overlay_cache_max_age = 86400;
     config->animated_mode = DIMS_ANIMATED_PASSTHROUGH;
+    config->profile_dir = DIMS_PROFILE_DIR;
 
     return (void *) config;
 }
@@ -368,6 +369,15 @@ dims_config_set_allowlist_signed(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 static const char *
+dims_config_set_profile_dir(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->profile_dir = arg;
+    return NULL;
+}
+
+static const char *
 dims_config_set_animated_images(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -556,6 +566,11 @@ const command_rec dims_directives[] =
                   "Whether the host allowlist applies to a signed request and "
                   "to a redirect. Set log to record what enforcing would "
                   "refuse, or enforce to refuse it. The default is log."),
+    AP_INIT_TAKE1("DimsProfileDir",
+                  dims_config_set_profile_dir, NULL, RSRC_CONF,
+                  "Where the ICC colour profiles live. They convert a CMYK "
+                  "source that has no profile of its own. The default is "
+                  DIMS_PROFILE_DIR "."),
     AP_INIT_TAKE1("DimsAnimatedImages",
                   dims_config_set_animated_images, NULL, RSRC_CONF,
                   "How a source with more than one frame is handled. Set "

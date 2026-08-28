@@ -32,7 +32,7 @@
 #include "status.h"
 #include "pipeline.h"
 #include "util_md5.h"
-#include "cmyk_icc.h"
+#include "profile.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -773,14 +773,18 @@ dims_process_image(dims_request_rec *d)
 
     /* Convert image to RGB from CMYK. */
     if(MagickGetImageColorspace(d->wand) == CMYKColorspace) {
+        const dims_profile *cmyk = dims_profile_cmyk();
+        const dims_profile *rgb = dims_profile_rgb();
         size_t number_profiles;
         char **profiles;
 
         profiles = MagickGetImageProfiles(d->wand, "icc", &number_profiles);
-        if (number_profiles == 0) {
-            MagickProfileImage(d->wand, "ICC", cmyk_icc, sizeof(cmyk_icc));
+        if (number_profiles == 0 && cmyk->data != NULL) {
+            MagickProfileImage(d->wand, "ICC", cmyk->data, cmyk->length);
         }
-        MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
+        if (rgb->data != NULL) {
+            MagickProfileImage(d->wand, "ICC", rgb->data, rgb->length);
+        }
 
         /* Each name is its own allocation, and so is the array. */
         if (profiles != NULL) {

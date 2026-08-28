@@ -178,6 +178,9 @@ struct dims_config_rec {
     /* How a multi-frame source is handled. Set from DimsAnimatedImages. */
     int animated_mode;
 
+    /* Where the ICC profiles live. Set from DimsProfileDir. */
+    const char *profile_dir;
+
     char *secret_key;
     const char *encryption_algorithm;
     long max_expiry_period;
