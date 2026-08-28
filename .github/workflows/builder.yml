@@ -4,14 +4,14 @@ name: Builder image
 # compiled at quantum depth 8. Publishing it keeps ImageMagick out of every
 # pull request run, which is minutes each time.
 #
-# It rebuilds when Dockerfile.builder changes, and on request.
+# It rebuilds when docker/Dockerfile.builder changes, and on request.
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'Dockerfile.builder'
+      - 'docker/Dockerfile.builder'
       - '.github/workflows/builder.yml'
   workflow_dispatch:
 
@@ -53,14 +53,15 @@ jobs:
       - name: Read the ImageMagick version
         id: version
         run: |
-          version=$(sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' Dockerfile.builder)
-          echo "tag=builder-im${version}" >> "$GITHUB_OUTPUT"
+          version=$(sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' docker/Dockerfile.builder)
+          revision=$(sed -n 's/^ARG BUILDER_REVISION=//p' docker/Dockerfile.builder)
+          echo "tag=builder-im${version}-r${revision}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.builder
+          file: docker/Dockerfile.builder
           platforms: linux/${{ matrix.arch }}
           push: true
           tags: ${{ env.REGISTRY }}:${{ steps.version.outputs.tag }}-${{ matrix.arch }}
@@ -92,8 +93,9 @@ jobs:
       - name: Read the ImageMagick version
         id: version
         run: |
-          version=$(sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' Dockerfile.builder)
-          echo "tag=builder-im${version}" >> "$GITHUB_OUTPUT"
+          version=$(sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' docker/Dockerfile.builder)
+          revision=$(sed -n 's/^ARG BUILDER_REVISION=//p' docker/Dockerfile.builder)
+          echo "tag=builder-im${version}-r${revision}" >> "$GITHUB_OUTPUT"
 
       - name: Join the architectures
         run: |

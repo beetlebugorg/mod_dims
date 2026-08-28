@@ -448,7 +448,11 @@ dims_config_set_no_image_url(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
             cmd->server->module_config, &dims_module);
-    config->no_image_url = (char *) arg;
+
+    /* A single dash means no error image, the same as it does for the fields
+     * of DimsAddClient. */
+    config->no_image_url = (arg == NULL || strcmp(arg, "-") == 0)
+            ? NULL : (char *) arg;
     return NULL;
 }
 

@@ -122,6 +122,64 @@ jobs:
           path: test/golden/**/*.failed.*
           if-no-files-found: ignore
 
+  image:
+    name: Server image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to the registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pull the toolchain, or build it. A pull request that bumps a pinned
+      # version names a tag the registry does not have yet, because the
+      # builder workflow publishes on the merge. Without this the two wait on
+      # each other.
+      - name: Resolve the toolchain
+        run: make toolchain
+
+      - name: Build the server image
+        run: docker build -f docker/Dockerfile -t mod-dims:ci .
+
+      # The image has to start with nothing set. Every DIMS_ variable has a
+      # default, and a missing one makes httpd refuse to start.
+      - name: Start with no environment
+        run: |
+          docker run -d --name dims-ci -p 8000:8000 mod-dims:ci
+          for i in $(seq 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8000/dims-status/; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs dims-ci
+          exit 1
+
+      - name: Serve an image
+        run: |
+          docker run -d --name dims-origin \
+            -v "$PWD/test/origin:/usr/local/apache2/htdocs:ro" httpd:2.4.62
+          origin=$(docker inspect -f \
+            '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dims-origin)
+          docker rm -f dims-ci
+          docker run -d --name dims-ci -e DIMS_WHITELIST="$origin" mod-dims:ci
+          sleep 5
+          docker exec dims-ci curl -fsS -o /tmp/out.png \
+            "http://127.0.0.1:8000/dims3/development/resize/100x100/?url=http://$origin/grid.png"
+          docker exec dims-ci sh -c 'test -s /tmp/out.png'
+
+      # The runtime user must not be able to rewrite the module it runs.
+      - name: Check the installation is read only
+        run: |
+          docker exec dims-ci sh -c '
+            test "$(id -u)" = 33 || exit 1
+            ! test -w /usr/local/apache2/modules/libmod_dims.so || exit 1
+            ! test -w /usr/local/apache2/conf/httpd.conf || exit 1'
+
   sanitizers:
     name: Sanitizers
     runs-on: ubuntu-24.04

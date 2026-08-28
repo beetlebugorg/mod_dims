@@ -1,105 +1,86 @@
-ARG HTTPD_VERSION=2.4.52
+# The mod_dims server image.
+#
+# Two stages. The first builds the module against the toolchain image, which
+# already has httpd, APR, libcurl, and ImageMagick at quantum depth 8. The
+# second is a clean httpd with the module and the ImageMagick runtime copied
+# in.
+#
+#     docker build -f docker/Dockerfile -t mod_dims .
+#     docker run -p 8000:8000 mod_dims
+#
+# It starts with no environment set. Every DIMS_ variable below has a default.
 
-FROM httpd:${HTTPD_VERSION} as build-mod-dims
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r2
+ARG HTTPD_VERSION=2.4.62
+ARG HTTPD_DIGEST=sha256:4c7788695c832bf415a662dfb5160f1895e65fc65c025e85f436ee2c9e7d7f3e
 
-ARG DIMS_VERSION=3.3.26
-ARG IMAGEMAGICK_VERSION=6.9.12-34
-ARG WEBP_VERSION=1.2.1
-ARG TIFF_VERSION=4.3.0
-ARG PREFIX=/usr/local/imagemagick
+FROM ${BUILDER_IMAGE} AS build
 
-WORKDIR /build
-
-RUN apt-get -y update && \
-    apt-get install -y --no-install-recommends \
-        automake libtool autoconf build-essential \
-        git ca-certificates \
-        libapr1-dev libaprutil1-dev \
-        curl \
-        libcurl4-openssl-dev libfreetype6-dev libopenexr-dev libxml2-dev \
-        libgif-dev libjpeg62-turbo-dev libpng-dev \
-        liblcms2-dev pkg-config libssl-dev libpangocairo-1.0-0 wget
-
-# WEBP Library
-RUN wget https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-${WEBP_VERSION}.tar.gz && \
-    tar xzvf libwebp-${WEBP_VERSION}.tar.gz && \
-    cd libwebp-${WEBP_VERSION} && \
-    ./configure --prefix=/usr/local/imagemagick && \
-    make -j4 && make install
-
-# TIFF Library
-RUN wget http://download.osgeo.org/libtiff/tiff-${TIFF_VERSION}.tar.gz && \
-    tar xzvf tiff-${TIFF_VERSION}.tar.gz && \
-    cd tiff-${TIFF_VERSION} && \
-    ./configure --prefix=$PREFIX --with-webp-include-dir=$PREFIX/include --with-webp-lib-dir=$PREFIX/lib && \
-    make -j4 && make install
-
-# Imagemagick
-RUN wget https://download.imagemagick.org/ImageMagick/download/releases/ImageMagick-${IMAGEMAGICK_VERSION}.tar.xz && \
-    export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig && \
-    tar xvf ImageMagick-${IMAGEMAGICK_VERSION}.tar.xz && \
-    cd ImageMagick-${IMAGEMAGICK_VERSION} && \
-    ./configure --without-x --with-quantum-depth=8 --prefix=$PREFIX && \
-    make -j4 && make install
-
-# libcurl
-RUN wget https://curl.se/download/curl-7.87.0.tar.xz && \
-    export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig && \
-    tar xvf curl-7.87.0.tar.xz && \
-    cd curl-7.87.0 && \
-    ./configure --with-openssl --prefix=$PREFIX && \
-    make -j4 && make install
-
-RUN apt-get --no-install-recommends install -y apt-transport-https apt-utils \
-            automake autoconf build-essential ccache cmake ca-certificates git \
-            gcc g++ libc-ares-dev libc-ares2 libre2-dev \
-            libssl-dev m4 make pkg-config tar wget zlib1g-dev
-
-ENV PKG_CONFIG_PATH=/usr/local/imagemagick/pkgconfig
-
-COPY . /build/mod_dims
 WORKDIR /build/mod_dims
-RUN export PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig && \
-    ./autorun.sh && \
-    ./configure && \
-    make && \
-    make install
+COPY . /build/mod_dims
 
-FROM httpd:${HTTPD_VERSION}
+RUN cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
+    cmake --build build -j"$(nproc)"
 
+FROM httpd:${HTTPD_VERSION}@${HTTPD_DIGEST}
+
+LABEL org.opencontainers.image.title="mod_dims"
+LABEL org.opencontainers.image.description="An Apache httpd module that resizes, crops, and reformats images on request"
+LABEL org.opencontainers.image.source="https://github.com/beetlebugorg/mod_dims"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# Every one has a default, so the container starts with no environment set.
 ENV DIMS_DOWNLOAD_TIMEOUT=60000
 ENV DIMS_IMAGEMAGICK_TIMEOUT=20000
 ENV DIMS_CLIENT=development
-ENV DIMS_NO_IMAGE_URL="http://placehold.it/350x150"
-ENV DIMS_DEFAULT_IMAGE_URL="http://placehold.it/350x150"
+ENV DIMS_NO_IMAGE_URL="-"
+ENV DIMS_DEFAULT_IMAGE_URL="-"
 ENV DIMS_CACHE_CONTROL_MAX_AGE=604800
 ENV DIMS_EDGE_CONTROL_DOWNSTREAM_TTL=604800
-ENV DIMS_TRUST_SOURCE=true
+ENV DIMS_TRUST_SOURCE=trust
 ENV DIMS_MIN_SOURCE_CACHE=604800
 ENV DIMS_MAX_SOURCE_CACHE=604800
-ENV DIMS_SECRET=""
+ENV DIMS_SECRET="-"
+ENV DIMS_WHITELIST=""
 ENV DIMS_CACHE_EXPIRE=604800
 ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
 ENV LC_ALL="C"
 
-USER root
+# The image libraries are not installed here. The builder compiles each one
+# from source into /usr/local/imagemagick, and that whole prefix is copied
+# below, so the version ImageMagick was compiled against is the version it
+# loads.
+#
+# curl is for the health check. ca-certificates is for fetching an https
+# source.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY --from=build-mod-dims /usr/local/apache2/modules/libmod_dims.so /usr/local/apache2/modules/
-COPY --from=build-mod-dims /usr/local/imagemagick /usr/local/imagemagick
+COPY --from=build /build/mod_dims/build/libmod_dims.so /usr/local/apache2/modules/
+COPY --from=build /usr/local/imagemagick /usr/local/imagemagick
 COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
 
-RUN apt-get update && \
-    apt-get -y install \
-        libpangocairo-1.0-0 libgif7 libjpeg62-turbo libpng16-16 libgomp1 libjbig0 liblcms2-2 \
-        libbz2-1.0 libfftw3-double3 libfontconfig1 libfreetype6 libheif1 \
-        liblqr-1-0 libltdl7 liblzma5 libopenjp2-7 libopenexr25 ca-certificates && \
-    rm -rf /usr/local/apache2/build \
+ENV LD_LIBRARY_PATH=/usr/local/imagemagick/lib
+
+# root owns the installation and the runtime user writes nothing in it. A
+# process an attacker controls must not be able to rewrite its own module and
+# wait for a restart.
+RUN rm -rf /usr/local/apache2/build \
         /usr/local/apache2/cgi-bin \
         /usr/local/apache2/include \
         /usr/local/apache2/htdocs/index.html && \
-    chown -R www-data:www-data /usr/local/apache2 && \
-    sed "s|Listen 80|Listen 8000|" /usr/local/apache2/conf/httpd.conf -i && \
-    sed "s|^#LoadModule authz_core_module|LoadModule authz_core_module|" /usr/local/apache2/conf/httpd.conf -i && \
-    echo "Include conf/extra/dims.conf" >> /usr/local/apache2/conf/httpd.conf
+    sed -i "s|Listen 80|Listen 8000|" /usr/local/apache2/conf/httpd.conf && \
+    sed -i "s|^#LoadModule authz_core_module|LoadModule authz_core_module|" \
+        /usr/local/apache2/conf/httpd.conf && \
+    echo "Include conf/extra/dims.conf" >> /usr/local/apache2/conf/httpd.conf && \
+    chown -R root:root /usr/local/apache2 /usr/local/imagemagick && \
+    chmod -R go-w /usr/local/apache2 /usr/local/imagemagick
 
+EXPOSE 8000
 USER 33
+
+# A real request, not a configuration check. The status handler answers
+# without reaching an origin.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -fsS -o /dev/null http://127.0.0.1:8000/dims-status/ || exit 1

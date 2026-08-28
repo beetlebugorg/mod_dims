@@ -3,8 +3,15 @@
 # How to build this image
 
 ```
-$ docker build -t mod-dims:latest -f Dockerfile ..
+$ docker build -t mod-dims:latest -f docker/Dockerfile .
 ```
+
+The build needs the toolchain image, which holds httpd, APR, libcurl, and
+ImageMagick at quantum depth 8. It is pulled from the registry. To build it
+first, run `make builder-local`.
+
+The image starts with nothing set. Every variable below has a default, and the
+allowlist starts empty, which matches no host.
 
 # How to use this image
 
@@ -25,10 +32,12 @@ $ docker run -e DIMS_WHITELIST="images.pexels.com" mod-dims:latest
 | Environment Variables | Description | Default |
 |-----------------------|-------------|---------|
 | `DIMS_CLIENT` | Name of client | development |
-| `DIMS_SECRET` | Shared secret for /dims4/ signatures | "" |
+| `DIMS_WHITELIST` | Hosts /dims3/ may fetch from, separated by spaces. Empty matches no host. | "" |
+| `DIMS_DEFAULT_IMAGE_URL` | URL to the image sent when a request fails. A single dash means none. | "-" |
+| `DIMS_SECRET` | Shared secret for /dims4/ signatures. A single dash means none, and /dims4/ then refuses every request. | "-" |
 | `DIMS_DOWNLOAD_TIMEOUT` | Max time allowed for downloading source images, in milliseconds. | 60000 |
 | `DIMS_IMAGEMAGICK_TIMEOUT` | Max time allowed for Imagemagick processing, in milliseconds. | 20000 |
-| `DIMS_NO_IMAGE_URL` | URL (http(s):// or file:///) to an image displayed for errors | "http://placehold.it/350x150" |
+| `DIMS_NO_IMAGE_URL` | URL (http(s):// or file:///) to an image displayed for errors. A single dash means none. | "-" |
 | `DIMS_CACHE_CONTROL_MAX_AGE` | Cache control max age header setting, in seconds | 604800 |
 | `DIMS_EDGE_CONTROL_DOWNSTREAM_TTL` | Edge control downstream TTL | 604800 |
 | `DIMS_TRUST_SOURCE` | Whether or not to trust origin cache headers | true |

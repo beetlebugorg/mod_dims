@@ -13,8 +13,9 @@ REGISTRY ?= ghcr.io/beetlebugorg/mod_dims
 
 # Read the ImageMagick version straight from the builder, so the tag and the
 # toolchain cannot disagree.
-IMAGEMAGICK_VERSION := $(shell sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' Dockerfile.builder)
-BUILDER_TAG := builder-im$(IMAGEMAGICK_VERSION)
+IMAGEMAGICK_VERSION := $(shell sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' docker/Dockerfile.builder)
+BUILDER_REVISION := $(shell sed -n 's/^ARG BUILDER_REVISION=//p' docker/Dockerfile.builder)
+BUILDER_TAG := builder-im$(IMAGEMAGICK_VERSION)-r$(BUILDER_REVISION)
 
 # Pull the toolchain, or build it when the registry does not have it yet.
 # A fresh checkout, a pull request opened before the toolchain is published,
@@ -26,7 +27,7 @@ toolchain:
 	  $(MAKE) builder-local
 
 builder-local:
-	docker buildx build --load -t $(REGISTRY):$(BUILDER_TAG) -f Dockerfile.builder .
+	docker buildx build --load -t $(REGISTRY):$(BUILDER_TAG) -f docker/Dockerfile.builder .
 	@echo "built $(REGISTRY):$(BUILDER_TAG)"
 
 builder:
@@ -34,7 +35,7 @@ builder:
 	    --platform linux/amd64,linux/arm64 \
 	    -t $(REGISTRY):$(BUILDER_TAG) \
 	    -t $(REGISTRY):builder \
-	    -f Dockerfile.builder .
+	    -f docker/Dockerfile.builder .
 
 builder-tag:
 	@echo $(REGISTRY):$(BUILDER_TAG)
