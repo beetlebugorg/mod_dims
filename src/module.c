@@ -168,6 +168,11 @@ dims_child_init(apr_pool_t *p, server_rec *s)
     MagickSetResourceLimit(DiskResource, config->disk_size);
     MagickSetResourceLimit(MemoryResource, config->memory_size);
     MagickSetResourceLimit(MapResource, config->map_size);
+
+    /* One thread per operation. ImageMagick's OpenMP otherwise starts a thread
+     * per core for each request, so the MPM worker count multiplies into
+     * hundreds of threads. The MPM provides the concurrency. */
+    MagickSetResourceLimit(ThreadResource, 1);
     curl_global_init(CURL_GLOBAL_ALL);
 
     dims_curl_rec *locks =

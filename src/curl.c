@@ -279,12 +279,23 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
 
+    /* Advertise every encoding libcurl was built with, so a text source such as
+     * an SVG transfers compressed. libcurl decodes it before the write
+     * callback, which counts the decoded bytes against the size limit. */
+    curl_easy_setopt(curl_handle, CURLOPT_ACCEPT_ENCODING, "");
+
     /* Every fetch passes the guard, including the sizer and the watermark
      * overlay, which do not reach the handler's allowlist check. */
     dims_netguard_install(curl_handle, d, mode);
-    curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
-    curl_easy_setopt(curl_handle, CURLOPT_DEBUGFUNCTION, dims_curl_debug_cb);
-    curl_easy_setopt(curl_handle, CURLOPT_DEBUGDATA, d);
+
+    /* Verbose tracing formats a line for every transfer stage. The debug
+     * callback keeps only the request headers, so pay the cost only when the
+     * log level would print them. */
+    if (APLOG_R_MODULE_IS_LEVEL(d->r, APLOG_MODULE_INDEX, APLOG_DEBUG)) {
+        curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
+        curl_easy_setopt(curl_handle, CURLOPT_DEBUGFUNCTION, dims_curl_debug_cb);
+        curl_easy_setopt(curl_handle, CURLOPT_DEBUGDATA, d);
+    }
 
     /* Set the user agent to dims/<version> */
     if (d->config->user_agent_override != NULL && d->config->user_agent_enabled == 1) {
