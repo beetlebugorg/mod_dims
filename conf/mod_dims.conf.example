@@ -49,6 +49,10 @@ DimsSigningKey CHANGE_ME_TO_A_LONG_RANDOM_KEY
 # keep it out of version control. Prefer /dims5/ for a new integration.
 DimsAddClient CLIENT http://example.com/no-image.png 604800 604800 trust 300 86400 CHANGE_ME_TO_A_LONG_RANDOM_SECRET
 
+# Decrypt the eurl parameter with AES-GCM, which is authenticated. The client
+# that builds an eurl must encrypt with the same.
+DimsEncryptionAlgorithm AES/GCM/NoPadding
+
 # Shown when a source image cannot be fetched or processed.
 DimsDefaultImageURL http://example.com/no-image.png
 

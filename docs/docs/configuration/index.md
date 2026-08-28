@@ -36,6 +36,9 @@ your deployment needs it.
 - `DimsStatusVerbose off` drops the component versions from the status page, so
   it does not name the libraries a caller would target. Restrict the
   `/dims-status/` location to your monitoring host as well.
+- `DimsEncryptionAlgorithm AES/GCM/NoPadding` decrypts the `eurl` parameter with
+  an authenticated cipher. The client that builds an `eurl` must encrypt with
+  the same.
 
 Two more are worth enabling as your deployment allows.
 
