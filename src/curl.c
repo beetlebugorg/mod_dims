@@ -117,12 +117,20 @@ static size_t
 dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
 {
     dims_request_rec *d = (dims_request_rec *) data;
-    size_t realsize = size * nmemb;
+    size_t realsize;
     const char *start = (const char *) ptr;
-    const char *end = start + realsize;
+    const char *end;
     const char *colon = NULL;
     const char *cursor;
     char *key = NULL, *value = NULL;
+
+    /* The product is libcurl's to define. Refuse an overflow rather than read
+     * past the buffer. */
+    if (size != 0 && nmemb > SIZE_MAX / size) {
+        return 0;
+    }
+    realsize = size * nmemb;
+    end = start + realsize;
 
     /* Split the line at its first colon. */
     for (cursor = start; cursor < end; cursor++) {
