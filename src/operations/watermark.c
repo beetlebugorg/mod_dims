@@ -125,6 +125,27 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         return DIMS_FAILURE;
     }
 
+    /*
+     * The overlay follows the same allowlist rule as the source image. An
+     * unsigned request enforces the allowlist. A signed request follows
+     * DimsAllowlistSigned, the same as the source does.
+     *
+     * The check runs before the cache lookup, so a cache hit is refused when
+     * the allowlist no longer permits the host. The cache is keyed on the URL
+     * and shared by every virtual host, so an entry one host wrote must not
+     * serve on a host whose allowlist refuses it.
+     */
+    int signed_request = d->use_secret_key || d->scheme == DIMS_SCHEME_DIMS5;
+    dims_allowlist_mode mode = signed_request
+            ? (d->config->allowlist_signed ? DIMS_ALLOWLIST_ENFORCE
+                                           : DIMS_ALLOWLIST_LOG)
+            : DIMS_ALLOWLIST_ENFORCE;
+
+    if (dims_validate_image_url(d, overlay_url, mode) != DIMS_NET_OK) {
+        *err = "Refused to fetch the overlay image!";
+        goto done;
+    }
+
     overlay_wand = NewMagickWand();
 
     // Try to read image from disk.
@@ -136,17 +157,8 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
 
     // Write to disk.
     } else {
-        dims_allowlist_mode mode = d->config->allowlist_signed
-                ? DIMS_ALLOWLIST_ENFORCE : DIMS_ALLOWLIST_LOG;
         apr_file_t *cached_file;
         apr_size_t bytes_to_write;
-
-        /* The overlay URL comes from the query string and no signature covers
-         * it, so it reaches the same guard the source image reaches. */
-        if (dims_validate_image_url(d, overlay_url, mode) != DIMS_NET_OK) {
-            *err = "Refused to fetch the overlay image!";
-            goto done;
-        }
 
         /* A failed transfer leaves data NULL and used zero. */
         if (dims_get_image_data(d, overlay_url, &image_data, mode) != CURLE_OK) {
@@ -174,8 +186,8 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
 
         apr_file_close(cached_file);
 
-        /* Bound the cache on the way in. No signature covers the overlay URL, so any
-         * caller can add an entry. */
+        /* Bound the cache on the way in. An unsigned request can still add an
+         * allowlisted entry, so the cache needs a limit. */
         dims_overlay_cache_prune(d->pool, cache_dir,
                 d->config->overlay_cache_max_entries,
                 d->config->overlay_cache_max_age, apr_time_now());
