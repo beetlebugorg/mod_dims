@@ -35,6 +35,9 @@ apr_status_t dims_process_image(dims_request_rec *d);
  * configured. */
 apr_status_t dims_cleanup(dims_request_rec *d, const char *err_msg, int status);
 
+/* Releases the wand. Safe to call more than once. */
+void dims_free_request(dims_request_rec *d);
+
 /* Downloads url into the request's wand. Passing NULL fetches the error
  * image instead. */
 int dims_fetch_remote_image(dims_request_rec *d, const char *url);

@@ -286,18 +286,15 @@ dims_send_image(dims_request_rec *d)
     ap_content_type_tolower(content_type);
     ap_set_content_type(d->r, content_type);
 
-    if(d->status == DIMS_FILE_NOT_FOUND) {
-        d->r->status = HTTP_NOT_FOUND;
-    } else if (d->fetch_http_status != 0) {
+    /*
+     * A fetch that reached the origin reports whatever the origin said, which
+     * is why an origin error becomes the caller's error. dims_http_status
+     * covers the cases the module decided itself.
+     */
+    if (d->fetch_http_status != 0 && d->status != DIMS_FILE_NOT_FOUND) {
         d->r->status = d->fetch_http_status;
-    } else if(d->status != DIMS_SUCCESS) {
-        if (d->status == DIMS_BAD_URL
-            || d->status == DIMS_BAD_ARGUMENTS) {
-            d->r->status = HTTP_BAD_REQUEST;
-        } else {
-            //Includes DIMS_BAD_CLIENT, DIMS_DOWNLOAD_TIMEOUT, DIMS_IMAGEMAGICK_TIMEOUT, DIMS_HOSTNAME_NOT_IN_WHITELIST
-            d->r->status = HTTP_INTERNAL_SERVER_ERROR;
-        }
+    } else if (d->status != DIMS_SUCCESS) {
+        d->r->status = dims_http_status(d->status);
     }
 
     if (blob == NULL) {
@@ -478,47 +475,75 @@ dims_send_image(dims_request_rec *d)
     return OK;
 }
 
+/*
+ * Releases the wand, reporting any ImageMagick error it carries.
+ *
+ * Safe to call more than once: the wand pointer is cleared, so a later call
+ * has nothing to do. Several failure paths reach this twice.
+ */
+void
+dims_free_request(dims_request_rec *d)
+{
+    ExceptionType type;
+    char *msg;
+
+    if (d->wand == NULL) {
+        return;
+    }
+
+    msg = MagickGetException(d->wand, &type);
+    if (type != UndefinedException && msg) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                "Imagemagick error, '%s', on request: %s ", msg, d->r->uri);
+    }
+    MagickRelinquishMemory(msg);
+
+    DestroyMagickWand(d->wand);
+    d->wand = NULL;
+}
+
+/*
+ * Ends a failed request.
+ *
+ * Records the status, frees the wand, logs the reason, and sends the error
+ * image when one is configured. The name is dims_cleanup for history; what it
+ * does is send an error.
+ */
 apr_status_t
 dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
 {
-    if(status != DIMS_IGNORE) {
+    if (status != DIMS_IGNORE) {
         d->status = status;
     }
 
-    if(d->wand) {
-        ExceptionType type;
-        char *msg = MagickGetException(d->wand, &type);
+    dims_free_request(d);
 
-        if(type != UndefinedException && msg) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                    "Imagemagick error, '%s', on request: %s ", 
-                    msg, d->r->uri);
-        }
-
-        MagickRelinquishMemory(msg);
-        DestroyMagickWand(d->wand);
-    } 
-    
-    if(err_msg) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
-                "mod_dims error, '%s', on request: %s ", 
-                err_msg, d->r->uri);
+    if (err_msg) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                "mod_dims error, '%s', on request: %s ", err_msg, d->r->uri);
     }
 
-    if(d->no_image_url) {
+    if (d->no_image_url) {
         d->wand = NewMagickWand();
-        if(!dims_fetch_remote_image(d, NULL)) {
+        if (!dims_fetch_remote_image(d, NULL)) {
             return dims_send_image(d);
-        } 
-        DestroyMagickWand(d->wand);
+        }
+        dims_free_request(d);
     }
-    if ( status != DIMS_SUCCESS ) {
+
+    /*
+     * With no error image configured every failure answers 404, whatever it
+     * was. dims_http_status disagrees, and is right: a malformed geometry is
+     * a bad request and a timeout is not a missing file.
+     *
+     * Changing this changes what a caller sees, so it waits for the directive
+     * that lets an operator opt in.
+     */
+    if (status != DIMS_SUCCESS) {
         return HTTP_NOT_FOUND;
     }
-    else {
-     return DECLINED;   
-    }
-     
+
+    return DECLINED;
 }
 
 /**
