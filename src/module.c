@@ -15,6 +15,7 @@
 #include "curl.h"
 #include "handler.h"
 #include "netguard.h"
+#include "overlay_cache.h"
 #include "pipeline.h"
 #include "profile.h"
 #include "status.h"
@@ -173,6 +174,12 @@ dims_child_init(apr_pool_t *p, server_rec *s)
      * per core for each request, so the MPM worker count multiplies into
      * hundreds of threads. The MPM provides the concurrency. */
     MagickSetResourceLimit(ThreadResource, 1);
+
+    /* The decoded overlay cache holds the same overlays the disk cache does,
+     * so it expires an entry after the same age. */
+    dims_overlay_memcache_init(p, DIMS_OVERLAY_MEMCACHE_MAX_ENTRIES,
+                               config->overlay_cache_max_age);
+
     curl_global_init(CURL_GLOBAL_ALL);
 
     dims_curl_rec *locks =

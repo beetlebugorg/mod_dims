@@ -59,6 +59,7 @@ paths=(
     "/dims3/TEST/resize/120x120/quality/70/format/webp/?url=$ORIGIN%2Fgrid.png"
     "/dims3/TEST/rotate/90/?url=$ORIGIN%2Fgrid.png"
     "/dims3/TEST/watermark/1.0,0.5,se/?url=$ORIGIN%2Fgrid.png&overlay=$ORIGIN%2Foverlay.png"
+    "/dims3/TEST/watermark/1.0,0.5,nw/?url=$ORIGIN%2Fgrid.png&overlay=$ORIGIN%2Foverlay.png"
     "/dims3/TEST/resize/100x100/?url=$ORIGIN%2Fsample.svg"
     "/dims3/TEST/resize/100x100/?url=$ORIGIN%2Fmissing.png"
     "/dims-status/"
