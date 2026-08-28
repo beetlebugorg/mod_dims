@@ -14,7 +14,7 @@
 /*
  * mod_dims signs expires + secret + commands + image_url, then the value of
  * each parameter _keys names, in _keys order. See src/mod_dims.c:1376-1390.
- * The comparison uses the first six characters only, which is finding C6.
+ * The comparison uses the first six characters only.
  */
 char *
 dims_signature_dims4(const char *expires, const char *secret, const char *commands,

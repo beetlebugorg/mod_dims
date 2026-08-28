@@ -36,7 +36,7 @@ dims_fixture_request(const char *image, const char *query)
     }
 
     /* apr_pcalloc, not apr_palloc: an operation must not read a field this
-     * harness forgot to set. Finding H8 is the same mistake in the module. */
+     * harness forgot to set. The module made the same mistake. */
     d = apr_pcalloc(pool, sizeof(*d));
     r = apr_pcalloc(pool, sizeof(*r));
     config = apr_pcalloc(pool, sizeof(*config));

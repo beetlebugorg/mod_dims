@@ -13,7 +13,7 @@
 typedef struct dims_header {
     char *name;
     char *value;
-    /* The line as the origin sent it, minus the terminator. Finding M3 is
+    /* The line as the origin sent it, minus the terminator. The leading space is
      * about whitespace a normalizing client would hide. */
     char *raw;
     struct dims_header *next;

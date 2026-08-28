@@ -32,8 +32,8 @@ test_watermark_north_west(void)
 }
 
 /*
- * Finding C5, the crash half. strrchr returns NULL when the overlay carries no
- * slash, and the next line dereferences it. See src/mod_dims_ops.c:378.
+ * strrchr returns NULL when the overlay carries no slash, and the next line
+ * dereferences it. See src/mod_dims_ops.c:378.
  *
  * The case runs the operation directly, so a crash takes the test binary down
  * and names itself. Over HTTP the same defect only shows as a dead worker.
@@ -62,7 +62,7 @@ test_watermark_without_overlay(void)
 }
 
 /*
- * Finding M9. opacity, size, and gravity are read whether or not their token
+ * opacity, size, and gravity are read whether or not their token
  * was present. A watermark with one argument of three leaves two of them
  * holding whatever the stack held.
  *
@@ -96,7 +96,8 @@ test_watermark_short_arguments(void)
 const dims_test dims_tests_unit_watermark[] = {
     { "TestWatermark", test_watermark, NULL },
     { "TestWatermarkNorthWest", test_watermark_north_west, NULL },
-    { "TestWatermarkOverlayWithoutSlash", test_watermark_overlay_without_slash, "C5" },
+    { "TestWatermarkOverlayWithoutSlash", test_watermark_overlay_without_slash,
+      "an overlay with no slash is dereferenced" },
     { "TestWatermarkWithoutOverlay", test_watermark_without_overlay, NULL },
     { "TestWatermarkShortArguments", test_watermark_short_arguments, NULL },
     DIMS_TEST_END

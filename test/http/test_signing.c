@@ -88,7 +88,7 @@ test_expired_signature_rejected(void)
 }
 
 /*
- * Finding C6. strncasecmp compares six characters, so a digest that agrees on
+ * strncasecmp compares six characters, so a digest that agrees on
  * the first six and differs after them is accepted. Twenty-four bits gate the
  * fetch. A full-length HMAC is the fix.
  */
@@ -118,7 +118,7 @@ test_signature_is_full_length(void)
 }
 
 /*
- * Finding C5. overlay is signed only when _keys names it, so one valid
+ * overlay is signed only when _keys names it, so one valid
  * signature accepts any overlay. The signature below is computed without
  * overlay and the request carries one.
  */
@@ -152,7 +152,7 @@ test_signature_covers_every_parameter(void)
 }
 
 /*
- * Finding M22. optimizeResize changes how much work the server does per
+ * optimizeResize changes how much work the server does per
  * request and is not part of the signature.
  */
 static void
@@ -175,7 +175,7 @@ test_unsigned_parameters_are_refused(void)
 }
 
 /*
- * Finding C4 is an uninitialized read, not a wrong answer, so it is not
+ * The uninitialized read below is not a wrong answer, so it is not
  * observable from outside. This case is a regression guard: the form that
  * carries no query string at all must still answer. Confirming C4 itself needs
  * a build with -fsanitize=address, which CI runs.
@@ -209,9 +209,12 @@ const dims_test dims_tests_signing[] = {
     { "TestLegacySignatureMatchesModDims", test_legacy_signature_matches_mod_dims, NULL },
     { "TestWrongSignatureRejected", test_wrong_signature_rejected, NULL },
     { "TestExpiredSignatureRejected", test_expired_signature_rejected, NULL },
-    { "TestSignatureIsFullLength", test_signature_is_full_length, "C6" },
-    { "TestSignatureCoversEveryParameter", test_signature_covers_every_parameter, "C5" },
-    { "TestUnsignedParametersAreRefused", test_unsigned_parameters_are_refused, "M22" },
+    { "TestSignatureIsFullLength", test_signature_is_full_length,
+      "the signature compares six characters" },
+    { "TestSignatureCoversEveryParameter", test_signature_covers_every_parameter,
+      "overlay is signed only when _keys names it" },
+    { "TestUnsignedParametersAreRefused", test_unsigned_parameters_are_refused,
+      "optimizeResize is never signed" },
     { "TestNoQueryStringAnswers", test_no_query_string_answers, NULL },
     DIMS_TEST_END
 };

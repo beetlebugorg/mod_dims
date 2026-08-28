@@ -53,7 +53,7 @@ test_watermark(void)
 
 /*
  * opacity, size, and gravity are read whether or not their token was present,
- * so a short argument list uses uninitialized memory. Finding M9. The values
+ * so a short argument list uses uninitialized memory. The values
  * turn out to be stable across requests, so the defect is not observable from
  * outside; confirming it needs valgrind or -fsanitize=memory, which CI runs.
  * This case guards the property that two identical requests agree.
@@ -74,8 +74,8 @@ test_watermark_short_arguments_are_stable(void)
 }
 
 /*
- * Finding C5, the crash half. strrchr returns NULL when the overlay has no
- * slash, and the next line dereferences it. See src/mod_dims_ops.c:378.
+ * strrchr returns NULL when the overlay has no slash, and the next line
+ * dereferences it. See src/mod_dims_ops.c:378.
  * Checking the result.
  */
 static void
@@ -100,6 +100,7 @@ const dims_test dims_tests_watermark[] = {
     { "TestWatermark", test_watermark, NULL },
     { "TestWatermarkShortArgumentsAreStable",
       test_watermark_short_arguments_are_stable, NULL },
-    { "TestWatermarkOverlayWithoutSlash", test_watermark_overlay_without_slash, "C5" },
+    { "TestWatermarkOverlayWithoutSlash", test_watermark_overlay_without_slash,
+      "an overlay with no slash is dereferenced" },
     DIMS_TEST_END
 };

@@ -64,7 +64,7 @@ test_last_modified_is_forwarded(void)
 }
 
 /*
- * Finding M3. dims_write_header_cb never skips the space after the colon, so
+ * dims_write_header_cb never skips the space after the colon, so
  * every forwarded value keeps a leading space.
  */
 static void
@@ -106,7 +106,7 @@ test_etag_is_stable(void)
 }
 
 /*
- * Finding M7. Conditional requests are never read, so a client holding a
+ * Conditional requests are never read, so a client holding a
  * valid ETag gets a full body back. Answering with 304 is the fix.
  */
 static void
@@ -139,9 +139,11 @@ const dims_test dims_tests_cache_headers[] = {
     { "TestExpiresIsSent", test_expires_is_sent, NULL },
     { "TestLastModifiedIsForwarded", test_last_modified_is_forwarded, NULL },
     { "TestForwardedHeaderHasNoLeadingSpace",
-      test_forwarded_header_has_no_leading_space, "M3" },
+      test_forwarded_header_has_no_leading_space,
+      "the value keeps the space after the colon" },
     { "TestEtagIsSent", test_etag_is_sent, NULL },
     { "TestEtagIsStable", test_etag_is_stable, NULL },
-    { "TestConditionalRequestReturns304", test_conditional_request_returns_304, "M7" },
+    { "TestConditionalRequestReturns304", test_conditional_request_returns_304,
+      "conditional requests are never read" },
     DIMS_TEST_END
 };

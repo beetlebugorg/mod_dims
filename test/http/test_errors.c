@@ -34,7 +34,7 @@ test_missing_source(void)
 }
 
 /*
- * Finding M2. The origin status is copied to the client, so a 500 from the
+ * The origin status is copied to the client, so a 500 from the
  * origin becomes a 500 from the service. Mapping it to 502 is the fix.
  * DimsOriginStatusMode.
  */
@@ -57,7 +57,7 @@ test_origin_failure_is_mapped(void)
  * A malformed geometry returns the fallback image with 200 today. The
  * operation fails, dims_cleanup fetches DimsDefaultImageURL, and
  * dims_send_image reports the fetch status of that image rather than the
- * failure. Finding M12. Each failure class needs its own status.
+ * failure. Each failure class needs its own status.
  */
 static void
 test_bad_geometry(void)
@@ -73,7 +73,7 @@ test_bad_geometry(void)
 }
 
 /*
- * Finding M8, the range half. quality is never range checked, so 500 reaches
+ * quality is never range checked, so 500 reaches
  * MagickSetImageCompressionQuality. The value needs a range check.
  */
 static void
@@ -88,7 +88,7 @@ test_quality_out_of_range(void)
 }
 
 /*
- * Finding H5. The parameter name is matched on four bytes and then indexed at
+ * The parameter name is matched on four bytes and then indexed at
  * offset 15, which reads past the end of a short token.
  *
  * The case asserts the worker answers. Under a sanitizer build it reports the
@@ -112,7 +112,7 @@ test_short_parameter_starting_with_opti(void)
 }
 
 /*
- * Finding H9. A parameter with no equals sign makes the parser read one byte
+ * A parameter with no equals sign makes the parser read one byte
  * past the terminator.
  */
 static void
@@ -133,7 +133,7 @@ test_parameter_without_equals(void)
 }
 
 /*
- * Finding C3. A short eurl makes the decoded length negative, and the pointer
+ * A short eurl makes the decoded length negative, and the pointer
  * arithmetic that follows runs on it. Decryption happens before any signature
  * check, so this needs no valid signature.
  */
@@ -167,7 +167,7 @@ test_empty_eurl(void)
 }
 
 /*
- * Finding H6. apr_uri_parse leaves path NULL for a URL with no path, and
+ * apr_uri_parse leaves path NULL for a URL with no path, and
  * strrchr dereferences it. The legacy /dims/ handler reaches it. Checking
  * the pointer first.
  */
@@ -187,7 +187,7 @@ test_source_url_without_path(void)
 }
 
 /*
- * Finding H7. The Content-Disposition filename comes from the source URL and
+ * The Content-Disposition filename comes from the source URL and
  * is not escaped, so a quote breaks out of the parameter. The filename needs escaping.
  */
 static void
@@ -222,14 +222,19 @@ test_content_disposition_is_escaped(void)
 const dims_test dims_tests_errors[] = {
     { "TestUnknownClient", test_unknown_client, NULL },
     { "TestMissingSource", test_missing_source, NULL },
-    { "TestOriginFailureIsMapped", test_origin_failure_is_mapped, "M2" },
-    { "TestBadGeometry", test_bad_geometry, "M12" },
-    { "TestQualityOutOfRange", test_quality_out_of_range, "M8" },
+    { "TestOriginFailureIsMapped", test_origin_failure_is_mapped,
+      "the origin status is forwarded" },
+    { "TestBadGeometry", test_bad_geometry,
+      "every failure reports one status" },
+    { "TestQualityOutOfRange", test_quality_out_of_range,
+      "quality is not range checked" },
     { "TestShortParameterStartingWithOpti", test_short_parameter_starting_with_opti, NULL },
     { "TestParameterWithoutEquals", test_parameter_without_equals, NULL },
     { "TestShortEurl", test_short_eurl, NULL },
     { "TestEmptyEurl", test_empty_eurl, NULL },
-    { "TestSourceUrlWithoutPath", test_source_url_without_path, "H6" },
-    { "TestContentDispositionIsEscaped", test_content_disposition_is_escaped, "H7" },
+    { "TestSourceUrlWithoutPath", test_source_url_without_path,
+      "a URL with no path leaves path NULL" },
+    { "TestContentDispositionIsEscaped", test_content_disposition_is_escaped,
+      "the disposition filename is not escaped" },
     DIMS_TEST_END
 };

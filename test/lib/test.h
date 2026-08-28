@@ -17,10 +17,11 @@ typedef struct dims_test {
      * up. */
     const char *name;
     dims_test_fn fn;
-    /* NULL when the case must pass. Otherwise a short identifier for the
+    /* NULL when the case must pass. Otherwise a short phrase naming the
      * defect the case records, so a known failure is visible without being
-     * noisy. An expected failure that passes is reported as XPASS and fails
-     * the run: the defect was either misdiagnosed or already fixed. */
+     * noisy and a reader learns what is wrong without leaving the file. An
+     * expected failure that passes is reported as XPASS and fails the run:
+     * the defect was either misdiagnosed or already fixed. */
     const char *xfail;
 } dims_test;
 
