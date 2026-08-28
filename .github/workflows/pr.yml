@@ -123,7 +123,7 @@ jobs:
           if-no-files-found: ignore
 
   image:
-    name: The server image builds and answers
+    name: Server image
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -135,12 +135,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Pull the toolchain, or build it. A pull request that bumps a pinned
+      # version names a tag the registry does not have yet, because the
+      # builder workflow publishes on the merge. Without this the two wait on
+      # each other.
+      - name: Resolve the toolchain
+        run: make toolchain
+
       - name: Build the server image
         run: docker build -f docker/Dockerfile -t mod-dims:ci .
 
       # The image has to start with nothing set. Every DIMS_ variable has a
       # default, and a missing one makes httpd refuse to start.
-      - name: Start it with no environment
+      - name: Start with no environment
         run: |
           docker run -d --name dims-ci -p 8000:8000 mod-dims:ci
           for i in $(seq 30); do
@@ -166,7 +173,7 @@ jobs:
           docker exec dims-ci sh -c 'test -s /tmp/out.png'
 
       # The runtime user must not be able to rewrite the module it runs.
-      - name: The installation is not writable by the runtime user
+      - name: Check the installation is read only
         run: |
           docker exec dims-ci sh -c '
             test "$(id -u)" = 33 || exit 1
