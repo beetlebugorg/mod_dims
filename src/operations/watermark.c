@@ -181,23 +181,39 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
                 d->config->overlay_cache_max_age, apr_time_now());
     }
 
-    /* Each is read below whether or not its token was present, so each needs
-     * a value. A zero width and height make the scale fail. */
+    /* Three arguments: an opacity, a size, and a gravity. */
+    if (args == NULL) {
+        *err = "Watermark requires an opacity, a size, and a gravity";
+        status = DIMS_BAD_ARGUMENTS;
+        goto done;
+    }
+
     token = apr_strtok(args, ",", &strtokstate);
-
-    if (token) {
-        opacity = atof(token);
+    if (token == NULL) {
+        *err = "Watermark requires an opacity, a size, and a gravity";
+        status = DIMS_BAD_ARGUMENTS;
+        goto done;
     }
+    opacity = atof(token);
 
     token = apr_strtok(NULL, ",", &strtokstate);
-
-    if (token) {
-        size = atof(token);
+    if (token == NULL) {
+        *err = "Watermark requires a size after the opacity";
+        status = DIMS_BAD_ARGUMENTS;
+        goto done;
     }
+    size = atof(token);
 
     token = apr_strtok(NULL, ",", &strtokstate);
-    if (token) {
+    if (token == NULL) {
+        *err = "Watermark requires a gravity after the size";
+        status = DIMS_BAD_ARGUMENTS;
+        goto done;
+    }
+
+    {
         DimsGravity *gravity_ptr = gravities;
+
         while (gravity_ptr->name != NULL) {
             if (strcmp(token, gravity_ptr->name) == 0) {
                 gravity = gravity_ptr->gravity;
@@ -206,6 +222,12 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
 
             gravity_ptr++;
         }
+    }
+
+    if (gravity == UndefinedGravity) {
+        *err = "Watermark gravity must be one of n, ne, nw, s, se, sw, w, e, c";
+        status = DIMS_BAD_ARGUMENTS;
+        goto done;
     }
 
     /*

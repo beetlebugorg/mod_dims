@@ -47,11 +47,7 @@ test_quality(void)
                        dims_quality_operation, "25", 512, 640);
 }
 
-/*
- * quality parses with base 0, so a leading zero is read as octal.
- * 070 becomes 56. The two calls below must agree once the value is parsed as
- * decimal, and they disagree today.
- */
+/* A leading zero is decimal, so quality/070 and quality/70 agree. */
 static void
 test_quality_leading_zero(void)
 {
@@ -64,15 +60,13 @@ test_quality_leading_zero(void)
 
     CHECK_INT(MagickGetImageCompressionQuality(octal->wand),
               MagickGetImageCompressionQuality(decimal->wand),
-              "quality/070 must mean 70, not octal 56");
+              "quality/070 must mean 70");
 
     dims_fixture_free(octal);
     dims_fixture_free(decimal);
 }
 
-/*
- * Nothing checks that the value is between 1 and 100.
- */
+/* The value has to be between 1 and 100. */
 static void
 test_quality_out_of_range(void)
 {
@@ -133,10 +127,8 @@ const dims_test dims_tests_unit_output[] = {
     { "TestFormatWebp", test_format_webp, NULL },
     { "TestFormatRejectsUnknown", test_format_rejects_unknown, NULL },
     { "TestQuality", test_quality, NULL },
-    { "TestQualityLeadingZero", test_quality_leading_zero,
-      "quality parses with base 0" },
-    { "TestQualityOutOfRange", test_quality_out_of_range,
-      "quality is not range checked" },
+    { "TestQualityLeadingZero", test_quality_leading_zero, NULL },
+    { "TestQualityOutOfRange", test_quality_out_of_range, NULL },
     { "TestQualityOnlyLowers", test_quality_only_lowers, NULL },
     { "TestStripTrue", test_strip_true, NULL },
     { "TestStripFalse", test_strip_false, NULL },

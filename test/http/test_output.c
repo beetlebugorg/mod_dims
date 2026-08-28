@@ -32,20 +32,17 @@ test_quality(void)
     dims_run_golden("TestQuality", "pexels-photo-1539116.jpeg", "quality/25", 512, 640);
 }
 
-/*
- * quality is parsed with base 0, so a leading zero is read as octal. 070
- * becomes 56.
- */
+/* A leading zero is decimal. quality/070 means 70. */
 static void
 test_quality_leading_zero(void)
 {
     dims_response *a = dims_request_ops("quality/070", "pexels-photo-1539116.jpeg");
-    dims_response *b = dims_request_ops("quality/56", "pexels-photo-1539116.jpeg");
+    dims_response *b = dims_request_ops("quality/70", "pexels-photo-1539116.jpeg");
 
     CHECK_INT(a->status, 200, "quality/070");
-    CHECK_INT(b->status, 200, "quality/56");
+    CHECK_INT(b->status, 200, "quality/70");
     CHECK(a->body_len == b->body_len,
-          "quality/070 is read as octal 56: want %zu bytes, got %zu",
+          "quality/070 must mean 70: want %zu bytes, got %zu",
           b->body_len, a->body_len);
 
     dims_response_free(a);

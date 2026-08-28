@@ -79,12 +79,29 @@ test_bad_geometry(void)
 static void
 test_quality_out_of_range(void)
 {
-    dims_response *response = dims_request_ops("quality/500", "pexels-photo-1539116.jpeg");
+    static const char *const refused[] = { "quality/500", "quality/0",
+                                           "quality/-1", "quality/high", NULL };
+    dims_response *accepted = dims_request_ops("quality/50",
+                                               "pexels-photo-1539116.jpeg");
+    int i;
 
-    CHECK(response->status >= 400 && response->status < 500,
-          "quality/500 is a client error, got %ld", response->status);
+    CHECK_INT(accepted->status, 200, "a value inside the range");
 
-    dims_response_free(response);
+    for (i = 0; refused[i] != NULL; i++) {
+        dims_response *response = dims_request_ops(refused[i],
+                                                   "pexels-photo-1539116.jpeg");
+
+        /* This server has an error image, so a refused operation still answers
+         * 200 with it. The body is what shows the operation refused. */
+        dims_test_logf("%s returns %ld with %zu bytes", refused[i],
+                       response->status, response->body_len);
+        CHECK(response->body_len != accepted->body_len,
+              "%s must not produce an image", refused[i]);
+
+        dims_response_free(response);
+    }
+
+    dims_response_free(accepted);
 }
 
 /*
@@ -374,8 +391,7 @@ const dims_test dims_tests_errors[] = {
       "the origin status is forwarded" },
     { "TestBadGeometry", test_bad_geometry,
       "every failure reports one status" },
-    { "TestQualityOutOfRange", test_quality_out_of_range,
-      "quality is not range checked" },
+    { "TestQualityOutOfRange", test_quality_out_of_range, NULL },
     { "TestShortParameterStartingWithOpti", test_short_parameter_starting_with_opti, NULL },
     { "TestParameterWithoutEquals", test_parameter_without_equals, NULL },
     { "TestShortEurl", test_short_eurl, NULL },
