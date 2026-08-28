@@ -26,10 +26,6 @@ Add the following to the Apache configuration:
 
     AddHandler dims-local .gif .jpg
 
-    <Location /dims/>
-        SetHandler dims
-    </Location>
-
     <Location /dims3/>
         SetHandler dims3
     </Location>

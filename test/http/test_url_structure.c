@@ -220,73 +220,46 @@ test_trailing_slash(void)
 }
 
 /*
- * /dims/<client>/<bitmap>/<width>/<height>/<quality>/<source>
- *
- * The legacy endpoint translates five numbers into a command list. The bitmap
- * names the operations: 1 resize, 2 reformat, 4 crop, 8 sharpen, then 256 jpg,
- * 512 gif, 1024 png.
+ * The legacy endpoint is gone. A request to it reaches no handler, and httpd
+ * looks for a file at that path and does not find one.
  */
 static void
-test_legacy_shape(void)
+test_legacy_endpoint_is_gone(void)
 {
-    long status = status_of_f("/dims/%s/1/100/100/70/http:/origin:8080/grid.png",
-                              DIMS_TEST_CLIENT);
-
-    dims_test_logf("the legacy endpoint returns %ld", status);
-    CHECK_INT(status, 200, "resize to 100x100 at quality 70");
+    CHECK_INT(status_of_f("/dims/%s/1/100/100/70/http:/origin:8080/grid.png",
+                          DIMS_TEST_CLIENT), 404, "the legacy shape");
+    CHECK_INT(status_of("/dims/"), 404, "nothing but the prefix");
 }
 
 /*
- * The five numbers are read with one sscanf and no validation after it, so a
- * short list slides the source URL into the last number's place and the
- * request still succeeds. These record what happens, not what should.
+ * The commands the legacy endpoint translated to are not gone. They are
+ * reachable on /dims4/, which is frozen.
  */
 static void
-test_legacy_missing_segments(void)
+test_legacy_commands_still_run(void)
 {
-    dims_response *response;
+    char *url = dims_fixture_url("grid.png");
+    char *path = dims_sign_dims4("legacy_thumbnail/100x100", url, NULL, NULL);
+    dims_response *response = dims_get(path);
     dims_image_size size;
-    char path[512];
 
-    snprintf(path, sizeof(path), "/dims/%s/1/100/100/http:/origin:8080/grid.png",
-             DIMS_TEST_CLIENT);
+    CHECK_INT(response->status, 200, "legacy_thumbnail on /dims4/");
+    size = dims_must_size(response->body, response->body_len);
+    CHECK_INT(size.width, 100, "width");
+
+    dims_response_free(response);
+    free(path);
+    free(url);
+
+    path = dims_sign_dims4("legacy_crop/100x100", url = dims_fixture_url("grid.png"),
+                           NULL, NULL);
     response = dims_get(path);
 
-    CHECK_INT(response->status, 200, "four numbers where five are expected");
-    size = dims_must_size(response->body, response->body_len);
-    dims_test_logf("the scheme became the quality, and the image came back %ldx%ld",
-                   size.width, size.height);
-    CHECK_INT(size.width, 100, "the resize still ran");
+    CHECK_INT(response->status, 200, "legacy_crop on /dims4/");
+
     dims_response_free(response);
-
-    CHECK(status_of_f("/dims/%s/http:/origin:8080/grid.png", DIMS_TEST_CLIENT)
-              >= 400, "no numbers at all");
-    CHECK(status_of("/dims/") >= 400, "nothing but the prefix");
-}
-
-/*
- * The bitmap is read with atoi, which answers 0 for anything that is not a
- * number, and 0 names no operation. The source then passes through at its
- * original size.
- */
-static void
-test_legacy_bitmap(void)
-{
-    dims_response *response;
-    dims_image_size size;
-    char path[512];
-
-    snprintf(path, sizeof(path), "/dims/%s/x/100/100/70/http:/origin:8080/grid.png",
-             DIMS_TEST_CLIENT);
-    response = dims_get(path);
-
-    CHECK_INT(response->status, 200, "a bitmap that is not a number");
-    size = dims_must_size(response->body, response->body_len);
-    CHECK_INT(size.width, 512, "the source passes through at its own size");
-    dims_response_free(response);
-
-    CHECK(status_of_f("/dims/%s/1/0/0/70/http:/origin:8080/grid.png",
-                      DIMS_TEST_CLIENT) >= 400, "a resize to no size");
+    free(path);
+    free(url);
 }
 
 /* The status endpoint takes no segments. */
@@ -306,9 +279,8 @@ const dims_test dims_tests_url_structure[] = {
     { "TestDims4ExpirySegment", test_dims4_expiry_segment, NULL },
     { "TestSourceInThePath", test_source_in_the_path, NULL },
     { "TestTrailingSlash", test_trailing_slash, NULL },
-    { "TestLegacyShape", test_legacy_shape, NULL },
-    { "TestLegacyMissingSegments", test_legacy_missing_segments, NULL },
-    { "TestLegacyBitmap", test_legacy_bitmap, NULL },
+    { "TestLegacyEndpointIsGone", test_legacy_endpoint_is_gone, NULL },
+    { "TestLegacyCommandsStillRun", test_legacy_commands_still_run, NULL },
     { "TestStatusShape", test_status_shape, NULL },
     DIMS_TEST_END
 };

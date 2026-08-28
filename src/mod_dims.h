@@ -42,14 +42,6 @@
 #define MODULE_RELEASE "$Revision: $"
 #define MODULE_VERSION "3.3.31"
 
-#define LEGACY_DIMS_RESIZE 1
-#define LEGACY_DIMS_REFORMAT 2
-#define LEGACY_DIMS_CROP 4
-#define LEGACY_DIMS_SHARPEN 8
-#define LEGACY_DIMS_JPG 256
-#define LEGACY_DIMS_GIF 512
-#define LEGACY_DIMS_PNG 1024
-
 /* How a request ended. These do not combine: every use is == or !=. */
 typedef enum {
     /* Leave the status already on the request alone. Only dims_cleanup reads
