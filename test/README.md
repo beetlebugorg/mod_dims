@@ -44,15 +44,17 @@ differ`.
 defect a missing baseline would otherwise become: a case that checks nothing.
 
 **A case that fails today is an expected failure, not a deleted case.** Mark it
-with a short identifier for the defect it records:
+with a short phrase naming the defect it records. Write the phrase, not a
+tracker number or a review identifier: a reader who clones the repository has
+only what is in it.
 
 ```c
-{ "TestSignatureIsFullLength", test_signature_is_full_length, "C6" },
+{ "TestSignatureIsFullLength", test_signature_is_full_length, "the signature compares six characters" },
 ```
 
 The runner reports it as `xfail`. When the fix lands, the case starts passing,
 the runner reports `XPASS`, and the run fails until the marker is removed. That
-is how each pull request proves it closed its finding.
+is how each pull request proves it closed the defect.
 
 ## The golden files
 

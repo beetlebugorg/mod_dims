@@ -48,7 +48,7 @@ test_quality(void)
 }
 
 /*
- * Finding M8. quality parses with base 0, so a leading zero is read as octal.
+ * quality parses with base 0, so a leading zero is read as octal.
  * 070 becomes 56. The two calls below must agree once the value is parsed as
  * decimal, and they disagree today.
  */
@@ -71,8 +71,7 @@ test_quality_leading_zero(void)
 }
 
 /*
- * Finding M8, the range half. Nothing checks that the value is between 1 and
- * 100.
+ * Nothing checks that the value is between 1 and 100.
  */
 static void
 test_quality_out_of_range(void)
@@ -134,8 +133,10 @@ const dims_test dims_tests_unit_output[] = {
     { "TestFormatWebp", test_format_webp, NULL },
     { "TestFormatRejectsUnknown", test_format_rejects_unknown, NULL },
     { "TestQuality", test_quality, NULL },
-    { "TestQualityLeadingZero", test_quality_leading_zero, "M8" },
-    { "TestQualityOutOfRange", test_quality_out_of_range, "M8" },
+    { "TestQualityLeadingZero", test_quality_leading_zero,
+      "quality parses with base 0" },
+    { "TestQualityOutOfRange", test_quality_out_of_range,
+      "quality is not range checked" },
     { "TestQualityOnlyLowers", test_quality_only_lowers, NULL },
     { "TestStripTrue", test_strip_true, NULL },
     { "TestStripFalse", test_strip_false, NULL },

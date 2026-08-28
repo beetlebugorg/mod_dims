@@ -34,7 +34,7 @@ test_quality(void)
 
 /*
  * quality is parsed with base 0, so a leading zero is read as octal. 070
- * becomes 56. Finding M8.
+ * becomes 56.
  */
 static void
 test_quality_leading_zero(void)

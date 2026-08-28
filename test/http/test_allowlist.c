@@ -303,7 +303,7 @@ test_redirect_off_allowlist_is_followed_by_default(void)
 }
 
 /*
- * Finding C1, on the server that sets DimsAllowlistSigned enforce.
+ * On the server that sets DimsAllowlistSigned enforce.
  *
  * The status is 500, not 400. A host outside the allowlist has reported that
  * way since the module was written, and enforcing the allowlist on a signed
@@ -328,7 +328,7 @@ test_signed_request_applies_allowlist(void)
     free(path);
 }
 
-/* Ported: TestFetchImageRefusesRedirectOffTheAllowlist. Finding C2. */
+/* Ported: TestFetchImageRefusesRedirectOffTheAllowlist. */
 static void
 test_fetch_image_refuses_redirect_off_the_allowlist(void)
 {

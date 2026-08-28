@@ -9,7 +9,7 @@
 #include "../lib/common.h"
 
 /*
- * Finding H11. A multi-frame image with no watermark command matches neither
+ * A multi-frame image with no watermark command matches neither
  * arm of the guard at src/mod_dims.c:1197-1290, so every command is skipped
  * and the original comes back at its original size.
  *
@@ -43,7 +43,7 @@ test_animated_gif_passthrough(void)
 }
 
 /*
- * Finding H2. The SVG branch calls apr_pstrcat on a buffer that is not NUL
+ * The SVG branch calls apr_pstrcat on a buffer that is not NUL
  * terminated. See src/mod_dims.c:761-767. The fixture has no XML declaration,
  * which is the branch that runs.
  *
@@ -90,7 +90,7 @@ test_portrait_source(void)
 }
 
 /*
- * Content-Length must describe the body. Finding H3 predicted a divergence
+ * Content-Length must describe the body. The review predicted a divergence
  * because the header comes from MagickGetImageLength and the body from
  * MagickGetImagesBlob. The harness measured no divergence on these fixtures,
  * so the finding is downgraded: the fix is still right, because a
@@ -123,7 +123,8 @@ test_content_length_matches_body_png(void)
 }
 
 const dims_test dims_tests_sources[] = {
-    { "TestAnimatedGifAppliesCommands", test_animated_gif_ignores_commands, "H11" },
+    { "TestAnimatedGifAppliesCommands", test_animated_gif_ignores_commands,
+      "a multi-frame image skips every command" },
     { "TestAnimatedGifPassthrough", test_animated_gif_passthrough, NULL },
     { "TestSvgSource", test_svg_source, NULL },
     { "TestCmykSource", test_cmyk_source, NULL },
