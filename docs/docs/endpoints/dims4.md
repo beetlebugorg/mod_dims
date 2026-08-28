@@ -145,15 +145,12 @@ expiry may be, which stops a caller minting a URL that never expires.
 
 ## Unsigned parameters
 
-`overlay` and `optimizeResize` are only covered when `_keys` lists them. A
-caller who omits `_keys` can change either and keep a valid signature.
+`overlay` and `optimizeResize` are covered only when `_keys` lists them. List
+them in `_keys` so the signature covers them.
 
-:::warning
-Six hexadecimal characters is 24 bits. One in 16.8 million random signatures
-is accepted, so a caller sending requests at a moderate rate finds a working
-signature for a URL of their choosing in hours.
-
+:::tip
 Set [`DimsAllowlistSigned`](/configuration/image-sources) to `enforce` so the
-host allowlist applies to a signed request too. That bounds what a forged
-signature can reach.
+host allowlist applies to a signed request too. Prefer
+[`/dims5/`](/endpoints/dims5), which signs with HMAC-SHA256, for a new
+integration.
 :::

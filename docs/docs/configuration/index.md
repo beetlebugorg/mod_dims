@@ -24,6 +24,29 @@ DimsSigningKey a-long-random-string
 </Location>
 ```
 
+## Hardening
+
+The shipped `conf/mod_dims.conf.example` sets these. Each is safe to relax when
+your deployment needs it.
+
+- `DimsMaxSourceBytes` caps the source size, so one request cannot exhaust
+  memory. A malicious SVG is bounded by this too.
+- `DimsAllowPrivateAddresses off` refuses a fetch to an internal address. The
+  cloud metadata address is refused whatever this holds.
+- `DimsStatusVerbose off` drops the component versions from the status page, so
+  it does not name the libraries a caller would target. Restrict the
+  `/dims-status/` location to your monitoring host as well.
+- `DimsEncryptionAlgorithm AES/GCM/NoPadding` decrypts the `eurl` parameter with
+  an authenticated cipher. The client that builds an `eurl` must encrypt with
+  the same.
+
+Two more are worth enabling as your deployment allows.
+
+- `DimsAllowlistSigned enforce` holds a signed request to the allowlist. A
+  signed request skips it by default. Enable it once the allowlist covers your
+  origins.
+- Prefer `/dims5/` for a new integration. It signs with HMAC-SHA256.
+
 ## Every directive
 
 | Directive | Default |

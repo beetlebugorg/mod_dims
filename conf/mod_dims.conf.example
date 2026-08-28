@@ -5,6 +5,9 @@
 #
 # Installing the module does not edit httpd.conf. That is deliberate: a build
 # step must not change a running server's configuration.
+#
+# The settings below are the secure ones. Each note says what it protects and
+# when to relax it.
 
 <IfModule !mod_dims.c>
     LoadModule dims_module modules/libmod_dims.so
@@ -14,10 +17,41 @@
 DimsDownloadTimeout 60000
 DimsImagemagickTimeout 20000
 
+# The largest source image to accept, in bytes. A larger source is refused
+# before it is decoded. This bounds memory and a malicious SVG. 0 means no
+# limit.
+DimsMaxSourceBytes 33554432
+
+# Refuse a fetch to a private or loopback address, so a request cannot reach an
+# internal service. Set it to On only when your origin is on a private network.
+# The cloud metadata address is refused whatever this holds.
+DimsAllowPrivateAddresses off
+
+# The hosts an image may come from. A leading *. matches subdomains only, not
+# the apex. This list applies to /dims3/. A signed request skips it unless you
+# enable DimsAllowlistSigned below.
+DimsAddWhitelist images.example.com
+DimsAddWhitelist *.cdn.example.com
+
+# Apply the host allowlist to a signed request and to a redirect. A signed
+# request skips the allowlist by default. Enable this once the allowlist covers
+# your origins, so a signed request is held to the same list. Set it to log
+# first to record what enforcing would refuse.
+# DimsAllowlistSigned enforce
+
+# /dims5/ is the endpoint to use for a new integration. It signs with
+# HMAC-SHA256. Set a long random key and keep it out of version control.
+DimsSigningKey CHANGE_ME_TO_A_LONG_RANDOM_KEY
+
 # DimsAddClient <appId> <noImageUrl> <max-age> <downstream-ttl> <trust> <minSrc> <maxSrc> <secret>
 #
-# The secret is the key for /dims4/ signatures. Keep it out of version control.
-DimsAddClient CLIENT http://example.com/no-image.png 604800 604800 trust 300 86400 changeme
+# The secret is the key for /dims4/ signatures. Use a long random secret and
+# keep it out of version control. Prefer /dims5/ for a new integration.
+DimsAddClient CLIENT http://example.com/no-image.png 604800 604800 trust 300 86400 CHANGE_ME_TO_A_LONG_RANDOM_SECRET
+
+# Decrypt the eurl parameter with AES-GCM, which is authenticated. The client
+# that builds an eurl must encrypt with the same.
+DimsEncryptionAlgorithm AES/GCM/NoPadding
 
 # Shown when a source image cannot be fetched or processed.
 DimsDefaultImageURL http://example.com/no-image.png
@@ -25,11 +59,13 @@ DimsDefaultImageURL http://example.com/no-image.png
 DimsCacheExpire 604800
 DimsNoImageCacheExpire 60
 
-# Hosts that /dims3/ may fetch from. A leading *. matches subdomains only, not
-# the apex. Signed /dims4/ requests skip this list entirely, which
-# specs/code-review.md records as finding C1.
-DimsAddWhitelist images.example.com
-DimsAddWhitelist *.cdn.example.com
+# The status page reports counters. Off drops the component versions, which name
+# the libraries a caller would target.
+DimsStatusVerbose off
+
+<Location /dims5/>
+    SetHandler dims5
+</Location>
 
 <Location /dims3/>
     SetHandler dims3
@@ -39,6 +75,10 @@ DimsAddWhitelist *.cdn.example.com
     SetHandler dims4
 </Location>
 
+# Restrict the status page to your monitoring host. Uncomment a Require line
+# once mod_authz_host is loaded.
 <Location /dims-status/>
     SetHandler dims-status
+    # Require local
+    # Require ip 10.0.0.0/8
 </Location>
