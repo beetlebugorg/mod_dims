@@ -48,13 +48,14 @@ test-update: up
 	$(IN_CONTAINER) ./build/test/dims_unit_test --update-golden $(RUN)
 	$(MAKE) test
 
-# Findings C4, M9, and H10 are reads of uninitialized or out of bounds memory.
-# They produce a wrong answer only sometimes, so a normal run cannot see them.
+# Reads of uninitialized or out of bounds memory produce a wrong answer only
+# sometimes, so a normal run cannot see them. Leak detection runs here too:
+# each case leaves through _exit, and lib/test.c asks for the check first.
 sanitize: up
 	$(IN_CONTAINER) sh -c 'cmake -B /tmp/build-asan -S /build/mod_dims \
 	    -DCMAKE_BUILD_TYPE=Debug -DDIMS_SANITIZE=address,undefined >/dev/null \
 	    && cmake --build /tmp/build-asan --target dims_unit_test -j"$$(nproc)"'
-	$(IN_CONTAINER) sh -c 'ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 \
+	$(IN_CONTAINER) sh -c 'ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1 \
 	    /tmp/build-asan/test/dims_unit_test'
 
 logs:

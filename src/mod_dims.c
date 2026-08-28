@@ -504,6 +504,7 @@ dims_send_image(dims_request_rec *d)
     MagickRelinquishMemory(blob);
     MagickRelinquishMemory(format);
     DestroyMagickWand(d->wand);
+    d->wand = NULL;
 
     /* After the image is sent record stats about this request. */
     if(d->status == DIMS_SUCCESS) {
@@ -688,7 +689,15 @@ dims_process_image(dims_request_rec *d)
         }
         MagickProfileImage(d->wand, "ICC", rgb_icc, sizeof(rgb_icc));
 
-        MagickRelinquishMemory((void *)profiles);
+        /* Each name is its own allocation, and so is the array. */
+        if (profiles != NULL) {
+            size_t i;
+
+            for (i = 0; i < number_profiles; i++) {
+                MagickRelinquishMemory(profiles[i]);
+            }
+            MagickRelinquishMemory((void *) profiles);
+        }
     }
 
     /*
@@ -713,8 +722,11 @@ dims_process_image(dims_request_rec *d)
 
         char *input_format = MagickGetImageFormat(d->wand);
 
-        if (strcmp(input_format, "PSD") == 0 || strcmp(input_format, "psd") == 0) {
-            should_flatten = true;
+        if (input_format != NULL) {
+            if (strcasecmp(input_format, "PSD") == 0) {
+                should_flatten = true;
+            }
+            MagickRelinquishMemory(input_format);
         }
 
         if (should_flatten) {
@@ -787,15 +799,17 @@ dims_process_image(dims_request_rec *d)
                     }
                 }
             }
-
-            MagickMergeImageLayers(d->wand, TrimBoundsLayer);
         }
 
         // Set output format if not provided in the request.
         if (!output_format_provided && d->config->default_output_format) {
             char *input_format = MagickGetImageFormat(d->wand);
+            int use_default = input_format == NULL ||
+                    !apr_table_get(d->config->ignore_default_output_format, input_format);
 
-            if (!apr_table_get(d->config->ignore_default_output_format, input_format)) {
+            MagickRelinquishMemory(input_format);
+
+            if (use_default) {
                 const char *err = NULL;
                 apr_status_t code;
 

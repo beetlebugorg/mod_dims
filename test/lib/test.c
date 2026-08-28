@@ -106,6 +106,10 @@ run_one(const dims_test *test, const char *filter, int *ran)
         in_test = 1;
         if (setjmp(failure_point) == 0) {
             test->fn();
+            /* _exit skips the atexit hook LeakSanitizer installs, so ask for
+             * the check here. It reports and exits non-zero when the case
+             * leaked. */
+            dims_test_check_leaks();
             _exit(0);
         }
         /* The message goes to the parent through the pipe stdout already is. */
@@ -219,3 +223,29 @@ dims_test_main(const dims_test_group *groups, int argc, char **argv)
 
     return failures == 0 ? 0 : 1;
 }
+
+/* __has_feature has to be tested in its own directive: gcc does not define it,
+ * and an || arm still gets macro expanded. */
+#if defined(__has_feature)
+#  if __has_feature(address_sanitizer)
+#    define DIMS_TEST_LSAN 1
+#  endif
+#endif
+#if defined(__SANITIZE_ADDRESS__)
+#  define DIMS_TEST_LSAN 1
+#endif
+
+#ifdef DIMS_TEST_LSAN
+#include <sanitizer/lsan_interface.h>
+
+void
+dims_test_check_leaks(void)
+{
+    __lsan_do_leak_check();
+}
+#else
+void
+dims_test_check_leaks(void)
+{
+}
+#endif

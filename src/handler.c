@@ -271,10 +271,12 @@ dims_sizer(dims_request_rec *d)
     apr_uri_t uri;
     long width, height;
 
-    d->wand = NewMagickWand();
     if(!d->image_url ) {
         return DECLINED;
     }
+
+    d->wand = NewMagickWand();
+
     if(apr_uri_parse(d->pool, d->image_url, &uri) != APR_SUCCESS) {
         return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
     }
@@ -295,6 +297,7 @@ dims_sizer(dims_request_rec *d)
     width = MagickGetImageWidth(d->wand);
     height = MagickGetImageHeight(d->wand);
     DestroyMagickWand(d->wand);
+    d->wand = NULL;
     ap_set_content_type(d->r, "text/plain");
     ap_rprintf(d->r, "{\n\t\"height\": %ld,\n\t\"width\": %ld\n}", height, width );
     return OK;

@@ -96,8 +96,7 @@ test_watermark_short_arguments(void)
 const dims_test dims_tests_unit_watermark[] = {
     { "TestWatermark", test_watermark, NULL },
     { "TestWatermarkNorthWest", test_watermark_north_west, NULL },
-    { "TestWatermarkOverlayWithoutSlash", test_watermark_overlay_without_slash,
-      "an overlay with no slash is dereferenced" },
+    { "TestWatermarkOverlayWithoutSlash", test_watermark_overlay_without_slash, NULL },
     { "TestWatermarkWithoutOverlay", test_watermark_without_overlay, NULL },
     { "TestWatermarkShortArguments", test_watermark_short_arguments, NULL },
     DIMS_TEST_END
