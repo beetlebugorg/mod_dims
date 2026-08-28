@@ -1,4 +1,4 @@
-# Clients and signing
+# Clients
 
 ## DimsAddClient
 

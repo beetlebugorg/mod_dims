@@ -56,6 +56,7 @@ const sidebars = {
       link: {type: 'doc', id: 'configuration/index'},
       items: [
         'configuration/clients',
+        'configuration/signing',
         'configuration/image-sources',
         'configuration/cache-control',
         'configuration/output',

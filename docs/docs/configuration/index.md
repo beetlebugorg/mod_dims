@@ -6,7 +6,8 @@ defaults rather than inheriting from the main server.
 
 | Page | Directives |
 |---|---|
-| [Clients and signing](/configuration/clients) | who may ask, and for how long |
+| [Clients](/configuration/clients) | who may ask, and for how long |
+| [Signing](/configuration/signing) | how to compute a `/dims4/` signature |
 | [Image sources](/configuration/image-sources) | where an image may come from |
 | [Cache control](/configuration/cache-control) | what the response says about caching |
 | [Output](/configuration/output) | what the response contains |
