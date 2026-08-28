@@ -1,21 +1,15 @@
 /**
- * mod_dims - Dynamic Image Manipulation Service
+ * The image pipeline.
  *
- * This module provides a webservice for dynamically manipulating
- * images.  Currently cropping, resizing, reformatting and
- * thumbnail creation are supported.
+ * A request arrives at handler.c, which routes it, reads its parts, and checks
+ * the caller may ask for it. What happens next is here:
  *
- * Code Flow Logic:
- *
- *  dims_handler        handler.c, routes the request and reads its parts
- *  dims_handle_request handler.c, checks the client, the signature, and the host
- *  dims_fetch_remote_image  this file, loads the source image
- *  dims_process_image  this file, runs the commands
- *  dims_send_image     this file, writes the response
+ *  dims_fetch_remote_image  loads the source image
+ *  dims_process_image       runs the commands
+ *  dims_send_image          writes the response
  *
  * A failure anywhere calls dims_cleanup, which sends the error image.
  *
-
  * Copyright 2009 AOL LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
@@ -33,12 +27,9 @@
 
 
 #include "mod_dims.h"
-#include "configuration.h"
-#include "encryption.h"
 #include "curl.h"
 #include "netguard.h"
 #include "status.h"
-#include "handler.h"
 #include "pipeline.h"
 #include "util_md5.h"
 #include "cmyk_icc.h"
@@ -46,16 +37,11 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <strings.h>
-#include <scoreboard.h>
-#include <openssl/evp.h>
-#include <openssl/sha.h>
-#include <openssl/err.h>
 
 #include <curl/curl.h>
 
 /* Defined at the end of this file, declared in module.h. */
 
-#define DIMS_POST_CONFIG_KEY "dims_post_config"
 
 
 
@@ -927,194 +913,3 @@ dims_process_image(dims_request_rec *d)
 
     return dims_send_image(d);
 }
-
-static int
-dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
-{
-    apr_status_t status;
-    apr_size_t retsize;
-    void *first_pass = NULL;
-
-    /*
-     * httpd runs post_config twice, and clears the first pass's pool
-     * afterwards. Skip that pass, so the shared memory is created once
-     * against a pool that lives as long as the server.
-     */
-    apr_pool_userdata_get(&first_pass, DIMS_POST_CONFIG_KEY, s->process->pool);
-    if (first_pass == NULL) {
-        apr_pool_userdata_set((const void *) 1, DIMS_POST_CONFIG_KEY,
-                              apr_pool_cleanup_null, s->process->pool);
-        return OK;
-    }
-
-    ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
-
-    /* Say which tiers of the network guard the operator left permissive, on
-     * every server, so the setting is visible without reading the config. */
-    {
-        server_rec *server;
-
-        for (server = s; server != NULL; server = server->next) {
-            dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-                    server->module_config, &dims_module);
-
-            if (config != NULL) {
-                dims_netguard_log_configuration(server, config);
-            }
-        }
-    }
-
-    /*
-     * ImageMagick starts in the child, never here. A worker that inherits its
-     * semaphores and cache state across the fork segfaults on its first
-     * request. The resource limits go with it, being per process. See
-     * dims_child_init.
-     */
-
-    ops = apr_hash_make(p);
-    apr_hash_set(ops, "strip", APR_HASH_KEY_STRING, dims_strip_operation);
-    apr_hash_set(ops, "resize", APR_HASH_KEY_STRING, dims_resize_operation);
-    apr_hash_set(ops, "crop", APR_HASH_KEY_STRING, dims_crop_operation);
-    apr_hash_set(ops, "thumbnail", APR_HASH_KEY_STRING, dims_thumbnail_operation);
-    apr_hash_set(ops, "legacy_thumbnail", APR_HASH_KEY_STRING, dims_legacy_thumbnail_operation);
-    apr_hash_set(ops, "legacy_crop", APR_HASH_KEY_STRING, dims_legacy_crop_operation);
-    apr_hash_set(ops, "quality", APR_HASH_KEY_STRING, dims_quality_operation);
-    apr_hash_set(ops, "sharpen", APR_HASH_KEY_STRING, dims_sharpen_operation);
-    apr_hash_set(ops, "format", APR_HASH_KEY_STRING, dims_format_operation);
-    apr_hash_set(ops, "brightness", APR_HASH_KEY_STRING, dims_brightness_operation);
-    apr_hash_set(ops, "flipflop", APR_HASH_KEY_STRING, dims_flipflop_operation);
-    apr_hash_set(ops, "sepia", APR_HASH_KEY_STRING, dims_sepia_operation);
-    apr_hash_set(ops, "grayscale", APR_HASH_KEY_STRING, dims_grayscale_operation);
-    apr_hash_set(ops, "autolevel", APR_HASH_KEY_STRING, dims_autolevel_operation);
-    apr_hash_set(ops, "rotate", APR_HASH_KEY_STRING, dims_rotate_operation);
-    apr_hash_set(ops, "invert", APR_HASH_KEY_STRING, dims_invert_operation);
-    apr_hash_set(ops, "watermark", APR_HASH_KEY_STRING, dims_watermark_operation);
-
-    /* Init APR's atomic functions */
-    status = apr_atomic_init(p);
-    if (status != APR_SUCCESS)
-        return HTTP_INTERNAL_SERVER_ERROR;
-
-    /* Create shared memory block */
-    status = apr_shm_create(&shm, sizeof(dims_stats_rec), NULL, p);
-    if (status != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error creating shm block\n");
-        return status;
-    }
-
-    /* Check size of shared memory block */
-    retsize = apr_shm_size_get(shm);
-    if (retsize != sizeof(dims_stats_rec)) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error allocating shared memory block\n");
-        return status;
-    }
-
-    /* Init shm block */
-    stats = apr_shm_baseaddr_get(shm);
-    if (stats == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error creating status block.\n");
-        return status;
-    }
-    memset(stats, 0, retsize);
-
-    if (retsize < sizeof(dims_stats_rec)) {
-        ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, s,
-                     "mod_dims : Not enough memory allocated!! Giving up");
-        return HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    stats->success_count = 1;
-    stats->failure_count = 0;
-    stats->download_timeout_count = 0;
-    stats->imagemagick_timeout_count = 0;
-
-    return OK;
-}
-
-
-
-apr_status_t
-dims_child_cleanup(void *data)
-{
-    dims_curl_rec *locks = (dims_curl_rec *) data;
-
-    curl_share_cleanup(locks->share);
-    curl_global_cleanup();
-
-    apr_thread_mutex_destroy(locks->share_mutex);
-    apr_thread_mutex_destroy(locks->dns_mutex);
-
-    apr_pool_userdata_set(NULL, DIMS_CURL_SHARED_KEY, NULL,
-            locks->s->process->pool);
-
-    MagickWandTerminus();
-
-    return APR_SUCCESS;
-}
-
-void
-dims_child_init(apr_pool_t *p, server_rec *s)
-{
-    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
-            s->module_config, &dims_module);
-
-    MagickWandGenesis();
-
-    /* Every limit is per process, so the total a host can use is this
-     * multiplied by the number of workers. */
-    MagickSetResourceLimit(AreaResource, config->area_size);
-    MagickSetResourceLimit(DiskResource, config->disk_size);
-    MagickSetResourceLimit(MemoryResource, config->memory_size);
-    MagickSetResourceLimit(MapResource, config->map_size);
-    curl_global_init(CURL_GLOBAL_ALL);
-
-    dims_curl_rec *locks =
-            (dims_curl_rec *) apr_pcalloc(p, sizeof(dims_curl_rec));
-
-    locks->s = s;
-    locks->share = curl_share_init();
-
-    apr_thread_mutex_create(&locks->share_mutex, APR_THREAD_MUTEX_DEFAULT, p);
-    apr_thread_mutex_create(&locks->dns_mutex, APR_THREAD_MUTEX_DEFAULT, p);
-
-    curl_share_setopt(locks->share, CURLSHOPT_LOCKFUNC, lock_share);
-    curl_share_setopt(locks->share, CURLSHOPT_UNLOCKFUNC, unlock_share);
-    curl_share_setopt(locks->share, CURLSHOPT_USERDATA, (void *) locks);
-    curl_share_setopt(locks->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-
-    /* We have to associate our handle/locks with the process->pool otherwise
-     * we won't be able to get at it from the remote_fetch_image function.  This
-     * pool doesn't seem to go away when the child process goes away so we
-     * have to register the clean up method below.
-     */
-    apr_pool_userdata_set(locks, DIMS_CURL_SHARED_KEY, NULL, s->process->pool);
-
-    /* Register cleanup with the 'p' pool so we can clean up the locks and
-     * shared curl handle when this process dies.
-     */
-    apr_pool_cleanup_register(p, locks, dims_child_cleanup, dims_child_cleanup);
-}
-
-static void
-dims_register_hooks(apr_pool_t *p)
-{
-    ap_hook_post_config(dims_init, NULL, NULL, APR_HOOK_MIDDLE);
-    ap_hook_child_init(dims_child_init, NULL, NULL,APR_HOOK_MIDDLE);
-    ap_hook_handler(dims_handler, NULL, NULL, APR_HOOK_MIDDLE);
-}
-
-
-module AP_MODULE_DECLARE_DATA dims_module =
-{
-    STANDARD20_MODULE_STUFF,
-    NULL,                   /* dir config creater */
-    NULL,                   /* dir merger --- default is to override */
-    dims_create_config,     /* server config */
-    NULL,                   /* merge server config */
-    dims_directives,        /* command apr_table_t */
-    dims_register_hooks,    /* register hooks */
-    0                       /* flags */
-};

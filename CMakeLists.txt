@@ -54,6 +54,7 @@ add_library(mod_dims MODULE
     src/url.c
     src/status.c
     src/mod_dims.c
+    src/module.c
     src/operations/autolevel.c
     src/operations/brightness.c
     src/operations/crop.c
