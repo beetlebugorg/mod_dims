@@ -9,16 +9,36 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-# project() takes numeric components only, so a pre-release name lives beside
-# it. DIMS_VERSION is the two joined, and that is what the module reports and
-# what a release tag has to match.
+# The version comes from the git tag, so a tag push is the whole bump. The
+# module reports it and the release names it. -DDIMS_VERSION wins for a
+# container build, which excludes .git, the same way -DDIMS_COMMIT does. A
+# checkout with no tag reads the short commit, which is honest and does not fail.
+if(NOT DIMS_VERSION)
+    find_package(Git QUIET)
+    if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" describe --tags --always --dirty
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            OUTPUT_VARIABLE DIMS_VERSION
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET)
+    endif()
+endif()
+if(NOT DIMS_VERSION)
+    set(DIMS_VERSION "0.0.0-unknown")
+endif()
+string(REGEX REPLACE "^v" "" DIMS_VERSION "${DIMS_VERSION}")
+
+# project() takes numeric components only, so read them from the version.
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" DIMS_VERSION_NUMERIC "${DIMS_VERSION}")
+if(NOT DIMS_VERSION_NUMERIC)
+    set(DIMS_VERSION_NUMERIC "0.0.0")
+endif()
+
 project(mod_dims
-    VERSION 4.0.0
+    VERSION ${DIMS_VERSION_NUMERIC}
     DESCRIPTION "Dynamic image manipulation for Apache httpd"
     LANGUAGES C)
-
-set(DIMS_VERSION_SUFFIX "-beta")
-set(DIMS_VERSION "${PROJECT_VERSION}${DIMS_VERSION_SUFFIX}")
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)

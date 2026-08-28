@@ -16,15 +16,16 @@ ARG HTTPD_DIGEST=sha256:979c38c2228d28c2edfd45c6e27dcee1c7b4a101a5526721ae8ece45
 
 FROM ${BUILDER_IMAGE} AS build
 
-# The build context excludes .git, so the commit comes in as an argument.
-# Without it the status page reports "unknown".
+# The build context excludes .git, so the version and the commit come in as
+# arguments. Without them the status page reports "unknown".
 ARG DIMS_COMMIT=unknown
+ARG DIMS_VERSION
 
 WORKDIR /build/mod_dims
 COPY . /build/mod_dims
 
 RUN cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-        -DDIMS_COMMIT="${DIMS_COMMIT}" && \
+        -DDIMS_COMMIT="${DIMS_COMMIT}" -DDIMS_VERSION="${DIMS_VERSION}" && \
     cmake --build build -j"$(nproc)"
 
 FROM httpd:${HTTPD_VERSION}@${HTTPD_DIGEST}
