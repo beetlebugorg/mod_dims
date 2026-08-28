@@ -37,6 +37,14 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 # Every one has a default, so the container starts with no environment set.
 ENV DIMS_DOWNLOAD_TIMEOUT=60000
 ENV DIMS_IMAGEMAGICK_TIMEOUT=20000
+# Worker pool. The default auto sizes each value from the container's CPU
+# allocation at start. Set a number to pin it. See the resources page.
+ENV DIMS_SERVER_LIMIT=auto
+ENV DIMS_THREADS_PER_CHILD=auto
+ENV DIMS_MAX_WORKERS=auto
+# Recycle a child after this many connections, so its memory returns to the
+# system. 0 keeps a child forever.
+ENV DIMS_MAX_CONNECTIONS_PER_CHILD=10000
 ENV DIMS_CLIENT=development
 ENV DIMS_NO_IMAGE_URL="-"
 ENV DIMS_DEFAULT_IMAGE_URL="-"
@@ -73,6 +81,7 @@ COPY --from=build /usr/local/imagemagick /usr/local/imagemagick
 COPY docker/policy.xml /usr/local/imagemagick/etc/ImageMagick-7/policy.xml
 COPY profiles/ /usr/local/share/mod_dims/profiles/
 COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
+COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/dims-entrypoint
 
 ENV LD_LIBRARY_PATH=/usr/local/imagemagick/lib
 
@@ -100,3 +109,7 @@ USER 33
 # without reaching an origin.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD /usr/local/imagemagick/bin/curl -fsS -o /dev/null http://127.0.0.1:8000/dims-status/ || exit 1
+
+# Size the worker pool from the CPU allocation, then run httpd.
+ENTRYPOINT ["/usr/local/bin/dims-entrypoint"]
+CMD ["httpd-foreground"]
