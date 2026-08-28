@@ -4,7 +4,7 @@
 images on request.
 
 ```
-/dims5/resize/100x100/?url=https://example.com/cat.jpg&sig=ecd30f9f...
+/dims4/CLIENT/6d3dcb/2147483647/resize/100x100/?url=https://example.com/cat.jpg
 ```
 
 That fetches `cat.jpg`, resizes it to fit 100 by 100, and returns it.
@@ -29,8 +29,9 @@ keeps one original and serves as many renditions as it needs.
 **Image variants on demand.** Define a rendition in a template or in frontend
 code. There is no build step, no batch job, and no second copy of every image.
 
-**Signed URLs.** A `/dims5/` URL is signed with HMAC-SHA256, so a caller
-cannot change the image, the transformation, or any parameter that shapes it.
+**Signed URLs.** A signed URL cannot be altered by a caller. `/dims5/` signs
+with HMAC-SHA256 and covers every parameter that shapes the result. `/dims4/`
+signs with a shared secret and stays supported.
 
 ## Getting started
 

@@ -65,8 +65,15 @@ LoadModule dims_module modules/libmod_dims.so
 
 DimsSigningKey a-long-random-string
 
+DimsAddClient development - 604800 604800 trust 300 86400 a-secret
+DimsAddWhitelist images.example.com
+
 <Location /dims5/>
     SetHandler dims5
+</Location>
+
+<Location /dims4/>
+    SetHandler dims4
 </Location>
 
 <Location /dims-status/>
