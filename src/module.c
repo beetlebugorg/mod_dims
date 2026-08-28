@@ -189,6 +189,11 @@ dims_child_init(apr_pool_t *p, server_rec *s)
     curl_share_setopt(locks->share, CURLSHOPT_USERDATA, (void *) locks);
     curl_share_setopt(locks->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
 
+    /* Share the TLS session cache too, so a new connection can resume a session
+     * and skip the full handshake. Every fetch still opens its own socket, so
+     * the address guard runs on each. */
+    curl_share_setopt(locks->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+
     /* We have to associate our handle/locks with the process->pool otherwise
      * we won't be able to get at it from the remote_fetch_image function.  This
      * pool doesn't seem to go away when the child process goes away so we
