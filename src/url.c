@@ -70,7 +70,7 @@ dims_param_value(const char *token, const char *name)
         return NULL;
     }
 
-    /* Past the equals sign the name carries. */
+    /* Past the equals sign in the name. */
     return token + length;
 }
 

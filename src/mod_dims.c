@@ -542,7 +542,7 @@ dims_send_image(dims_request_rec *d)
 }
 
 /*
- * Releases the wand, reporting any ImageMagick error it carries.
+ * Releases the wand, reporting any ImageMagick error it has.
  *
  * Safe to call more than once: the wand pointer is cleared, so a later call
  * has nothing to do. Several failure paths reach this twice.

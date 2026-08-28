@@ -84,7 +84,7 @@ test_quality_out_of_range(void)
 
 /*
  * quality only lowers. A request for a higher value than the image already
- * carries is ignored. See src/mod_dims_ops.c:243-250.
+ * has is ignored.
  */
 static void
 test_quality_only_lowers(void)
@@ -118,7 +118,7 @@ test_strip_false(void)
 /*
  * A NULL argument is what dims_process_image passes when the request does not
  * name strip. The image is stripped anyway, because the configuration default
- * is on. See src/mod_dims_ops.c:75-90.
+ * is on.
  */
 static void
 test_strip_null_follows_config(void)

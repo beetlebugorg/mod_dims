@@ -140,7 +140,7 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
             value_start++;
         }
 
-        /* Trim whichever terminator the line carries. A line with no colon
+        /* Trim whichever terminator the line has. A line with no colon
          * never reaches here. */
         while (value_end > value_start &&
                 (value_end[-1] == '\r' || value_end[-1] == '\n')) {

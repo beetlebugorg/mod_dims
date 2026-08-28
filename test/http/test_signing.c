@@ -120,7 +120,7 @@ test_signature_is_full_length(void)
 /*
  * overlay is signed only when _keys names it, so one valid
  * signature accepts any overlay. The signature below is computed without
- * overlay and the request carries one.
+ * overlay and the request has one.
  */
 static void
 test_signature_covers_every_parameter(void)
@@ -177,7 +177,7 @@ test_unsigned_parameters_are_refused(void)
 /*
  * The uninitialized read below is not a wrong answer, so it is not
  * observable from outside. This case is a regression guard: the form that
- * carries no query string at all must still answer. Confirming C4 itself needs
+ * has no query string at all must still answer. Confirming the read itself needs
  * a build with -fsanitize=address, which CI runs.
  */
 static void

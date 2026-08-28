@@ -61,7 +61,7 @@ test_a_shorter_token_does_not_match(void)
     check("", "url=", NULL);
 }
 
-/* A parameter with no equals sign carries no value. */
+/* A parameter with no equals sign has no value. */
 static void
 test_a_name_without_equals_does_not_match(void)
 {

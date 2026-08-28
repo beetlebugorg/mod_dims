@@ -9,8 +9,8 @@
 /*
  * The golden directory name for this build.
  *
- * Golden bytes depend on the ImageMagick build, so the name carries the
- * distribution and the ImageMagick version. It does not carry the
+ * Golden bytes depend on the ImageMagick build, so the name has the
+ * distribution and the ImageMagick version. It does not name the
  * architecture: amd64 and arm64 were measured to produce all 90 files byte
  * for byte identical.
  *

@@ -81,7 +81,7 @@ dims_net_result dims_validate_image_url(dims_request_rec *d, const char *url,
 /*
  * Installs the guard on a curl handle.
  *
- * The mode carries to every redirect hop.
+ * The mode applies to every redirect hop.
  */
 void dims_netguard_install(CURL *handle, dims_request_rec *d,
                            dims_allowlist_mode mode);

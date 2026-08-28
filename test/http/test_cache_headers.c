@@ -10,7 +10,7 @@
 
 #include "../lib/common.h"
 
-/* grid.png carries max-age=3600, which is inside the trust window. */
+/* grid.png has max-age=3600, which is inside the trust window. */
 static void
 test_trusted_source_max_age(void)
 {
@@ -25,7 +25,7 @@ test_trusted_source_max_age(void)
     dims_response_free(response);
 }
 
-/* The pexels fixture carries max-age=99999999, above the 86400 maximum, so
+/* The pexels fixture has max-age=99999999, above the 86400 maximum, so
  * the client default applies instead. */
 static void
 test_source_max_age_above_the_window(void)
@@ -120,7 +120,7 @@ test_conditional_request_returns_304(void)
     char *path = dims_sign_dims4("resize/100x100", url, NULL, NULL);
     dims_response *second;
 
-    CHECK(etag != NULL, "the first response must carry an ETag");
+    CHECK(etag != NULL, "the first response must have an ETag");
     snprintf(header, sizeof(header), "If-None-Match: %s", etag);
     headers[0] = header;
 

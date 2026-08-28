@@ -1,7 +1,7 @@
 /*
  * Decrypting the eurl request parameter.
  *
- * eurl carries an encrypted source URL, so a signed URL can hide where the
+ * eurl is an encrypted source URL, so a signed URL can hide where the
  * image really comes from. The key is derived from the client's secret.
  *
  * Copyright 2009 AOL LLC
@@ -17,7 +17,7 @@
 /* The shortest thing AES-128-ECB can decrypt. */
 #define DIMS_AES_BLOCK_BYTES 16
 
-/* What the GCM input carries before and after the ciphertext. */
+/* What the GCM input has before and after the ciphertext. */
 #define DIMS_GCM_IV_BYTES 12
 #define DIMS_GCM_TAG_BYTES 16
 
@@ -30,7 +30,7 @@ int aes_errors(const char *message, size_t length, void *u);
 char *aes_128_decrypt(request_rec *r, unsigned char *key,
                       unsigned char *encrypted_text, int encrypted_length);
 
-/* AES-128-GCM. The base64 input carries the IV, the ciphertext, and the tag,
+/* AES-128-GCM. The base64 input has the IV, the ciphertext, and the tag,
  * in that order. */
 char *aes_128_gcm_decrypt(request_rec *r, unsigned char *key,
                           unsigned char *base64_encrypted_text);

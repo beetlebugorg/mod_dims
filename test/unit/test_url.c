@@ -35,12 +35,12 @@ check_url(const char *path, const char *want)
     char *got = dims_path_image_url(pool, subject, NULL);
 
     if (want == NULL) {
-        CHECK(got == NULL, "%s must carry no URL, got %s", path,
+        CHECK(got == NULL, "%s must have no URL, got %s", path,
               got ? got : "(null)");
         return;
     }
 
-    CHECK(got != NULL, "%s must carry a URL", path);
+    CHECK(got != NULL, "%s must have a URL", path);
     if (got != NULL) {
         CHECK(strcmp(got, want) == 0, "%s: want %s, got %s", path, want, got);
     }

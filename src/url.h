@@ -14,9 +14,9 @@
 /*
  * Finds the source URL inside a request path.
  *
- * The legacy handlers carry the URL in the path, and httpd collapses the
+ * The legacy handlers put the URL in the path, and httpd collapses the
  * double slash, so it arrives as "http:/example.com/a.jpg". This returns it
- * with the slash put back, or NULL when the path carries no URL.
+ * with the slash put back, or NULL when the path has no URL.
  *
  * Sets *start to where the URL begins inside subject, which is where the
  * caller truncates to leave only the commands. Pass NULL to skip it.
@@ -27,7 +27,7 @@ char *dims_path_image_url(apr_pool_t *pool, char *subject, char **start);
  * Returns the value of one query parameter, or NULL when the token names a
  * different parameter.
  *
- * name carries its own equals sign, for example "eurl=". The whole name is
+ * name includes its own equals sign, for example "eurl=". The whole name is
  * compared, so a token shorter than the name never matches.
  */
 const char *dims_param_value(const char *token, const char *name);
