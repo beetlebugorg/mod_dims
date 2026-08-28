@@ -1,0 +1,187 @@
+name: Release
+
+# A v tag publishes the server image and creates the release.
+#
+# The tag has to name the version CMakeLists.txt declares. Deriving the
+# version from the tag instead would let a tag ship a binary that reports a
+# different one, so the tag is checked against the source and a mismatch stops
+# the run.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  REGISTRY: ghcr.io/beetlebugorg/mod_dims
+
+jobs:
+  check:
+    name: Check the tag
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      latest: ${{ steps.read.outputs.latest }}
+      commit: ${{ steps.read.outputs.commit }}
+    steps:
+      # Every tag, because the highest one decides whether this release moves
+      # the latest name.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare the tag with the version in CMakeLists.txt
+        id: read
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME#v}"
+          source_version=$(sed -n 's/^[[:space:]]*VERSION[[:space:]]*//p' CMakeLists.txt | head -1)
+
+          if [ "$tag" != "$source_version" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} names ${tag}, CMakeLists.txt declares ${source_version}"
+            exit 1
+          fi
+
+          # The latest name moves only for the highest version, so a backport
+          # tagged after a newer release does not move it backwards.
+          highest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
+          if [ "$tag" = "$highest" ]; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${tag} is not the highest version (${highest}), so latest stays where it is"
+          fi
+
+          echo "version=${tag}" >> "$GITHUB_OUTPUT"
+
+          # The short commit, so the status page reads the same as a local
+          # build does.
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+  # Each architecture builds on a runner of that architecture. Building both on
+  # one means emulating the other, which is minutes for a result a native
+  # runner produces in seconds.
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          build-args: |
+            DIMS_COMMIT=${{ needs.check.outputs.commit }}
+          tags: ${{ env.REGISTRY }}:${{ needs.check.outputs.version }}-${{ matrix.arch }}
+          # No provenance attestation. With it each per architecture tag is an
+          # index holding the image plus an unknown/unknown manifest, and
+          # joining two of those collides on the attestations and drops an
+          # architecture.
+          provenance: false
+
+  manifest:
+    name: Publish the manifest
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to the registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Join the architectures
+        run: |
+          set -eu
+          version="${{ needs.check.outputs.version }}"
+          tags="-t ${REGISTRY}:${version}"
+          if [ "${{ needs.check.outputs.latest }}" = "true" ]; then
+            tags="${tags} -t ${REGISTRY}:latest"
+          fi
+
+          docker buildx imagetools create $tags \
+            "${REGISTRY}:${version}-amd64" \
+            "${REGISTRY}:${version}-arm64"
+
+      # A manifest that lost an architecture still pulls on the one it kept, so
+      # the failure is invisible until someone runs it elsewhere.
+      - name: Check both architectures are in the manifest
+        run: |
+          set -eu
+          version="${{ needs.check.outputs.version }}"
+          out=$(docker buildx imagetools inspect "${REGISTRY}:${version}")
+          echo "$out"
+          echo "$out" | grep -q 'linux/amd64' || { echo "::error::no amd64"; exit 1; }
+          echo "$out" | grep -q 'linux/arm64' || { echo "::error::no arm64"; exit 1; }
+
+  release:
+    name: Create the release
+    needs: [check, manifest]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # No module as an asset. A .so is only useful against the exact httpd and
+      # ImageMagick it was compiled with, so the image is the artifact.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          version="${{ needs.check.outputs.version }}"
+          latest_flag=""
+          if [ "${{ needs.check.outputs.latest }}" != "true" ]; then
+            latest_flag="--latest=false"
+          fi
+
+          cat > notes.md <<EOF
+          ## Image
+
+          \`\`\`
+          docker pull ${REGISTRY}:${version}
+          \`\`\`
+
+          linux/amd64 and linux/arm64.
+          EOF
+
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            --generate-notes \
+            $latest_flag

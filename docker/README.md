@@ -1,5 +1,14 @@
 # mod-dims Docker Container
 
+# Where to get this image
+
+```
+$ docker pull ghcr.io/beetlebugorg/mod_dims:latest
+```
+
+A `v` tag publishes `ghcr.io/beetlebugorg/mod_dims:<version>` for linux/amd64
+and linux/arm64. `latest` names the highest version.
+
 # How to build this image
 
 ```
