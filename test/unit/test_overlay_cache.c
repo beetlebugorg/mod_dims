@@ -183,6 +183,104 @@ test_prune_survives_a_missing_directory(void)
     dims_overlay_cache_prune(pool, NULL, 4, 60, apr_time_now());
 }
 
+/* A small decoded overlay to store and clone. */
+static MagickWand *
+sample_overlay(unsigned int width, unsigned int height)
+{
+    PixelWand *background = NewPixelWand();
+    MagickWand *wand = NewMagickWand();
+
+    PixelSetColor(background, "red");
+
+    if (MagickNewImage(wand, width, height, background) == MagickFalse) {
+        FAIL("cannot create a sample overlay");
+    }
+
+    DestroyPixelWand(background);
+
+    return wand;
+}
+
+/* A hit hands back a private copy, not the stored wand. */
+static void
+test_memcache_returns_an_independent_clone(void)
+{
+    MagickWand *source;
+    MagickWand *clone;
+
+    dims_overlay_memcache_destroy();
+    dims_overlay_memcache_init(cache_pool(), 4, 0);
+
+    source = sample_overlay(7, 5);
+    dims_overlay_memcache_put("https://example.com/logo.png", source);
+
+    clone = dims_overlay_memcache_get("https://example.com/logo.png");
+
+    CHECK(clone != NULL, "a stored overlay is a hit");
+    CHECK(clone != source, "the hit is a clone, not the stored wand");
+    CHECK_INT(MagickGetImageWidth(clone), 7, "clone width");
+    CHECK_INT(MagickGetImageHeight(clone), 5, "clone height");
+
+    DestroyMagickWand(clone);
+    DestroyMagickWand(source);
+    dims_overlay_memcache_destroy();
+}
+
+/* An overlay the cache never saw is a miss. */
+static void
+test_memcache_misses_an_unknown_url(void)
+{
+    dims_overlay_memcache_destroy();
+    dims_overlay_memcache_init(cache_pool(), 4, 0);
+
+    CHECK(dims_overlay_memcache_get("https://example.com/absent.png") == NULL,
+          "an unknown overlay is a miss");
+
+    dims_overlay_memcache_destroy();
+}
+
+/* The cache holds its count. The oldest overlay goes first. */
+static void
+test_memcache_bounds_the_count(void)
+{
+    MagickWand *wand = sample_overlay(4, 4);
+    MagickWand *hit;
+
+    dims_overlay_memcache_destroy();
+    dims_overlay_memcache_init(cache_pool(), 2, 0);
+
+    dims_overlay_memcache_put("a", wand);
+    dims_overlay_memcache_put("b", wand);
+    dims_overlay_memcache_put("c", wand);
+
+    CHECK(dims_overlay_memcache_get("a") == NULL, "the oldest overlay is gone");
+
+    hit = dims_overlay_memcache_get("b");
+    CHECK(hit != NULL, "the second overlay stays");
+    DestroyMagickWand(hit);
+
+    hit = dims_overlay_memcache_get("c");
+    CHECK(hit != NULL, "the newest overlay stays");
+    DestroyMagickWand(hit);
+
+    DestroyMagickWand(wand);
+    dims_overlay_memcache_destroy();
+}
+
+/* Without a cache the calls do nothing and answer a miss. */
+static void
+test_memcache_without_init_is_a_miss(void)
+{
+    MagickWand *wand = sample_overlay(4, 4);
+
+    dims_overlay_memcache_destroy();
+
+    dims_overlay_memcache_put("a", wand);
+    CHECK(dims_overlay_memcache_get("a") == NULL, "no cache is a miss");
+
+    DestroyMagickWand(wand);
+}
+
 const dims_test dims_tests_unit_overlay_cache[] = {
     { "TestCacheDirHasOneSeparator", test_cache_dir_has_one_separator,
       NULL },
@@ -195,5 +293,12 @@ const dims_test dims_tests_unit_overlay_cache[] = {
       test_prune_without_bounds_keeps_everything, NULL },
     { "TestPruneSurvivesAMissingDirectory",
       test_prune_survives_a_missing_directory, NULL },
+    { "TestMemcacheReturnsAnIndependentClone",
+      test_memcache_returns_an_independent_clone, NULL },
+    { "TestMemcacheMissesAnUnknownUrl",
+      test_memcache_misses_an_unknown_url, NULL },
+    { "TestMemcacheBoundsTheCount", test_memcache_bounds_the_count, NULL },
+    { "TestMemcacheWithoutInitIsAMiss",
+      test_memcache_without_init_is_a_miss, NULL },
     DIMS_TEST_END
 };

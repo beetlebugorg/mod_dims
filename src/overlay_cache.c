@@ -10,6 +10,7 @@
 #include <apr_file_info.h>
 #include <apr_escape.h>
 #include <apr_file_io.h>
+#include <apr_thread_mutex.h>
 #include <stdlib.h>
 #include <openssl/sha.h>
 #include <string.h>
@@ -128,4 +129,193 @@ dims_overlay_cache_prune(apr_pool_t *pool, const char *cache_dir,
     for (i = 0; i < excess; i++) {
         apr_file_remove(((dims_cache_entry *) entries->elts)[i].path, pool);
     }
+}
+
+/* -- The decoded overlay cache -------------------------------------------- */
+
+/* One decoded overlay. A NULL url marks a free slot. */
+typedef struct {
+    char *url;
+    MagickWand *wand;
+    apr_time_t inserted;
+    apr_uint64_t used;
+} dims_overlay_mementry;
+
+typedef struct {
+    apr_thread_mutex_t *mutex;
+    dims_overlay_mementry *entries;
+    int capacity;
+
+    /* Zero keeps an entry for the life of the process. */
+    apr_time_t max_age;
+
+    /* Rises on every access. The smallest value names the oldest entry. */
+    apr_uint64_t clock;
+} dims_overlay_memcache;
+
+static dims_overlay_memcache *overlay_memcache = NULL;
+
+void
+dims_overlay_memcache_init(apr_pool_t *pool, int max_entries,
+                           long max_age_seconds)
+{
+    dims_overlay_memcache *cache;
+
+    if (overlay_memcache != NULL || pool == NULL || max_entries <= 0) {
+        return;
+    }
+
+    cache = calloc(1, sizeof(*cache));
+    if (cache == NULL) {
+        return;
+    }
+
+    cache->entries = calloc((size_t) max_entries, sizeof(*cache->entries));
+    if (cache->entries == NULL) {
+        free(cache);
+        return;
+    }
+
+    if (apr_thread_mutex_create(&cache->mutex, APR_THREAD_MUTEX_DEFAULT,
+                                pool) != APR_SUCCESS) {
+        free(cache->entries);
+        free(cache);
+        return;
+    }
+
+    cache->capacity = max_entries;
+    cache->max_age = (max_age_seconds > 0)
+            ? apr_time_from_sec(max_age_seconds) : 0;
+    cache->clock = 0;
+
+    overlay_memcache = cache;
+}
+
+MagickWand *
+dims_overlay_memcache_get(const char *url)
+{
+    dims_overlay_memcache *cache = overlay_memcache;
+    MagickWand *clone = NULL;
+    int i;
+
+    if (cache == NULL || url == NULL) {
+        return NULL;
+    }
+
+    apr_thread_mutex_lock(cache->mutex);
+
+    for (i = 0; i < cache->capacity; i++) {
+        dims_overlay_mementry *entry = &cache->entries[i];
+
+        if (entry->url == NULL || strcmp(entry->url, url) != 0) {
+            continue;
+        }
+
+        /* An entry past its age is a miss. Drop it and let the caller decode
+         * the overlay again. */
+        if (cache->max_age > 0
+                && apr_time_now() - entry->inserted > cache->max_age) {
+            DestroyMagickWand(entry->wand);
+            free(entry->url);
+            entry->url = NULL;
+            entry->wand = NULL;
+            break;
+        }
+
+        entry->used = ++cache->clock;
+
+        /* Clone under the lock. The stored wand is never handed out, so no
+         * two threads read it at once. */
+        clone = CloneMagickWand(entry->wand);
+        break;
+    }
+
+    apr_thread_mutex_unlock(cache->mutex);
+
+    return clone;
+}
+
+void
+dims_overlay_memcache_put(const char *url, MagickWand *wand)
+{
+    dims_overlay_memcache *cache = overlay_memcache;
+    dims_overlay_mementry *slot = NULL;
+    char *key;
+    MagickWand *stored;
+    int i;
+
+    if (cache == NULL || url == NULL || wand == NULL) {
+        return;
+    }
+
+    apr_thread_mutex_lock(cache->mutex);
+
+    /* Another thread that also missed may have stored it first. Keep the first
+     * entry and add nothing. */
+    for (i = 0; i < cache->capacity; i++) {
+        if (cache->entries[i].url != NULL
+                && strcmp(cache->entries[i].url, url) == 0) {
+            apr_thread_mutex_unlock(cache->mutex);
+            return;
+        }
+    }
+
+    /* Take a free slot, or the oldest full one. */
+    for (i = 0; i < cache->capacity; i++) {
+        if (cache->entries[i].url == NULL) {
+            slot = &cache->entries[i];
+            break;
+        }
+        if (slot == NULL || cache->entries[i].used < slot->used) {
+            slot = &cache->entries[i];
+        }
+    }
+
+    key = strdup(url);
+    stored = CloneMagickWand(wand);
+
+    if (key == NULL || stored == NULL) {
+        free(key);
+        if (stored != NULL) {
+            DestroyMagickWand(stored);
+        }
+        apr_thread_mutex_unlock(cache->mutex);
+        return;
+    }
+
+    if (slot->url != NULL) {
+        DestroyMagickWand(slot->wand);
+        free(slot->url);
+    }
+
+    slot->url = key;
+    slot->wand = stored;
+    slot->inserted = apr_time_now();
+    slot->used = ++cache->clock;
+
+    apr_thread_mutex_unlock(cache->mutex);
+}
+
+void
+dims_overlay_memcache_destroy(void)
+{
+    dims_overlay_memcache *cache = overlay_memcache;
+    int i;
+
+    if (cache == NULL) {
+        return;
+    }
+
+    overlay_memcache = NULL;
+
+    for (i = 0; i < cache->capacity; i++) {
+        if (cache->entries[i].url != NULL) {
+            DestroyMagickWand(cache->entries[i].wand);
+            free(cache->entries[i].url);
+        }
+    }
+
+    apr_thread_mutex_destroy(cache->mutex);
+    free(cache->entries);
+    free(cache);
 }

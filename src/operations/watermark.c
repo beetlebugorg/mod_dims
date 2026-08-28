@@ -147,58 +147,71 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         goto done;
     }
 
-    overlay_wand = NewMagickWand();
+    /*
+     * A repeat overlay is already decoded in memory. Clone it and skip the
+     * decode. The allowlist check above still runs, so a memory hit obeys the
+     * same rule as a disk hit.
+     */
+    overlay_wand = dims_overlay_memcache_get(overlay_url);
 
-    // Try to read image from disk.
-    if (apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool) == 0) {
-        if (MagickReadImage(overlay_wand, finfo.fname) == MagickFalse) {
-            *err = "Unable to read the cached overlay image!";
-            goto done;
-        }
+    if (overlay_wand == NULL) {
+        overlay_wand = NewMagickWand();
 
-    // Write to disk.
-    } else {
-        apr_file_t *cached_file;
-        apr_size_t bytes_to_write;
+        // Try to read image from disk.
+        if (apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool) == 0) {
+            if (MagickReadImage(overlay_wand, finfo.fname) == MagickFalse) {
+                *err = "Unable to read the cached overlay image!";
+                goto done;
+            }
 
-        /* A failed transfer leaves data NULL and used zero. */
-        if (dims_get_image_data(d, overlay_url, &image_data, mode) != CURLE_OK) {
-            *err = "Unable to fetch overlay image from overlay URL!";
-            goto done;
-        }
+        // Write to disk.
+        } else {
+            apr_file_t *cached_file;
+            apr_size_t bytes_to_write;
 
-        /* The overlay reaches the same SVG renderer as the source, so it gets
-         * the same check against an external reference. */
-        if (!dims_svg_is_safe(d->pool, image_data.data, image_data.used, NULL)) {
-            *err = "Refused an overlay that references an external resource!";
-            goto done;
-        }
+            /* A failed transfer leaves data NULL and used zero. */
+            if (dims_get_image_data(d, overlay_url, &image_data, mode) != CURLE_OK) {
+                *err = "Unable to fetch overlay image from overlay URL!";
+                goto done;
+            }
 
-        if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
-            *err = "Unable to fetch overlay image from overlay URL!";
-            goto done;
-        }
+            /* The overlay reaches the same SVG renderer as the source, so it
+             * gets the same check against an external reference. */
+            if (!dims_svg_is_safe(d->pool, image_data.data, image_data.used, NULL)) {
+                *err = "Refused an overlay that references an external resource!";
+                goto done;
+            }
 
-        if (apr_file_open(&cached_file, filename, APR_FOPEN_CREATE | APR_FOPEN_WRITE, APR_FPROT_UREAD | APR_FPROT_UWRITE, d->pool) != APR_SUCCESS) {
-            *err = "Unable to open overlay cache file!";
-            goto done;
-        }
+            if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
+                *err = "Unable to fetch overlay image from overlay URL!";
+                goto done;
+            }
 
-        bytes_to_write = image_data.used;
-        if (apr_file_write(cached_file, image_data.data, &bytes_to_write) != APR_SUCCESS) {
+            if (apr_file_open(&cached_file, filename, APR_FOPEN_CREATE | APR_FOPEN_WRITE, APR_FPROT_UREAD | APR_FPROT_UWRITE, d->pool) != APR_SUCCESS) {
+                *err = "Unable to open overlay cache file!";
+                goto done;
+            }
+
+            bytes_to_write = image_data.used;
+            if (apr_file_write(cached_file, image_data.data, &bytes_to_write) != APR_SUCCESS) {
+                apr_file_close(cached_file);
+
+                *err = "Unable to write overlay image to cache!";
+                goto done;
+            }
+
             apr_file_close(cached_file);
 
-            *err = "Unable to write overlay image to cache!";
-            goto done;
+            /* Bound the cache on the way in. An unsigned request can still add
+             * an allowlisted entry, so the cache needs a limit. */
+            dims_overlay_cache_prune(d->pool, cache_dir,
+                    d->config->overlay_cache_max_entries,
+                    d->config->overlay_cache_max_age, apr_time_now());
         }
 
-        apr_file_close(cached_file);
-
-        /* Bound the cache on the way in. An unsigned request can still add an
-         * allowlisted entry, so the cache needs a limit. */
-        dims_overlay_cache_prune(d->pool, cache_dir,
-                d->config->overlay_cache_max_entries,
-                d->config->overlay_cache_max_age, apr_time_now());
+        /* Keep the decoded overlay so the next request clones it. The store
+         * holds its own copy; this wand stays with the request. */
+        dims_overlay_memcache_put(overlay_url, overlay_wand);
     }
 
     /* Three arguments: an opacity, a size, and a gravity. */

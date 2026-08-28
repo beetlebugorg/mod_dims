@@ -100,6 +100,9 @@ DimsOverlayCacheMaxAge 86400
 
 How long an overlay stays on disk, in seconds. `0` means it never expires.
 
+The module also keeps a few decoded overlays in memory, so a repeat watermark
+request skips the decode. A memory entry expires after this same age.
+
 An overlay must pass the allowlist, but an unsigned request can still add an
 allowlisted entry. Both bounds exist for that reason. A cache hit is checked
 against the allowlist again, so an entry one host wrote does not serve on a
