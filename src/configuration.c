@@ -310,6 +310,22 @@ dims_config_set_client(cmd_parms *cmd, void *d, int argc, char *const argv[])
 }
 
 static const char *
+dims_config_set_max_source_bytes(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    char *end = NULL;
+    apr_int64_t value = apr_strtoi64(arg, &end, 10);
+
+    if (end == arg || *end != '\0' || value < 0) {
+        return "DimsMaxSourceBytes must be a whole number of bytes, or 0 for no limit";
+    }
+
+    config->max_source_bytes = (size_t) value;
+    return NULL;
+}
+
+static const char *
 dims_config_set_no_image_url(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -402,6 +418,11 @@ const command_rec dims_directives[] =
                   dims_config_set_no_image_expire, NULL, RSRC_CONF,
                   "Default expire time for Cache-Control/Expires/Edge-Control headers for NOIMAGE image, in seconds."
                   "The default is 60"),
+    AP_INIT_TAKE1("DimsMaxSourceBytes",
+                  dims_config_set_max_source_bytes, NULL, RSRC_CONF,
+                  "Largest source image to accept, in bytes. A source larger than "
+                  "this is refused before it is decoded. The default is 0, which "
+                  "means no limit."),
     AP_INIT_TAKE1("DimsDownloadTimeout",
                   dims_config_set_download_timeout, NULL, RSRC_CONF,
                   "Timeout for downloading remote images."

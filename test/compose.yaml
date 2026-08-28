@@ -11,6 +11,7 @@ services:
     volumes:
       - ./origin:/usr/local/apache2/htdocs:ro
       - ./conf/origin.conf:/usr/local/apache2/conf/extra/origin.conf:ro
+      - ./origin-cgi:/usr/local/apache2/cgi-bin:ro
     command: >
       sh -c "sed -i 's|^Listen 80$$|Listen 8080|' /usr/local/apache2/conf/httpd.conf &&
              echo 'Include conf/extra/origin.conf' >> /usr/local/apache2/conf/httpd.conf &&

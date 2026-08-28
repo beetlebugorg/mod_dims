@@ -36,6 +36,7 @@
 #include <MagickWand/MagickWand.h>
 
 #include <curl/curl.h>
+#include <stdint.h>
 
 /* The version httpd reports and the status handler prints. */
 #define MODULE_RELEASE "$Revision: $"
@@ -84,6 +85,10 @@ typedef struct {
     size_t size;
     size_t used;
     long response_code;
+
+    /* Zero means no limit. Set from DimsMaxSourceBytes. */
+    size_t max_bytes;
+    int exceeded_limit;
 } dims_image_data_t;
 
 typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, const char **err);
@@ -131,6 +136,9 @@ struct dims_config_rec {
     MagickSizeType memory_size;
     MagickSizeType map_size;
     MagickSizeType disk_size;
+
+    /* Largest source image to accept, in bytes. Zero means no limit. */
+    size_t max_source_bytes;
 
     int curl_queue_size;
     char *secret_key;
