@@ -110,6 +110,33 @@ dims_set_sanitizers(mod_dims)
 # build called "apxs -i -a", which appended a LoadModule line to the running
 # server's httpd.conf. A build step must not edit an installed configuration.
 
+# The commit this build came from, for the status page.
+#
+# -DDIMS_COMMIT wins, because a container build has no git history: the build
+# context excludes .git, so the commit has to come in as an argument. Failing
+# that, read it here. A tarball with neither reports "unknown", which is
+# honest and does not fail the build.
+if(NOT DIMS_COMMIT)
+    find_package(Git QUIET)
+    if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            OUTPUT_VARIABLE DIMS_COMMIT
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET)
+    endif()
+endif()
+if(NOT DIMS_COMMIT)
+    set(DIMS_COMMIT "unknown")
+endif()
+
+configure_file(src/version.h.in "${CMAKE_BINARY_DIR}/generated/version.h" @ONLY)
+
+# Directory wide, so the test targets see it too. They compile the operations,
+# which reach mod_dims.h.
+include_directories("${CMAKE_BINARY_DIR}/generated")
+
 # Where the profiles are installed, and where the module looks for them.
 set(DIMS_PROFILE_DIR "${CMAKE_INSTALL_PREFIX}/share/mod_dims/profiles"
     CACHE PATH "Where the ICC colour profiles are installed")

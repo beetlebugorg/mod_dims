@@ -44,7 +44,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
         return OK;
     }
 
-    ap_add_version_component(p, "mod_dims/" MODULE_VERSION);
+    ap_add_version_component(p, "mod_dims/" DIMS_VERSION);
 
     /* Say which tiers of the network guard the operator left permissive, on
      * every server, so the setting is visible without reading the config. */

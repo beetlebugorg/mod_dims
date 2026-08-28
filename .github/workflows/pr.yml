@@ -143,7 +143,9 @@ jobs:
         run: make toolchain
 
       - name: Build the server image
-        run: docker build -f docker/Dockerfile -t mod-dims:ci .
+        run: |
+          docker build -f docker/Dockerfile -t mod-dims:ci \
+            --build-arg DIMS_COMMIT="$(git rev-parse --short HEAD)" .
 
       # The image has to start with nothing set. Every DIMS_ variable has a
       # default, and a missing one makes httpd refuse to start.
