@@ -26,6 +26,7 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
       latest: ${{ steps.read.outputs.latest }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
       commit: ${{ steps.read.outputs.commit }}
     steps:
       # Every tag, because the highest one decides whether this release moves
@@ -39,24 +40,44 @@ jobs:
         run: |
           set -eu
           tag="${GITHUB_REF_NAME#v}"
-          source_version=$(sed -n 's/^[[:space:]]*VERSION[[:space:]]*//p' CMakeLists.txt | head -1)
+
+          # project() takes numeric components only, so the pre-release name
+          # sits beside it. The two joined are what the module reports.
+          numeric=$(sed -n 's/^[[:space:]]*VERSION[[:space:]]*//p' CMakeLists.txt | head -1)
+          suffix=$(sed -n 's/^set(DIMS_VERSION_SUFFIX "\(.*\)")$/\1/p' CMakeLists.txt | head -1)
+          source_version="${numeric}${suffix}"
 
           if [ "$tag" != "$source_version" ]; then
             echo "::error::tag ${GITHUB_REF_NAME} names ${tag}, CMakeLists.txt declares ${source_version}"
             exit 1
           fi
 
-          # The latest name moves only for the highest version, so a backport
-          # tagged after a newer release does not move it backwards.
-          highest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
-          if [ "$tag" = "$highest" ]; then
-            echo "latest=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "latest=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::${tag} is not the highest version (${highest}), so latest stays where it is"
-          fi
-
           echo "version=${tag}" >> "$GITHUB_OUTPUT"
+
+          # A version with a suffix is a pre-release. It never moves the latest
+          # name, whatever it sorts as.
+          case "$tag" in
+            *-*)
+              echo "prerelease=true" >> "$GITHUB_OUTPUT"
+              echo "latest=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::${tag} is a pre-release, so latest stays where it is"
+              ;;
+            *)
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
+
+              # The latest name moves only for the highest release, so a
+              # backport tagged after a newer one does not move it backwards.
+              # Pre-release tags are left out: sort -V puts 4.0.0-beta after
+              # 4.0.0, which is the opposite of what it means.
+              highest=$(git tag -l 'v*' | sed 's/^v//' | sed '/-/d' | sort -V | tail -1)
+              if [ "$tag" = "$highest" ]; then
+                echo "latest=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "latest=false" >> "$GITHUB_OUTPUT"
+                echo "::notice::${tag} is not the highest release (${highest}), so latest stays where it is"
+              fi
+              ;;
+          esac
 
           # The short commit, so the status page reads the same as a local
           # build does.
@@ -165,9 +186,12 @@ jobs:
         run: |
           set -eu
           version="${{ needs.check.outputs.version }}"
-          latest_flag=""
+          flags=""
           if [ "${{ needs.check.outputs.latest }}" != "true" ]; then
-            latest_flag="--latest=false"
+            flags="--latest=false"
+          fi
+          if [ "${{ needs.check.outputs.prerelease }}" = "true" ]; then
+            flags="${flags} --prerelease"
           fi
 
           cat > notes.md <<EOF
@@ -184,4 +208,4 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --notes-file notes.md \
             --generate-notes \
-            $latest_flag
+            $flags

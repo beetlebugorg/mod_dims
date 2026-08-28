@@ -9,10 +9,16 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+# project() takes numeric components only, so a pre-release name lives beside
+# it. DIMS_VERSION is the two joined, and that is what the module reports and
+# what a release tag has to match.
 project(mod_dims
-    VERSION 3.3.31
+    VERSION 4.0.0
     DESCRIPTION "Dynamic image manipulation for Apache httpd"
     LANGUAGES C)
+
+set(DIMS_VERSION_SUFFIX "-beta")
+set(DIMS_VERSION "${PROJECT_VERSION}${DIMS_VERSION_SUFFIX}")
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -156,7 +162,7 @@ if(BUILD_TESTING)
     add_subdirectory(test)
 endif()
 
-message(STATUS "mod_dims ${PROJECT_VERSION}")
+message(STATUS "mod_dims ${DIMS_VERSION}")
 message(STATUS "  apxs          ${APXS_EXECUTABLE}")
 message(STATUS "  httpd headers ${APXS_INCLUDE_DIR}")
 message(STATUS "  module dir    ${APXS_LIBEXEC_DIR}")
