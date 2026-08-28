@@ -21,6 +21,10 @@ typedef struct {
     apr_uint32_t failure_count;
     apr_uint32_t download_timeout_count;
     apr_uint32_t imagemagick_timeout_count;
+
+    /* How many requests are in the image stage right now. DimsMaxInFlight caps
+     * it. Every worker adds to the same counter, so the cap is server wide. */
+    apr_uint32_t in_flight;
 } dims_stats_rec;
 
 extern dims_stats_rec *stats;

@@ -27,6 +27,7 @@ add_executable(dims_test
     http/test_url_structure.c
     http/test_thumbnail.c
     http/test_watermark.c
+    http/test_concurrency.c
     lib/common.c
     lib/golden.c
     lib/imagesize.c
@@ -34,9 +35,12 @@ add_executable(dims_test
     lib/signing.c
     lib/test.c)
 
+find_package(Threads REQUIRED)
+
 target_link_libraries(dims_test PRIVATE
     PkgConfig::CURL
-    PkgConfig::CRYPTO)
+    PkgConfig::CRYPTO
+    Threads::Threads)
 
 target_compile_definitions(dims_test PRIVATE _GNU_SOURCE)
 

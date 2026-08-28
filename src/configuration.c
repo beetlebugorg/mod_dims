@@ -36,6 +36,8 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->disable_encoded_fetch = 0;
     config->default_output_format = NULL;
 
+    config->max_in_flight = 0;
+
     config->area_size = (MagickSizeType) DIMS_AREA_SIZE_MB * 1024 * 1024;
     config->memory_size = (MagickSizeType) DIMS_MEMORY_SIZE_MB * 1024 * 1024;
     config->map_size = (MagickSizeType) DIMS_MAP_SIZE_MB * 1024 * 1024;
@@ -344,6 +346,22 @@ dims_config_set_max_source_bytes(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 static const char *
+dims_config_set_max_in_flight(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    char *end = NULL;
+    apr_int64_t value = apr_strtoi64(arg, &end, 10);
+
+    if (end == arg || *end != '\0' || value < 0 || value > INT_MAX) {
+        return "DimsMaxInFlight must be a whole number, or 0 for no limit";
+    }
+
+    config->max_in_flight = (int) value;
+    return NULL;
+}
+
+static const char *
 dims_config_set_allow_private_addresses(cmd_parms *cmd, void *dummy, int arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -575,6 +593,12 @@ const command_rec dims_directives[] =
                   "Largest source image to accept, in bytes. A source larger than "
                   "this is refused before it is decoded. The default is 0, which "
                   "means no limit."),
+    AP_INIT_TAKE1("DimsMaxInFlight",
+                  dims_config_set_max_in_flight, NULL, RSRC_CONF,
+                  "Largest number of requests in the image stage at once, across "
+                  "every worker. A further request is refused with 503, so a "
+                  "burst cannot exhaust memory. The default is 0, which means no "
+                  "limit."),
     AP_INIT_FLAG("DimsAllowPrivateAddresses",
                   dims_config_set_allow_private_addresses, NULL, RSRC_CONF,
                   "Whether a fetch may reach a private address, meaning "

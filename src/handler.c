@@ -194,6 +194,27 @@ verified:
         }
     }
 
+    /*
+     * Take a slot in the image stage. The count is server wide, so a burst
+     * cannot hold one pixel cache per worker and exhaust memory. A request over
+     * the cap gets a bare 503 and does no image work, which sheds load rather
+     * than adding to it. dims_send_image and dims_cleanup release the slot.
+     */
+    if (d->config->max_in_flight > 0) {
+        apr_uint32_t in_flight = apr_atomic_inc32(&stats->in_flight);
+
+        if (in_flight >= (apr_uint32_t) d->config->max_in_flight) {
+            apr_atomic_dec32(&stats->in_flight);
+            dims_free_request(d);
+            ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, d->r,
+                    "Image stage is full, cap %d reached, refusing: %s",
+                    d->config->max_in_flight, d->r->uri);
+            return HTTP_SERVICE_UNAVAILABLE;
+        }
+
+        d->holds_slot = 1;
+    }
+
     if(d->filename) {
         /* Handle local images. */
 

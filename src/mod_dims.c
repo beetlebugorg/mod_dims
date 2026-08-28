@@ -474,6 +474,22 @@ dims_set_validators(dims_request_rec *d)
     }
 }
 
+/*
+ * Releases the image stage slot this request holds.
+ *
+ * Safe to call more than once and safe on a request that never took a slot:
+ * the flag guards the decrement, so the counter falls by one for each request
+ * that entered the stage, whichever exit path runs first.
+ */
+static void
+dims_release_slot(dims_request_rec *d)
+{
+    if (d->holds_slot) {
+        d->holds_slot = 0;
+        apr_atomic_dec32(&stats->in_flight);
+    }
+}
+
 apr_status_t
 dims_send_image(dims_request_rec *d)
 {
@@ -546,6 +562,9 @@ dims_send_image(dims_request_rec *d)
     MagickRelinquishMemory(format);
     DestroyMagickWand(d->wand);
     d->wand = NULL;
+
+    /* The pixel cache is gone, so the image stage slot is free. */
+    dims_release_slot(d);
 
     /* After the image is sent record stats about this request. */
     if(d->status == DIMS_SUCCESS) {
@@ -700,6 +719,10 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
     if (status != DIMS_IGNORE) {
         d->status = status;
     }
+
+    /* The request leaves the image stage here, whether or not it took a slot.
+     * A drawn error image below is small and needs no slot of its own. */
+    dims_release_slot(d);
 
     dims_free_request(d);
 
@@ -878,6 +901,7 @@ dims_process_image(dims_request_rec *d)
         if (rc != OK) {
             dims_set_cache_headers(d);
             dims_free_request(d);
+            dims_release_slot(d);
             apr_atomic_inc32(&stats->success_count);
             return rc;
         }

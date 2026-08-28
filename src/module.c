@@ -127,6 +127,7 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     stats->failure_count = 0;
     stats->download_timeout_count = 0;
     stats->imagemagick_timeout_count = 0;
+    stats->in_flight = 0;
 
     return OK;
 }

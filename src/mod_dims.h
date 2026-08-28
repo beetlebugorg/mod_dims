@@ -159,6 +159,11 @@ struct dims_config_rec {
     /* Largest source image to accept, in bytes. Zero means no limit. */
     size_t max_source_bytes;
 
+    /* Largest number of requests in the image stage at once, across every
+     * worker. A further request is refused with 503. Set from DimsMaxInFlight.
+     * Zero means no limit. */
+    int max_in_flight;
+
     /* Whether a fetch may reach a private address. Set from
      * DimsAllowPrivateAddresses. Loopback and link local are refused whatever
      * this holds. */
@@ -287,6 +292,10 @@ struct dims_request_rec {
     /* Should Content-Disposition header bet set. */
     int send_content_disposition;
     char *content_disposition_filename;
+
+    /* Whether this request holds a slot in the image stage counter. It releases
+     * the slot once, when the response is sent or the request is cleaned up. */
+    int holds_slot;
 };
 
 #endif

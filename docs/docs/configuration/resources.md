@@ -59,8 +59,29 @@ DimsImagemagickAreaSize 128
 Megabytes any single image may use. Default 128. An image larger than this is
 cached on disk rather than in memory.
 
+## DimsMaxInFlight
+
+```apacheconf
+DimsMaxInFlight 0
+```
+
+Largest number of requests in the image stage at once, across every worker.
+Default 0, which means no limit.
+
+The other limits here are per process. This one is server wide: every worker
+adds to one counter. A request over the cap gets a 503 and does no image work,
+so a burst sheds load rather than exhausting memory. Without a cap, the number
+of requests decoding at once equals the worker count, and each one can hold a
+full pixel cache.
+
+Set it below the point where the concurrent pixel caches exceed the host
+memory. The counter covers the fetch as well as the transform, so a slow origin
+counts against it.
+
 ## Choosing values
 
 With `ServerLimit 16` and the defaults, sixteen processes may each hold 512 MB
 of pixel cache and write 2 GB to disk. Divide the memory a host has by the
-worker count, and set the limits from that.
+worker count, and set the limits from that. `DimsMaxInFlight` puts a ceiling on
+the concurrent requests directly, below the worker count when the per process
+limits alone are not enough.
