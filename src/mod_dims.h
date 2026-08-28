@@ -76,6 +76,18 @@ typedef enum {
     DIMS_NETWORK_REFUSED
 } dims_status_t;
 
+/* How a failure at the origin reaches the caller. Set from
+ * DimsOriginStatusMode. */
+typedef enum {
+    /* Report whatever the origin said. This is what the module has always
+     * done. */
+    DIMS_ORIGIN_STATUS_FORWARD = 0,
+
+    /* Report one of three: 404 for a missing source, 504 for a timeout, 502
+     * for every other origin failure. */
+    DIMS_ORIGIN_STATUS_MAP
+} dims_origin_status_mode;
+
 /* The HTTP status a dims_status_t maps to, and a short reason for the log. */
 int dims_http_status(int status);
 const char *dims_status_name(int status);
@@ -93,6 +105,15 @@ typedef struct {
     size_t max_bytes;
     int exceeded_limit;
 } dims_image_data_t;
+
+/*
+ * The status a failure at the origin reaches the caller with, or zero when
+ * this failure did not come from the origin or the mode is forward.
+ *
+ * Forward mode returns zero for everything, so the two response paths keep
+ * the statuses they have always emitted, including where they disagree.
+ */
+int dims_origin_status(dims_request_rec *d);
 
 typedef apr_status_t(dims_operation_func) (dims_request_rec *, char *args, const char **err);
 void smartCrop(MagickWand *wand, int resolution, unsigned long cropWidth, unsigned long cropHeight);
@@ -150,6 +171,14 @@ struct dims_config_rec {
     /* Whether the allowlist applies to a signed request. Set from
      * DimsAllowlistSigned: 0 logs what it would refuse, 1 refuses. */
     int allowlist_signed;
+
+    /* How a failure at the origin reaches the caller. Set from
+     * DimsOriginStatusMode. */
+    int origin_status_mode;
+
+    /* Whether the status handler prints the component versions. Set from
+     * DimsStatusVerbose. */
+    int status_verbose;
 
     int curl_queue_size;
     char *secret_key;

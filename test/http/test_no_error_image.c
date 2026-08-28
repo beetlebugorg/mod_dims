@@ -128,11 +128,36 @@ test_origin_failure_is_not_success(void)
     free(url);
 }
 
+/*
+ * A failure the module decided itself, on a request whose source fetch worked.
+ *
+ * The fetch leaves 200 on the request, so a mapping that read the origin's
+ * status here would answer 200 with no body. The module's own status is the
+ * one that describes what happened. 500 is not the clearest answer for a
+ * malformed geometry, but it is the answer the module gives, and this case
+ * holds it still while the mapping around it moves.
+ */
+static void
+test_bad_geometry_reports_the_module_status(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char *path = dims_sign_dims4("resize/not-a-size", url, NULL, NULL);
+    long status = status_of(path);
+
+    dims_test_logf("a malformed geometry with no error image returns %ld", status);
+    CHECK_INT(status, 500, "a malformed geometry");
+
+    free(path);
+    free(url);
+}
+
 const dims_test dims_tests_no_error_image[] = {
     { "TestUnknownClientIsAServerError", test_unknown_client_is_a_server_error, NULL },
     { "TestWrongSignatureIsABadRequest", test_wrong_signature_is_a_bad_request, NULL },
     { "TestExpiredSignatureIsABadRequest", test_expired_signature_is_a_bad_request, NULL },
     { "TestMissingSourceIsNotFound", test_missing_source_is_not_found, NULL },
     { "TestOriginFailureIsNotSuccess", test_origin_failure_is_not_success, NULL },
+    { "TestBadGeometryReportsTheModuleStatus",
+      test_bad_geometry_reports_the_module_status, NULL },
     DIMS_TEST_END
 };

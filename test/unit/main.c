@@ -21,6 +21,7 @@ extern const dims_test dims_tests_unit_adjustments[];
 extern const dims_test dims_tests_unit_output[];
 extern const dims_test dims_tests_unit_watermark[];
 extern const dims_test dims_tests_unit_netguard[];
+extern const dims_test dims_tests_unit_url[];
 
 static const dims_test_group groups[] = {
     { "unit/test_resize.c", dims_tests_unit_resize },
@@ -31,6 +32,7 @@ static const dims_test_group groups[] = {
     { "unit/test_output.c", dims_tests_unit_output },
     { "unit/test_watermark.c", dims_tests_unit_watermark },
     { "unit/test_netguard.c", dims_tests_unit_netguard },
+    { "unit/test_url.c", dims_tests_unit_url },
     { NULL, NULL }
 };
 

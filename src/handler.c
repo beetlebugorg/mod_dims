@@ -10,6 +10,7 @@
 #include "configuration.h"
 #include "curl.h"
 #include "netguard.h"
+#include "url.h"
 #include "encryption.h"
 #include "status.h"
 #include "pipeline.h"
@@ -369,7 +370,7 @@ dims_handler(request_rec *r)
     } else if(r->uri && strncmp(r->uri, "/dims/", 6) == 0) {
         int status = 0;
         char appid[50], b[10], w[10], h[10], q[10];
-        char *fixed_url, *url;
+        char *fixed_url;
 
         /* Translate provided parameters into new-style parameters. */
         b[0] = w[0] = h[0] = q[0] = '-';
@@ -391,14 +392,9 @@ dims_handler(request_rec *r)
             return dims_cleanup(d, NULL, DIMS_BAD_URL);
         }
 
-        /* HACK: If URL has "http:/" instead of "http://", correct it. */
-        url = strstr(r->uri, "http:/");
-        if(url && *(url + 6) != '/') {
-            fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
-        } else if(!url) {
+        fixed_url = dims_path_image_url(r->pool, r->uri, NULL);
+        if(!fixed_url) {
             return dims_cleanup(d, NULL, DIMS_BAD_URL);
-        } else {
-            fixed_url = url;
         }
 
         char *commands = apr_psprintf(r->pool, "%s", appid);
@@ -456,7 +452,7 @@ dims_handler(request_rec *r)
             (r->uri && strncmp(r->uri, "/dims3/", 7) == 0) ||
             (strcmp(r->handler, "dims4") == 0 )) {
         /* Handle new-style DIMS parameters. */
-        char *p, *url = NULL, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
+        char *p, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
         if (( strcmp( r->handler,"dims4") == 0)) {
                d->use_secret_key = 1;
         }
@@ -535,23 +531,18 @@ dims_handler(request_rec *r)
             }
         }
 
-        /* Parse out URL to image.
-         * HACK: If URL has "http:/" instead of "http://", correct it. 
-         */
+        /* The URL sits in the path when no query parameter carried it. */
         commands = apr_pstrdup(r->pool, r->uri);
         if(fixed_url == NULL) {
-            url = strstr(r->uri, "http:/");
-            if(url && *(url + 6) != '/') {
-                fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
-            } else if(!url) {
+            fixed_url = dims_path_image_url(r->pool, r->uri, NULL);
+            if(!fixed_url) {
                 return dims_cleanup(d, NULL, DIMS_BAD_URL);
-            } else {
-                fixed_url = url;
             }
 
-            /* Strip URL off URI.  This leaves only the tranformation parameters. */
-            p = strstr(commands, "http:/");
-            if(!p) return dims_cleanup(d, NULL, DIMS_BAD_URL);
+            /* Strip the URL off the copy, which leaves only the commands. */
+            if(!dims_path_image_url(r->pool, commands, &p)) {
+                return dims_cleanup(d, NULL, DIMS_BAD_URL);
+            }
             *p = '\0';
         }
 
@@ -584,14 +575,9 @@ dims_handler(request_rec *r)
     } else if(strcmp(r->handler, "dims-status") == 0) {
         return dims_status_handler(r);
     } else if(strcmp(r->handler, "dims-sizer") == 0) {
-        char *url, *fixed_url;
-        url = strstr(r->uri, "http:/");
-        if(url && *(url + 6) != '/') {
-            fixed_url = apr_psprintf(r->pool, "http://%s", url + 6);
-        } else if(!url) {
+        char *fixed_url = dims_path_image_url(r->pool, r->uri, NULL);
+        if(!fixed_url) {
             return dims_cleanup(d, NULL, DIMS_BAD_URL);
-        } else {
-            fixed_url = url;
         }
         d->image_url = fixed_url;
         d->unparsed_commands = NULL;

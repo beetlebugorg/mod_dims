@@ -14,6 +14,7 @@ add_executable(dims_test
     http/test_cache_headers.c
     http/test_crop.c
     http/test_errors.c
+    http/test_origin_status.c
     http/test_output.c
     http/test_resize.c
     http/test_rotate.c
@@ -100,12 +101,14 @@ add_executable(dims_unit_test
     unit/test_resize.c
     unit/test_rotate.c
     unit/test_netguard.c
+    unit/test_url.c
     unit/test_thumbnail.c
     unit/test_watermark.c
     lib/environment.c
     lib/golden.c
     lib/test.c
     ${CMAKE_SOURCE_DIR}/src/netguard.c
+    ${CMAKE_SOURCE_DIR}/src/url.c
     ${CMAKE_SOURCE_DIR}/src/operations/autolevel.c
     ${CMAKE_SOURCE_DIR}/src/operations/brightness.c
     ${CMAKE_SOURCE_DIR}/src/operations/crop.c

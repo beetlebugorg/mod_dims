@@ -58,3 +58,33 @@ dims_status_name(int status)
         default:                            return "unknown";
     }
 }
+
+int
+dims_origin_status(dims_request_rec *d)
+{
+    if (d->config->origin_status_mode != DIMS_ORIGIN_STATUS_MAP) {
+        return 0;
+    }
+
+    switch (d->status) {
+        case DIMS_FILE_NOT_FOUND:
+            return HTTP_NOT_FOUND;
+
+        case DIMS_DOWNLOAD_TIMEOUT:
+            return HTTP_GATEWAY_TIME_OUT;
+
+        case DIMS_FAILURE:
+            /*
+             * A failure the origin caused leaves its status on the request. A
+             * failure after a successful fetch, such as a malformed geometry,
+             * leaves 200 there, and it is the module's failure, not a bad
+             * gateway. The module's own mapping keeps those.
+             */
+            return (d->fetch_http_status != 0 && d->fetch_http_status != HTTP_OK)
+                    ? HTTP_BAD_GATEWAY : 0;
+
+        default:
+            /* Not a failure at the origin. */
+            return 0;
+    }
+}
