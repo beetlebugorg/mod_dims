@@ -180,7 +180,11 @@ jobs:
           origin=$(docker inspect -f \
             '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dims-origin)
           docker rm -f dims-ci
-          docker run -d --name dims-ci -e DIMS_WHITELIST="$origin" mod-dims:ci
+          # The origin runs on a private network address, so this run opts in.
+          docker run -d --name dims-ci \
+            -e DIMS_WHITELIST="$origin" \
+            -e DIMS_ALLOW_PRIVATE_ADDRESSES=on \
+            mod-dims:ci
           sleep 5
           docker exec dims-ci curl -fsS -o /tmp/out.png \
             "http://127.0.0.1:8000/dims3/development/resize/100x100/?url=http://$origin/grid.png"
