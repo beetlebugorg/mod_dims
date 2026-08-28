@@ -10,7 +10,7 @@
 #
 # It starts with no environment set. Every DIMS_ variable below has a default.
 
-ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r3
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r4
 ARG HTTPD_VERSION=2.4.68
 ARG HTTPD_DIGEST=sha256:979c38c2228d28c2edfd45c6e27dcee1c7b4a101a5526721ae8ece454e89e99e
 
@@ -62,10 +62,10 @@ ENV LC_ALL="C"
 # below, so the version ImageMagick was compiled against is the version it
 # loads.
 #
-# curl is for the health check. ca-certificates is for fetching an https
-# source.
+# ca-certificates is for verifying an https source. The health check uses the
+# curl the builder compiled, which is in the ImageMagick prefix copied below.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl && \
+    apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /build/mod_dims/build/libmod_dims.so /usr/local/apache2/modules/
@@ -75,6 +75,9 @@ COPY profiles/ /usr/local/share/mod_dims/profiles/
 COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
 
 ENV LD_LIBRARY_PATH=/usr/local/imagemagick/lib
+
+# The compiled tools, so curl and magick resolve on PATH inside the container.
+ENV PATH=/usr/local/imagemagick/bin:${PATH}
 
 # root owns the installation and the runtime user writes nothing in it. A
 # process an attacker controls must not be able to rewrite its own module and
@@ -96,4 +99,4 @@ USER 33
 # A real request, not a configuration check. The status handler answers
 # without reaching an origin.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -fsS -o /dev/null http://127.0.0.1:8000/dims-status/ || exit 1
+    CMD /usr/local/imagemagick/bin/curl -fsS -o /dev/null http://127.0.0.1:8000/dims-status/ || exit 1

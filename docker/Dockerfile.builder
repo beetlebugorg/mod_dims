@@ -30,7 +30,7 @@ FROM httpd:${HTTPD_VERSION}@${HTTPD_DIGEST}
 
 # Bump this when any pinned version below changes. The tag names the
 # ImageMagick version and this number, so two toolchains cannot share a name.
-ARG BUILDER_REVISION=3
+ARG BUILDER_REVISION=4
 
 ARG IMAGEMAGICK_VERSION=7.1.2-30
 ARG IMAGEMAGICK_SHA256=3034a64f22398e15ee3dd1e6b1aa83d838cfc47df1bb246ae0eca9590e6ace72
@@ -71,13 +71,12 @@ ARG FREETYPE_SHA256=0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f06
 ARG XML2_VERSION=2.13.8
 ARG XML2_SHA256=277294cb33119ab71b2bc81f2f445e9bc9435b893ad15bb2cd2b0e859a0ee84a
 
-# Only what compiles the delegates. Every image library comes from source
-# below, so none of them is installed here.
+# Only what compiles the delegates. Every image library, and OpenSSL and
+# libcurl, comes from source below, so none of them is installed here.
 RUN apt-get -y update && \
     apt-get install -y --no-install-recommends \
         build-essential cmake nasm ca-certificates pkg-config wget xz-utils \
-        libapr1-dev libaprutil1-dev \
-        libcurl4-openssl-dev libssl-dev && \
+        libapr1-dev libaprutil1-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Every delegate installs into one prefix, and each one after the first
@@ -166,4 +165,51 @@ RUN wget -q -O im.tar.gz \
         --without-magick-plus-plus && \
     make -j"$(nproc)" && make install && \
     cd .. && rm -rf "ImageMagick-${IMAGEMAGICK_VERSION}" im.tar.gz
+
+# libcurl fetches every source image, so its version and its TLS library are a
+# security surface. Both come from source, with HTTP/2 through nghttp2. The
+# module links this OpenSSL too, so one libcrypto is in the process.
+ARG OPENSSL_VERSION=3.5.8
+ARG OPENSSL_SHA256=a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2
+ARG NGHTTP2_VERSION=1.70.0
+ARG NGHTTP2_SHA256=e05cb1388eaca3830aded4ccf20044b6e1ac1a61411dcca11b0437c4285c8bc2
+ARG CURL_VERSION=8.21.0
+ARG CURL_SHA256=aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6
+
+# OpenSSL, from source into the same prefix. libcurl links it for TLS and the
+# module links it for HMAC, so both use one libcrypto. libdir=lib keeps it
+# beside the other libraries.
+RUN fetch "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
+        "${OPENSSL_SHA256}" && \
+    cd "openssl-${OPENSSL_VERSION}" && \
+    ./config --prefix=${PREFIX} --libdir=lib --openssldir=/etc/ssl shared no-tests && \
+    make -j"$(nproc)" && make install_sw && cd .. && rm -rf "openssl-${OPENSSL_VERSION}"
+
+# nghttp2 gives libcurl HTTP/2. Only the library, none of the tools.
+RUN fetch "https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz" \
+        "${NGHTTP2_SHA256}" && \
+    cd "nghttp2-${NGHTTP2_VERSION}" && \
+    ./configure --prefix=${PREFIX} --enable-lib-only --without-jemalloc && \
+    make -j"$(nproc)" && make install && cd .. && rm -rf "nghttp2-${NGHTTP2_VERSION}"
+
+# libcurl, from source into the same prefix. It links the OpenSSL, zlib, and
+# nghttp2 built above. Every protocol the module does not use is off, so the
+# build cannot reach one even if a URL names it. The network guard already
+# restricts the scheme; this is the second line.
+RUN fetch "https://curl.se/download/curl-${CURL_VERSION}.tar.xz" \
+        "${CURL_SHA256}" && \
+    cd "curl-${CURL_VERSION}" && \
+    ./configure --prefix=${PREFIX} \
+        --with-openssl=${PREFIX} \
+        --with-zlib=${PREFIX} \
+        --with-nghttp2=${PREFIX} \
+        --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
+        --enable-http \
+        --disable-static --disable-manual --disable-libcurl-option \
+        --without-libpsl \
+        --disable-ftp --disable-file --disable-ldap --disable-ldaps \
+        --disable-rtsp --disable-dict --disable-telnet --disable-tftp \
+        --disable-pop3 --disable-imap --disable-smtp --disable-gopher \
+        --disable-mqtt --disable-smb && \
+    make -j"$(nproc)" && make install && cd .. && rm -rf "curl-${CURL_VERSION}"
 
