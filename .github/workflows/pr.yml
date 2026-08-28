@@ -1,12 +1,24 @@
 name: CI
 
+# The module, not the documentation. A change under docs/, a markdown file, or
+# a documentation workflow runs docs-pr.yml instead.
 on:
   pull_request:
     paths-ignore:
+      - 'docs/**'
       - '**.md'
+      - 'LICENSE'
+      - 'NOTICE'
+      - '.github/workflows/docs-*.yml'
   push:
     branches:
       - main
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE'
+      - 'NOTICE'
+      - '.github/workflows/docs-*.yml'
 
 permissions:
   contents: read
