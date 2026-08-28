@@ -73,6 +73,14 @@ For the README, `docs/`, comments, error messages, and pull request bodies.
 - Six sentences per paragraph. Lists for sequences and sets.
 - Keep technical names and technical verbs unchanged.
 
+A comment says what the code does and why. It does not say what the code used
+to do. The reader has the current code and nothing else, so a defect that is
+already fixed is not their problem. Write "A parameter with no equals sign
+carries no value", not "the parser used to read past the terminator".
+
+Keep a comment to one or two lines. A block comment above a function earns its
+size; a block comment inside one usually means the code below it needs a name.
+
 ## Branches
 
 Work targets `main`. `master` is version 3.3.31 and takes hotfixes only.

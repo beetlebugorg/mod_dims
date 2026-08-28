@@ -7,6 +7,7 @@
 #include "operations.h"
 #include "../curl.h"
 #include "../netguard.h"
+#include "../url.h"
 
 #include <openssl/sha.h>
 #include <paths.h>
@@ -45,13 +46,15 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         const size_t args_len = strlen(d->r->args) + 1;
         char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
         char *token;
-        char *strtokstate;
+        char *strtokstate = NULL;
 
         token = apr_strtok(args, "&", &strtokstate);
         while (token) {
-            if (strncmp(token, "overlay=", 4) == 0) {
+            const char *value = dims_param_value(token, "overlay=");
+
+            if (value != NULL) {
                 ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
-                overlay_url = apr_pstrdup(d->r->pool, token + 8);
+                overlay_url = apr_pstrdup(d->r->pool, value);
                 ap_unescape_url(overlay_url);
             }
             token = apr_strtok(NULL, "&", &strtokstate);
@@ -111,7 +114,10 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
 
     // Try to read image from disk.
     if (apr_stat(&finfo, filename, APR_FINFO_SIZE, d->pool) == 0) {
-        MagickReadImage(overlay_wand, finfo.fname);
+        if (MagickReadImage(overlay_wand, finfo.fname) == MagickFalse) {
+            *err = "Unable to read the cached overlay image!";
+            return DIMS_FAILURE;
+        }
 
     // Write to disk.
     } else {
@@ -126,10 +132,15 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
             return DIMS_FAILURE;
         }
 
-        /* The result is not read. A failed fetch leaves image_data empty and
-         * MagickReadImageBlob reports it, which is the only reason this does
-         * not crash. Checking the code belongs with the wider error handling. */
-        (void) dims_get_image_data(d, overlay_url, &image_data, mode);
+        /* A failed transfer leaves data NULL and used zero. */
+        if (dims_get_image_data(d, overlay_url, &image_data, mode) != CURLE_OK) {
+            if (image_data.data) {
+                free(image_data.data);
+            }
+
+            *err = "Unable to fetch overlay image from overlay URL!";
+            return DIMS_FAILURE;
+        }
 
         if (MagickReadImageBlob(overlay_wand, image_data.data, image_data.used) == MagickFalse) {
             if (image_data.data) {
@@ -160,31 +171,28 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         free(image_data.data);
     }
 
-    /*
-     * Every one of these is read below whether or not its token was present,
-     * so a short argument list used whatever the stack held. Zero keeps the
-     * outcome the caller sees today, because a zero width and height make the
-     * scale fail, but now it fails the same way every time instead of
-     * depending on the stack. Rejecting the wrong argument count outright is
-     * the real fix and is a separate change.
-     */
+    /* Each is read below whether or not its token was present, so each needs
+     * a value. A zero width and height make the scale fail. */
     float opacity = 0.0f;
     double size = 0.0;
     GravityType gravity = UndefinedGravity;
 
-    char *token = strtok(args, ",");
+    /* apr_strtok keeps its state here. strtok keeps it in one static
+     * location shared by every request in the process. */
+    char *strtokstate = NULL;
+    char *token = apr_strtok(args, ",", &strtokstate);
 
     if (token) {
         opacity = atof(token);
     }
 
-    token = strtok(NULL, ",");
+    token = apr_strtok(NULL, ",", &strtokstate);
 
     if (token) {
         size = atof(token);
     }
 
-    token = strtok(NULL, ",");
+    token = apr_strtok(NULL, ",", &strtokstate);
     if (token) {
         DimsGravity *gravity_ptr = gravities;
         while (gravity_ptr->name != NULL) {
@@ -200,15 +208,9 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
     /*
      * Reduce the overlay's opacity.
      *
-     * ImageMagick 6 colorized with a transparent color and passed the wanted
-     * alpha as the third argument, which that version read as an opacity.
-     * Version 7 reads the same argument as a per channel blend, so the overlay
-     * came out fully opaque.
-     *
-     * The alpha has to be multiplied, not replaced. MagickSetImageAlpha would
-     * set every pixel to the same alpha, including the transparent background,
-     * which puts a translucent rectangle behind the overlay. Masking to the
-     * alpha channel and multiplying leaves a transparent pixel transparent.
+     * Multiply the alpha channel, never replace it. MagickSetImageAlpha sets
+     * every pixel to one alpha, including the transparent background, which
+     * puts a translucent rectangle behind the overlay.
      */
     MagickSetImageAlphaChannel(overlay_wand, OnAlphaChannel);
     {

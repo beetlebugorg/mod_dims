@@ -28,13 +28,9 @@ dims_http_status(int status)
         case DIMS_FILE_NOT_FOUND:
             return HTTP_NOT_FOUND;
 
-        /* Everything else reports as a server error, including the two
-         * timeouts, an unknown client, and a host the allowlist refused.
-         *
-         * Three of those are arguably wrong. A timeout is a gateway problem,
-         * an unknown client is a bad request, and a refused host is neither.
-         * Changing them changes what a caller sees, so it waits for the
-         * directive that lets an operator opt in. */
+        /* Everything else is a server error, including the two timeouts, an
+         * unknown client, and a host the allowlist refused. DimsOriginStatusMode
+         * map is what moves the ones that came from the origin. */
         default:
             return HTTP_INTERNAL_SERVER_ERROR;
     }

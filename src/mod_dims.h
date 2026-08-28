@@ -50,13 +50,7 @@
 #define LEGACY_DIMS_GIF 512
 #define LEGACY_DIMS_PNG 1024
 
-/*
- * How a request ended.
- *
- * These were defined as powers of two, which says they combine. Nothing ever
- * combined them: every use is == or !=, and DIMS_SUCCESS is zero, so it could
- * never have been a flag. An enumeration says what was always true.
- */
+/* How a request ended. These do not combine: every use is == or !=. */
 typedef enum {
     /* Leave the status already on the request alone. Only dims_cleanup reads
      * this, when it is reporting a failure that set the status itself. */
@@ -79,8 +73,7 @@ typedef enum {
 /* How a failure at the origin reaches the caller. Set from
  * DimsOriginStatusMode. */
 typedef enum {
-    /* Report whatever the origin said. This is what the module has always
-     * done. */
+    /* Report whatever the origin said. */
     DIMS_ORIGIN_STATUS_FORWARD = 0,
 
     /* Report one of three: 404 for a missing source, 504 for a timeout, 502
@@ -107,11 +100,9 @@ typedef struct {
 } dims_image_data_t;
 
 /*
- * The status a failure at the origin reaches the caller with, or zero when
- * this failure did not come from the origin or the mode is forward.
- *
- * Forward mode returns zero for everything, so the two response paths keep
- * the statuses they have always emitted, including where they disagree.
+ * The status a failure at the origin reaches the caller with, or zero when the
+ * failure did not come from the origin or the mode is forward. Zero leaves the
+ * caller's own mapping in charge.
  */
 int dims_origin_status(dims_request_rec *d);
 

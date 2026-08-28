@@ -19,15 +19,35 @@ static char to_hex(char code) {
     return hex[code & 15];
 }
 
-/* Returns a url-encoded version of str */
-/* IMPORTANT: be sure to free() the returned string after use */
-static char *url_encode(char *str) {
-    char *pstr = str, *buf = malloc(strlen(str) * 3 + 1), *pbuf = buf;
+/*
+ * Returns a url-encoded version of str, or NULL when the allocation fails.
+ * The caller frees the result.
+ *
+ * The character set is fixed. Changing it changes which URLs reach an origin.
+ */
+static char *url_encode(const char *str) {
+    const char *pstr = str;
+    char *buf;
+    char *pbuf;
+
+    /* Three bytes per input byte at most, and a terminator. */
+    buf = malloc(strlen(str) * 3 + 1);
+    if (buf == NULL) {
+        return NULL;
+    }
+
+    pbuf = buf;
     while (*pstr) {
-        if (isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' || *pstr == '~' || *pstr == ':' || *pstr == '/' || *pstr == '?' || *pstr == '=' || *pstr == '&')
-            *pbuf++ = *pstr;
+        /* isalnum takes an int holding an unsigned char value. A signed char
+         * above 127 is undefined for the ctype functions. */
+        unsigned char c = (unsigned char) *pstr;
+
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~' ||
+                c == ':' || c == '/' || c == '?' || c == '=' || c == '&')
+            *pbuf++ = (char) c;
         else
-            *pbuf++ = '%', *pbuf++ = to_hex(*pstr >> 4), *pbuf++ = to_hex(*pstr & 15);
+            *pbuf++ = '%', *pbuf++ = to_hex((char) (c >> 4)),
+            *pbuf++ = to_hex((char) (c & 15));
         pstr++;
     }
     *pbuf = '\0';
@@ -47,8 +67,7 @@ dims_write_image_cb(void *ptr, size_t size, size_t nmemb, void *data)
     size_t realsize;
     size_t needed;
 
-    /* size is always 1 from libcurl, but the product is still theirs to
-     * define, so do not let it wrap. */
+    /* size is always 1 from libcurl, but the product is theirs to define. */
     if (size != 0 && nmemb > SIZE_MAX / size) {
         return 0;
     }
@@ -74,9 +93,8 @@ dims_write_image_cb(void *ptr, size_t size, size_t nmemb, void *data)
             grown = mem->max_bytes + 1;
         }
 
-        /* Assign only after realloc succeeds. Assigning straight into
-         * mem->data loses the old pointer when it fails, which leaks the
-         * buffer and leaves the caller holding NULL with a stale length. */
+        /* Assign only after realloc succeeds, or a failure loses the
+         * buffer. */
         moved = (char *) realloc(mem->data, grown);
         if (moved == NULL) {
             return 0;
@@ -89,8 +107,7 @@ dims_write_image_cb(void *ptr, size_t size, size_t nmemb, void *data)
     memcpy(mem->data + mem->used, ptr, realsize);
     mem->used = needed;
 
-    /* The SVG path hands this buffer to apr_pstrcat, which reads it as a
-     * string. Terminating it keeps that read inside the allocation. */
+    /* The SVG path reads this buffer as a string. */
     mem->data[mem->used] = '\0';
 
     return realsize;
@@ -101,25 +118,41 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
 {
     dims_request_rec *d = (dims_request_rec *) data;
     size_t realsize = size * nmemb;
-    char *start = (char *) ptr;
-    char *header = (char *) ptr;
+    const char *start = (const char *) ptr;
+    const char *end = start + realsize;
+    const char *colon = NULL;
+    const char *cursor;
     char *key = NULL, *value = NULL;
 
-    while (header < (start + realsize)) {
-        if(*header == ':') {
-            key = apr_pstrndup(d->pool, start, header - start);
-            while(*header == ' ') {
-                header++;
-            }
-            value = apr_pstrndup(d->pool, header + 1, start + realsize - header - 3);
-            header = start + realsize - 1;
+    /* Split the line at its first colon. */
+    for (cursor = start; cursor < end; cursor++) {
+        if (*cursor == ':') {
+            colon = cursor;
+            break;
         }
-        header++;
     }
 
-    /* A redirect target arrives here before libcurl follows it. The address
-     * callback covers a hop that resolves somewhere refused; this covers a hop
-     * that resolves fine and is simply not a host the operator named. */
+    if (colon != NULL) {
+        const char *value_start = colon + 1;
+        const char *value_end = end;
+
+        while (value_start < end && (*value_start == ' ' || *value_start == '\t')) {
+            value_start++;
+        }
+
+        /* Trim whichever terminator the line carries. A line with no colon
+         * never reaches here. */
+        while (value_end > value_start &&
+                (value_end[-1] == '\r' || value_end[-1] == '\n')) {
+            value_end--;
+        }
+
+        key = apr_pstrndup(d->pool, start, (apr_size_t) (colon - start));
+        value = apr_pstrndup(d->pool, value_start,
+                (apr_size_t) (value_end - value_start));
+    }
+
+    /* A redirect target arrives here before libcurl follows it. */
     if(key && value && strcasecmp(key, "Location") == 0) {
         dims_netguard_check_redirect(d, value);
     }
@@ -134,8 +167,7 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
         d->etag = value;
     }
 
-    /* Returning short aborts the transfer, which is how a refused redirect
-     * stops before libcurl follows it. */
+    /* Returning short aborts the transfer. */
     if (d->net_refusal != DIMS_NET_OK) {
         return 0;
     }
@@ -190,7 +222,19 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
 
     /* Encode the fetch URL before downloading */
     if (!d->config->disable_encoded_fetch) {
-        fetch_url = url_encode(fetch_url);
+        char *encoded = url_encode(fetch_url);
+
+        if (encoded == NULL) {
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                    "Cannot allocate the encoded URL, on request: %s", d->r->uri);
+            data->data = NULL;
+            data->size = 0;
+            data->used = 0;
+            data->response_code = 0;
+            return CURLE_OUT_OF_MEMORY;
+        }
+
+        fetch_url = encoded;
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Encoded URL: %s ", fetch_url);
     }
 
@@ -202,9 +246,8 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
 
-    /* Stop a transfer whose declared length is already over the limit,
-     * before any of it is read. The write callback catches an origin that
-     * declares nothing and keeps sending. */
+    /* Stop a transfer whose declared length is already over the limit. The
+     * write callback catches an origin that declares nothing. */
     if (d->config->max_source_bytes > 0) {
         curl_easy_setopt(curl_handle, CURLOPT_MAXFILESIZE_LARGE,
                 (curl_off_t) d->config->max_source_bytes);
@@ -213,8 +256,7 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
 
     /* Every fetch passes the guard, including the sizer and the watermark
-     * overlay. Both reach this function without going through the allowlist
-     * check in the handler. */
+     * overlay, which do not reach the handler's allowlist check. */
     dims_netguard_install(curl_handle, d, mode);
     curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_DEBUGFUNCTION, dims_curl_debug_cb);

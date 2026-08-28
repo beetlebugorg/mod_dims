@@ -34,7 +34,7 @@ dims_handle_request(dims_request_rec *d)
 
     d->client_id = ap_getword(d->pool, (const char **) &d->unparsed_commands, '/');
 
-    if(!(d->client_config = 
+    if(!(d->client_config =
             apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
         return dims_cleanup(d, "Application ID is not valid", DIMS_BAD_CLIENT);
     }
@@ -59,7 +59,7 @@ dims_handle_request(dims_request_rec *d)
             return dims_cleanup( d, "Image Key has expired", DIMS_BAD_URL);
         }
         if ( expires - now > d->config->max_expiry_period && d->config->max_expiry_period >0 ) {
-            ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r, 
+            ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r,
                 "Image expiry too far in the future:%s %s now=%ld",expires_str, d->r->uri,now);
             return dims_cleanup(d, "Image key too far in the future", DIMS_BAD_URL);
         }
@@ -72,12 +72,19 @@ dims_handle_request(dims_request_rec *d)
             const size_t args_len = strlen(d->r->args) + 1;
             char *args = apr_pstrndup(d->r->pool, d->r->args, args_len);
             char *token;
-            char *strtokstate;
+            char *strtokstate = NULL;
 
             token = apr_strtok(args, "&", &strtokstate);
             while (token) {
-                char *param = strtok(token, "=");
-                apr_hash_set(params, param, APR_HASH_KEY_STRING, apr_pstrdup(d->r->pool, param + strlen(param) + 1));
+                /* A parameter with no equals sign carries no value. */
+                char *equals = strchr(token, '=');
+
+                if (equals != NULL) {
+                    *equals = '\0';
+                    apr_hash_set(params, token, APR_HASH_KEY_STRING,
+                            apr_pstrdup(d->r->pool, equals + 1));
+                }
+
                 token = apr_strtok(NULL, "&", &strtokstate);
             }
         }
@@ -93,40 +100,49 @@ dims_handle_request(dims_request_rec *d)
             s++;
         }
 
+        /* Check the key before building the input. apr_pstrcat stops at its
+         * first NULL argument, which would hash the expiry alone. */
+        if (d->client_config->secret_key == NULL) {
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                "Developer key not set for client '%s'", d->client_config->id);
+            return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
+        }
+
         // Standard signature params.
         char *signature_params = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, commands, d->image_url, NULL);
 
-        // Concatenate additional params.
-        char *token;
-        char *strtokstate;
-        token = apr_strtok(apr_hash_get(params, "_keys", APR_HASH_KEY_STRING), ",", &strtokstate);
-        while (token) {
-            signature_params = apr_pstrcat(d->pool, signature_params, apr_hash_get(params, token, APR_HASH_KEY_STRING), NULL);
-            token = apr_strtok(NULL, ",", &strtokstate);
+        /* Concatenate the additional params _keys names. _keys is optional. */
+        char *keys = apr_hash_get(params, "_keys", APR_HASH_KEY_STRING);
+
+        if (keys != NULL) {
+            char *strtokstate = NULL;
+            char *token = apr_strtok(keys, ",", &strtokstate);
+
+            while (token) {
+                const char *value = apr_hash_get(params, token, APR_HASH_KEY_STRING);
+
+                signature_params = apr_pstrcat(d->pool, signature_params, value, NULL);
+                token = apr_strtok(NULL, ",", &strtokstate);
+            }
         }
 
         // Hash.
         gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
-        
-        if(d->client_config->secret_key == NULL) {
+
+        if (strncasecmp(hash, gen_hash, 6) != 0) {
             gen_hash[7] = '\0';
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
-                "Developer key not set for client '%s'", d->client_config->id);
-            return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
-        } else if (strncasecmp(hash, gen_hash, 6) != 0) {
-            gen_hash[7] = '\0';
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r,
                 "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, hash, d->r->uri, d->image_url);
             return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
         }
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
-            "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);    
+        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+            "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);
     }
 
     d->request_hash = ap_md5(d->pool,
             (unsigned char *) apr_pstrcat(d->pool, d->client_id,
                 d->unparsed_commands, d->image_url, NULL));
-  
+
     dims_set_optimal_geometry(d);
 
     if (d->image_url && *d->image_url == '/') {
@@ -189,8 +205,16 @@ dims_handle_request(dims_request_rec *d)
             return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
         }
 
-        char *filename = strrchr(uri.path, '/');
-        if (!filename || !uri.hostname) {
+        /* apr_uri_parse leaves path NULL for a URL with no path component,
+         * such as http://example.com. */
+        char *filename;
+
+        if (!uri.path || !uri.hostname) {
+            return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+        }
+
+        filename = strrchr(uri.path, '/');
+        if (!filename) {
             return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
         }
 
@@ -200,11 +224,8 @@ dims_handle_request(dims_request_rec *d)
 
         hostname = uri.hostname;
 
-        /*
-         * A signed request has never consulted the allowlist. Refusing one now
-         * would change which URLs /dims4/ accepts, so it waits for the
-         * operator to set DimsAllowlistSigned to enforce.
-         */
+        /* A signed request consults the allowlist only under
+         * DimsAllowlistSigned enforce. */
         if ( d->use_secret_key == 1 && !d->config->allowlist_signed ) {
             found = 1;
         } else {
@@ -214,7 +235,7 @@ dims_handle_request(dims_request_rec *d)
         if(found) {
             fetch_url = d->image_url;
         } else {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r, 
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
                     "Requested URL has hostname that is not in the "
                     "whitelist. (%s)", uri.hostname);
             return dims_cleanup(d, NULL, DIMS_HOSTNAME_NOT_IN_WHITELIST);
@@ -223,22 +244,10 @@ dims_handle_request(dims_request_rec *d)
         /* Fetch the image into a buffer. */
         if (fetch_url && dims_fetch_remote_image(d, fetch_url) != 0) {
             /*
-             * The source failed. Send the error image instead, and when there
-             * is none, report what went wrong.
-             *
-             * This returned DECLINED, which leaked the wand and handed the
-             * request back to httpd. httpd looked for a file at the request
-             * path, did not find one, and answered 404. The status was right
-             * by accident and said nothing about what happened.
-             */
-            /*
-             * Report the status the source failure produced, and a plain
-             * failure when it produced none.
-             *
-             * DIMS_IGNORE alone is not enough. dims_fetch_remote_image only
-             * sets a status when the origin answered 404; for any other
-             * failure the request is still marked successful, and asking
-             * dims_cleanup to keep that status answers 200 with no body.
+             * The source failed. Send the error image, and report the status
+             * the failure produced. dims_fetch_remote_image records one only
+             * for a 404, so anything else needs DIMS_FAILURE rather than
+             * DIMS_IGNORE, which would keep the success it was marked with.
              */
             if (dims_fetch_remote_image(d, NULL) != 0) {
                 return dims_cleanup(d, NULL,
@@ -258,7 +267,7 @@ dims_handle_request(dims_request_rec *d)
 apr_status_t
 dims_sizer(dims_request_rec *d)
 {
-    
+
     apr_uri_t uri;
     long width, height;
 
@@ -270,12 +279,8 @@ dims_sizer(dims_request_rec *d)
         return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
     }
 
-    /*
-     * The sizer took any URL from any caller and reported whether it decoded
-     * as an image, which made it a scanner. It carries no signature, so the
-     * allowlist is the only gate it can have, and it applies here whatever
-     * DimsAllowlistSigned holds.
-     */
+    /* The sizer carries no signature, so the allowlist is its only gate and
+     * applies whatever DimsAllowlistSigned holds. */
     if(!dims_host_allowed(d->config->whitelist, uri.hostname)) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
                 "Requested URL has hostname that is not in the "
@@ -286,7 +291,7 @@ dims_sizer(dims_request_rec *d)
     if(dims_fetch_remote_image(d, d->image_url ) != 0) {
         return dims_cleanup(d, "Unable to get image file", DIMS_FILE_NOT_FOUND);
     }
- 
+
     width = MagickGetImageWidth(d->wand);
     height = MagickGetImageHeight(d->wand);
     DestroyMagickWand(d->wand);
@@ -298,30 +303,17 @@ dims_sizer(dims_request_rec *d)
 
 
 
-/**
- * The apache handler.  Apache will call this method when a request
- * for /dims/, /dims3/, /dims4/ or an image is recieved.
+/*
+ * The httpd handler, called for /dims/, /dims3/, /dims4/, and a local image.
  *
- * Depending on how this function is called it will do one of three
- * things:
- *
- * 1) Transform old-style request into a new-style request and 
- *    pass it along to the dims_handle_newstyle function.
- * 
- * 2) Parse out the URL and commands and pass them along
- *    to the dims_handle_newstyle function.
- *
- * 3) Load the image from the filesystem and pass it along
- *    with the commands (r->path_info) to dims_process_image.
+ * It reads the request into a dims_request_rec and hands it to
+ * dims_handle_request, dims_sizer, or dims_process_image.
  */
 apr_status_t
 dims_handler(request_rec *r)
 {
-    /*
-     * apr_pcalloc, not apr_palloc. The list below sets one field at a time,
-     * so every field it does not name holds whatever the pool handed over.
-     * Zeroing first makes a forgotten field NULL or zero rather than garbage.
-     */
+    /* apr_pcalloc, so a field the list below does not name is zero rather
+     * than whatever the pool held. */
     dims_request_rec *d = (dims_request_rec *)
             apr_pcalloc(r->pool, sizeof(dims_request_rec));
 
@@ -357,7 +349,7 @@ dims_handler(request_rec *r)
     apr_table_setn(r->notes, "DIMS_DL_TIME", "-");
     apr_table_setn(r->notes, "DIMS_IM_TIME", "-");
 
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
             "Handler %s : %s", r->handler, r->uri);
     /* Handle old-style DIMS parameters. */
     if(strcmp(r->handler, "dims-local") == 0 &&
@@ -374,9 +366,9 @@ dims_handler(request_rec *r)
 
         /* Translate provided parameters into new-style parameters. */
         b[0] = w[0] = h[0] = q[0] = '-';
-        status = sscanf(r->uri + 5, 
-                "/%49[^/]/%9[^/]/%9[^/]/%9[^/]/%9[^/]/", 
-                (char *) &appid, (char *) &b, (char *) &w, (char *) &h, 
+        status = sscanf(r->uri + 5,
+                "/%49[^/]/%9[^/]/%9[^/]/%9[^/]/%9[^/]/",
+                (char *) &appid, (char *) &b, (char *) &w, (char *) &h,
                 (char *) &q);
 
         if(status != 5) {
@@ -403,19 +395,19 @@ dims_handler(request_rec *r)
             if(!width && !height) {
                 return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
             }
-            commands = apr_psprintf(r->pool, "%s/legacy_thumbnail/%ldx%ld", 
+            commands = apr_psprintf(r->pool, "%s/legacy_thumbnail/%ldx%ld",
                     commands, (long) width, (long) height);
         } else if(bitmap & LEGACY_DIMS_CROP || bitmap & LEGACY_DIMS_RESIZE) {
             const char *cmd = (bitmap & LEGACY_DIMS_RESIZE) ? "resize" : "legacy_crop";
 
             if(width && !height) {
-                commands = apr_psprintf(r->pool, "%s/%s/%ld", 
+                commands = apr_psprintf(r->pool, "%s/%s/%ld",
                         commands, cmd, (long) width);
             } else if(height && !width) {
-                commands = apr_psprintf(r->pool, "%s/%s/x%ld", 
+                commands = apr_psprintf(r->pool, "%s/%s/x%ld",
                         commands, cmd, (long) height);
             } else if(width && height) {
-                commands = apr_psprintf(r->pool, "%s/%s/%ldx%ld", 
+                commands = apr_psprintf(r->pool, "%s/%s/%ldx%ld",
                         commands, cmd, (long) width, (long) height);
             } else {
                 return dims_cleanup(d, NULL, DIMS_BAD_ARGUMENTS);
@@ -423,23 +415,23 @@ dims_handler(request_rec *r)
         }
 
         if(bitmap & LEGACY_DIMS_JPG) {
-            commands = apr_psprintf(r->pool, "%s/format/jpg", 
+            commands = apr_psprintf(r->pool, "%s/format/jpg",
                     commands);
         } else if(bitmap & LEGACY_DIMS_PNG) {
-            commands = apr_psprintf(r->pool, "%s/format/png", 
+            commands = apr_psprintf(r->pool, "%s/format/png",
                     commands);
         } else if(bitmap & LEGACY_DIMS_GIF) {
-            commands = apr_psprintf(r->pool, "%s/format/gif", 
+            commands = apr_psprintf(r->pool, "%s/format/gif",
                     commands);
         }
 
         if(bitmap & LEGACY_DIMS_SHARPEN) {
-            commands = apr_psprintf(r->pool, "%s/sharpen/0.0x1.5", 
+            commands = apr_psprintf(r->pool, "%s/sharpen/0.0x1.5",
                     commands);
         }
 
         if(quality > 0 && quality <= 100) {
-            commands = apr_psprintf(r->pool, "%s/quality/%d", 
+            commands = apr_psprintf(r->pool, "%s/quality/%d",
                     commands, quality);
         }
 
@@ -457,7 +449,19 @@ dims_handler(request_rec *r)
                d->use_secret_key = 1;
         }
 
-        char *unparsed_commands = apr_pstrdup(r->pool, r->uri + 7);
+        /* The commands start at a fixed offset, so the location has to be
+         * the one that offset belongs to. */
+        char *unparsed_commands;
+
+        if (!dims_endpoint_prefix(r->uri)) {
+            ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+                    "The dims3 and dims4 handlers need a location of /dims3/ "
+                    "or /dims4/. This request arrived at %s.",
+                    r->uri ? r->uri : "");
+            return dims_cleanup(d, "Invalid URL in request.", DIMS_BAD_URL);
+        }
+
+        unparsed_commands = apr_pstrdup(r->pool, r->uri + DIMS_ENDPOINT_PREFIX_LEN);
         d->client_id = ap_getword(d->pool, (const char **) &unparsed_commands, '/');
 
         if(!(d->client_config =
@@ -473,31 +477,30 @@ dims_handler(request_rec *r)
             char *strtokstate;
             token = apr_strtok(args, "&", &strtokstate);
             while (token) {
-                if(strncmp(token, "url=", 4) == 0) {
+                /* dims_param_value compares the whole name, so a token
+                 * shorter than the name never matches. */
+                const char *value;
+
+                if((value = dims_param_value(token, "url=")) != NULL) {
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "ARG: %s", token);
-                    fixed_url = apr_pstrdup(r->pool, token + 4);
+                    fixed_url = apr_pstrdup(r->pool, value);
                     ap_unescape_url(fixed_url);
 
                     if (strcmp(fixed_url, "") == 0) {
                         return dims_cleanup(d, NULL, DIMS_BAD_URL);
                     }
-                } else if (strncmp(token, "download=1", 10) == 0) {
+                } else if (strcmp(token, "download=1") == 0) {
                     d->send_content_disposition = 1;
 
-                } else if (strncmp(token, "eurl=", 4) == 0) {
-                    eurl = apr_pstrdup(r->pool, token + 5);
+                } else if ((value = dims_param_value(token, "eurl=")) != NULL) {
+                    eurl = apr_pstrdup(r->pool, value);
 
                     // Hash secret via SHA-1.
                     unsigned char *secret = (unsigned char *) d->client_config->secret_key;
                     unsigned char hash[SHA_DIGEST_LENGTH];
 
-                    /*
-                     * DimsAddClient stores a secret of "-" as NULL, so a
-                     * client configured without one reaches this with nothing
-                     * to hash. strlen then read from address zero and killed
-                     * the worker, on a query parameter that needs no
-                     * signature.
-                     */
+                    /* DimsAddClient stores a secret of "-" as NULL, and
+                     * there is nothing to derive a key from. */
                     if (secret == NULL) {
                         return dims_cleanup(d, "Missing Developer Key",
                                 DIMS_BAD_CLIENT);
@@ -536,8 +539,8 @@ dims_handler(request_rec *r)
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Decrypted URL: %s", fixed_url);
                     break;
 
-                } else if (strncmp(token, "optimizeResize=", 4) == 0) {
-                    d->optimize_resize = atof(token + 15);
+                } else if ((value = dims_param_value(token, "optimizeResize=")) != NULL) {
+                    d->optimize_resize = atof(value);
                     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, "Overriding optimize resize: %f", d->optimize_resize);
                 }
                 token = apr_strtok(NULL, "&", &strtokstate);
@@ -571,7 +574,9 @@ dims_handler(request_rec *r)
         }
 
         d->image_url = image_url;
-        d->unparsed_commands = commands + 6;
+        /* One less than the prefix keeps the leading slash, which
+         * dims_handle_request steps over. */
+        d->unparsed_commands = commands + DIMS_ENDPOINT_PREFIX_LEN - 1;
 
         /* Calculate image filename for use with content disposition. */
         apr_uri_t uri;
