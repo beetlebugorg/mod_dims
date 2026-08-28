@@ -7,7 +7,7 @@
 # under TMPDIR works for both, and nothing in the tree ends up needing a chown.
 services:
   origin:
-    image: httpd:2.4.62
+    image: httpd:2.4.68
     volumes:
       - ./origin:/usr/local/apache2/htdocs:ro
       - ./conf/origin.conf:/usr/local/apache2/conf/extra/origin.conf:ro
