@@ -1,8 +1,8 @@
 /*
  * Reading a source URL out of a request path.
  *
- * Finding M18. The module searched for "http:/" alone, and "https:/" does not
- * contain it, so a TLS source in the path was never found.
+ * The module searched for "http:/" alone, and "https:/" does not contain it,
+ * so a TLS source in the path was never found.
  *
  * Copyright 2026 Jeremy Collins
  * SPDX-License-Identifier: Apache-2.0

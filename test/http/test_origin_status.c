@@ -52,9 +52,9 @@ default_request(const char *fixture)
 }
 
 /*
- * Finding M2. The origin's status became the caller's status, which reports
- * whether a target exists and what it wanted. In map mode an origin failure is
- * one of three answers and says nothing else.
+ * The origin's status became the caller's status, which reports whether a
+ * target exists and what it wanted. In map mode an origin failure is one of
+ * three answers and says nothing else.
  */
 static void
 test_origin_error_forwards_by_default(void)
@@ -142,9 +142,8 @@ test_map_leaves_a_module_failure_alone(void)
 }
 
 /*
- * Finding M17. The status page names every library a caller would need to
- * pick an exploit, and the shipped configuration exposes it with no access
- * control.
+ * The status page names every library a caller would need to pick an exploit,
+ * and the shipped configuration exposes it with no access control.
  */
 static void
 test_status_prints_versions_by_default(void)
@@ -183,9 +182,9 @@ test_status_hides_versions_when_asked(void)
 }
 
 /*
- * Finding M18. The sizer takes its URL from the path. httpd collapses the
- * double slash, and the module searched for "http:/" alone, so an https source
- * was never found and the request failed as a bad URL.
+ * The sizer takes its URL from the path. httpd collapses the double slash,
+ * and the module searched for "http:/" alone, so an https source was never
+ * found and the request failed as a bad URL.
  *
  * The origin speaks plain HTTP, so the https case cannot return an image. It
  * has to fail somewhere other than the URL parser, and a 400 says the parser
@@ -228,9 +227,9 @@ test_sizer_reads_an_https_url_from_the_path(void)
 }
 
 /*
- * Finding M1, on the server that enables the sizer. The sizer consulted no
- * allowlist, so any caller could ask it to connect anywhere and learn whether
- * the answer decoded as an image.
+ * The sizer, on the server that enables it. It consulted no allowlist, so any
+ * caller could ask it to connect anywhere and learn whether the answer decoded
+ * as an image.
  */
 static void
 test_sizer_applies_the_allowlist(void)
