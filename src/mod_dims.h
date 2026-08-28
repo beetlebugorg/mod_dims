@@ -106,6 +106,12 @@ typedef struct {
     int exceeded_limit;
 } dims_image_data_t;
 
+/* One command from the request path: a name and its arguments. */
+typedef struct {
+    char *name;
+    char *args;
+} dims_command;
+
 /*
  * The status a failure at the origin reaches the caller with, or zero when the
  * failure did not come from the origin or the mode is forward. Zero leaves the
@@ -236,6 +242,9 @@ struct dims_request_rec {
 
     /* The unparsed commands (resize, crop, etc). */
     char *unparsed_commands;
+
+    /* The commands parsed once into name and argument pairs. */
+    apr_array_header_t *commands;
 
     /* The original image size in bytes. */
     long original_image_size;

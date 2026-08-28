@@ -630,28 +630,22 @@ dims_draw_error_image(dims_request_rec *d)
     }
 
     /* The requested geometry, when the commands hold one. */
-    if (d->unparsed_commands != NULL) {
-        const char *cmds = d->unparsed_commands;
+    if (d->commands != NULL) {
         RectangleInfo rec;
+        int i;
 
-        while (*cmds != '\0') {
-            char *command = ap_getword(d->pool, &cmds, '/');
-            char *args;
+        for (i = 0; i < d->commands->nelts; i++) {
+            const dims_command *c =
+                    &((const dims_command *) d->commands->elts)[i];
 
-            if (*command == '\0') {
-                break;
-            }
-
-            args = ap_getword(d->pool, &cmds, '/');
-
-            if (strcmp(command, "resize") == 0 ||
-                    strcmp(command, "thumbnail") == 0 ||
-                    strcmp(command, "crop") == 0 ||
-                    strcmp(command, "legacy_thumbnail") == 0 ||
-                    strcmp(command, "legacy_crop") == 0) {
+            if (strcmp(c->name, "resize") == 0 ||
+                    strcmp(c->name, "thumbnail") == 0 ||
+                    strcmp(c->name, "crop") == 0 ||
+                    strcmp(c->name, "legacy_thumbnail") == 0 ||
+                    strcmp(c->name, "legacy_crop") == 0) {
                 memset(&rec, 0, sizeof(rec));
 
-                if (ParseAbsoluteGeometry(args, &rec) != NoValue) {
+                if (ParseAbsoluteGeometry(c->args, &rec) != NoValue) {
                     if (rec.width > 0) {
                         width = rec.width;
                     }
@@ -744,34 +738,61 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
  * large image cheap. A 1817x3000 source down to 78x110 takes 105ms with it
  * and 396ms without.
  */
+/*
+ * Splits unparsed_commands into name and argument pairs, once. Every later pass
+ * reads d->commands rather than walking the string again. An empty segment,
+ * such as a leading or doubled slash, is skipped.
+ */
+void
+dims_parse_commands(dims_request_rec *d)
+{
+    const char *cmds = d->unparsed_commands;
+
+    d->commands = apr_array_make(d->pool, 8, sizeof(dims_command));
+
+    if (cmds == NULL) {
+        return;
+    }
+
+    while (*cmds != '\0') {
+        char *name = ap_getword(d->pool, &cmds, '/');
+        dims_command *command;
+
+        if (*name == '\0') {
+            continue;
+        }
+
+        command = (dims_command *) apr_array_push(d->commands);
+        command->name = name;
+        command->args = ap_getword(d->pool, &cmds, '/');
+    }
+}
+
 void
 dims_set_optimal_geometry(dims_request_rec *d)
 {
     MagickStatusType flags;
     RectangleInfo rec;
-    const char *cmds = d->unparsed_commands;
+    int i;
 
     if(!d->wand) {
         d->wand = NewMagickWand();
     }
 
-    /* Process operations. */
-    while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
-        char *command = ap_getword(d->pool, &cmds, '/');
+    if (d->commands == NULL) {
+        return;
+    }
 
-        if(strcmp(command, "resize") == 0 ||
-            strcmp(command, "legacy_thumbnail") == 0 ||
-            strcmp(command, "thumbnail") == 0) {
-            char *args = ap_getword(d->pool, &cmds, '/');
+    for (i = 0; i < d->commands->nelts; i++) {
+        const dims_command *c = &((const dims_command *) d->commands->elts)[i];
 
-            flags = ParseAbsoluteGeometry(args, &rec);
+        if(strcmp(c->name, "resize") == 0 ||
+            strcmp(c->name, "legacy_thumbnail") == 0 ||
+            strcmp(c->name, "thumbnail") == 0) {
+            flags = ParseAbsoluteGeometry(c->args, &rec);
             if(flags & WidthValue && flags & HeightValue && !(flags & PercentValue)) {
                 MagickSetSize(d->wand, rec.width, rec.height);
                 return;
-            }
-        } else {
-            if(strcmp(command, "") != 0) {
-                ap_getword(d->pool, &cmds, '/');
             }
         }
     }
@@ -788,67 +809,63 @@ static apr_status_t
 dims_run_commands(dims_request_rec *d, apr_hash_t *ops, int *exc_strip_cmd,
                   int *output_format_provided, const char **err)
 {
-    const char *cmds = d->unparsed_commands;
-    while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
-        char *command = ap_getword(d->pool, &cmds, '/');
+    int i;
+
+    for (i = 0; d->commands != NULL && i < d->commands->nelts; i++) {
+        const dims_command *c = &((const dims_command *) d->commands->elts)[i];
+        char *command = c->name;
+        char *args = c->args;
+        dims_operation_func *func;
 
         if (strcmp(command, "format") == 0) {
             *output_format_provided = 1;
         }
 
-        if(strlen(command) > 0) {
-            char *args = ap_getword(d->pool, &cmds, '/');
+        /* A NOIMAGE image must not be cropped, so a crop or a thumbnail becomes
+         * a resize to the same size. */
+        if (d->use_no_image &&
+                (strcmp(command, "crop") == 0 ||
+                strcmp(command, "legacy_thumbnail") == 0 ||
+                strcmp(command, "legacy_crop") == 0 ||
+                strcmp(command, "thumbnail") == 0)) {
+            RectangleInfo rec;
 
-            /* If the NOIMAGE image is being used for some reason then
-            * we don't want to crop it.
-            */
-            if(d->use_no_image &&
-                    (strcmp(command, "crop") == 0 ||
-                    strcmp(command, "legacy_thumbnail") == 0 ||
-                    strcmp(command, "legacy_crop") == 0 ||
-                    strcmp(command, "thumbnail") == 0)) {
-                RectangleInfo rec;
+            (void) ParseAbsoluteGeometry(args, &rec);
 
-                (void) ParseAbsoluteGeometry(args, &rec);
-
-                if(rec.width > 0 && rec.height == 0) {
-                    args = apr_psprintf(d->pool, "%ld", rec.width);
-                } else if(rec.height > 0 && rec.width == 0) {
-                    args = apr_psprintf(d->pool, "x%ld", rec.height);
-                } else if(rec.width > 0 && rec.height > 0) {
-                    args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
-                } else {
-                    return DIMS_BAD_ARGUMENTS;
-                }
-
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                    "Rewriting command %s to 'resize' because a NOIMAGE "
-                    "image is being processed.", command);
-
-                command = (char *) "resize";
+            if (rec.width > 0 && rec.height == 0) {
+                args = apr_psprintf(d->pool, "%ld", rec.width);
+            } else if (rec.height > 0 && rec.width == 0) {
+                args = apr_psprintf(d->pool, "x%ld", rec.height);
+            } else if (rec.width > 0 && rec.height > 0) {
+                args = apr_psprintf(d->pool, "%ldx%ld", rec.width, rec.height);
+            } else {
+                return DIMS_BAD_ARGUMENTS;
             }
 
-            // Check if the command is present and set flag.
-            if(strcmp(command, "strip") == 0) {
-                *exc_strip_cmd = 1;
-            }
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                "Rewriting command %s to 'resize' because a NOIMAGE "
+                "image is being processed.", command);
 
-            dims_operation_func *func =
-                    apr_hash_get(ops, command, APR_HASH_KEY_STRING);
-            if(func != NULL) {
-                apr_status_t code;
+            command = (char *) "resize";
+        }
 
-                ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
-                    "Executing command %s(%s), on request %s",
-                    command, args, d->r->uri);
+        if (strcmp(command, "strip") == 0) {
+            *exc_strip_cmd = 1;
+        }
 
-                if((code = func(d, args, err)) != DIMS_SUCCESS) {
-                    return code;
-                }
+        func = apr_hash_get(ops, command, APR_HASH_KEY_STRING);
+        if (func != NULL) {
+            apr_status_t code;
+
+            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
+                "Executing command %s(%s), on request %s",
+                command, args, d->r->uri);
+
+            if ((code = func(d, args, err)) != DIMS_SUCCESS) {
+                return code;
             }
         }
     }
-
 
     return DIMS_SUCCESS;
 }
@@ -938,11 +955,12 @@ dims_process_image(dims_request_rec *d)
     bool should_flatten = false;
 
     if (images > 1) {
-        const char *cmds = d->unparsed_commands;
-        while(cmds < d->unparsed_commands + strlen(d->unparsed_commands)) {
-            char *command = ap_getword(d->pool, &cmds, '/');
+        int i;
+        for (i = 0; d->commands != NULL && i < d->commands->nelts; i++) {
+            const dims_command *c =
+                    &((const dims_command *) d->commands->elts)[i];
 
-            if (strcmp(command, "watermark") == 0) {
+            if (strcmp(c->name, "watermark") == 0) {
                 should_flatten = true;
                 break;
             }

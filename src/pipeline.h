@@ -56,6 +56,10 @@ void dims_free_request(dims_request_rec *d);
  * image instead. */
 int dims_fetch_remote_image(dims_request_rec *d, const char *url);
 
+/* Parses unparsed_commands once into d->commands, a list of name and argument
+ * pairs. Every later pass reads that list rather than the string. */
+void dims_parse_commands(dims_request_rec *d);
+
 /* Tells ImageMagick the size the request will end at, so a large JPEG decodes
  * at a smaller scale. */
 void dims_set_optimal_geometry(dims_request_rec *d);

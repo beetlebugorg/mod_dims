@@ -156,6 +156,7 @@ verified:
                 d->client_id ? d->client_id : "",
                 d->unparsed_commands, d->image_url, NULL));
 
+    dims_parse_commands(d);
     dims_set_optimal_geometry(d);
 
     if (d->image_url && *d->image_url == '/') {
