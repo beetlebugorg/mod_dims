@@ -148,3 +148,32 @@ foreach(source IN LISTS DIMS_UNIT_SOURCES)
         set_tests_properties(unit.${case} PROPERTIES LABELS "unit")
     endforeach()
 endforeach()
+
+# -- The module loads
+#
+# The request cases prove the module works, but only once httpd is already
+# serving. When the module fails to load, httpd never starts, and every one of
+# them reports the same thing: the service did not answer. That is the least
+# useful failure the suite can produce.
+#
+# The shared memory defect found during the ImageMagick 7 port was exactly
+# this shape. The module was correct, the configuration was correct, and httpd
+# refused to start. These cases name that directly.
+#
+# They need httpd, not the compose services, so they carry the contract label.
+
+add_test(NAME ModuleLoadsIntoHttpd
+    COMMAND ${CMAKE_COMMAND}
+        -DHTTPD=/usr/local/apache2/bin/httpd
+        -DMODE=loads
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckModuleLoads.cmake)
+set_tests_properties(ModuleLoadsIntoHttpd PROPERTIES LABELS "contract")
+
+add_test(NAME ExampleConfigIsValid
+    COMMAND ${CMAKE_COMMAND}
+        -DHTTPD=/usr/local/apache2/bin/httpd
+        -DMODE=example
+        -DDIMS_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DDIMS_MODULE=$<TARGET_FILE:mod_dims>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckModuleLoads.cmake)
+set_tests_properties(ExampleConfigIsValid PROPERTIES LABELS "contract")
