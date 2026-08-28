@@ -1,5 +1,15 @@
 # Cache control
 
+## Revalidation
+
+The module sends an `ETag` when the source image sends one. The value comes
+from the commands and from the source's validator. A change to either one
+changes the value. The module forwards `Last-Modified` from the source.
+
+The module reads `If-None-Match` and `If-Modified-Since`. On a match it returns
+`304` with an empty body. It does not decode, transform, or encode the image.
+The `304` has the same `Cache-Control` and `Expires` as the full response.
+
 ## DimsCacheExpire
 
 ```apacheconf

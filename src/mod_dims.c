@@ -331,15 +331,15 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
     return 0;
 }
 
-apr_status_t
-dims_send_image(dims_request_rec *d)
+/*
+ * Sets Cache-Control, Edge-Control, and Expires.
+ *
+ * The 200 path and the 304 path both call this, so both responses use the same
+ * rules.
+ */
+static void
+dims_set_cache_headers(dims_request_rec *d)
 {
-    char buf[128];
-    unsigned char *blob;
-    char *format;
-    char *content_type;
-    size_t length;
-    apr_time_t start_time;
     int expire_time = 0;
 
     char *cache_control = NULL,
@@ -354,35 +354,6 @@ dims_send_image(dims_request_rec *d)
     int src_max_age = 0;
 
     int trust_src_img = 0;
-
-    format = MagickGetImageFormat(d->wand);
-
-    MagickResetIterator(d->wand);
-
-    start_time = apr_time_now();
-    blob = MagickGetImagesBlob(d->wand, &length);
-    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
-
-    /* Set the Content-Type based on the image format. */
-    content_type = apr_psprintf(d->pool, "image/%s", format);
-    ap_content_type_tolower(content_type);
-    ap_set_content_type(d->r, content_type);
-
-    /* A fetch that reached the origin reports what the origin said.
-     * dims_origin_status overrides that under DimsOriginStatusMode map. */
-    d->r->status = dims_origin_status(d);
-
-    if (d->r->status == 0) {
-        if (d->fetch_http_status != 0 && d->status != DIMS_FILE_NOT_FOUND) {
-            d->r->status = d->fetch_http_status;
-        } else {
-            d->r->status = dims_http_status(d->status);
-        }
-    }
-
-    if (blob == NULL) {
-        d->r->status = HTTP_BAD_REQUEST;
-    }
 
     if(d->status == DIMS_SUCCESS && d->fetch_http_status == 200 && d->client_config) {
 
@@ -469,17 +440,90 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->headers_out, "Edge-Control", edge_control);
     }
 
-    if(d->filename && d->config->include_disposition) {
-        dims_set_disposition(d, "inline", d->filename);
-    } else if(d->content_disposition_filename && d->send_content_disposition) {
-        dims_set_disposition(d, "attachment", d->content_disposition_filename);
-    }
-
     if(expire_time) {
         char buf[APR_RFC822_DATE_LEN];
         apr_time_t e = apr_time_now() + ((long long) expire_time * 1000L * 1000L);
         apr_rfc822_date(buf, e);
         apr_table_set(d->r->headers_out, "Expires", buf);
+    }
+}
+
+/*
+ * Builds the ETag from the request hash and the origin's validator. A change
+ * to the commands or to the source image changes the value.
+ */
+static const char *
+dims_response_etag(dims_request_rec *d)
+{
+    if (d->etag == NULL || d->request_hash == NULL) {
+        return NULL;
+    }
+
+    return apr_psprintf(d->pool, "\"%s\"",
+            ap_md5(d->pool, (unsigned char *)
+                    apr_pstrcat(d->pool, d->request_hash, d->etag, NULL)));
+}
+
+/* Sets ETag and Last-Modified on the response. */
+static void
+dims_set_validators(dims_request_rec *d)
+{
+    const char *etag = dims_response_etag(d);
+
+    if (etag != NULL) {
+        apr_table_set(d->r->headers_out, "ETag", etag);
+    }
+
+    if (d->last_modified != NULL) {
+        apr_table_set(d->r->headers_out, "Last-Modified", d->last_modified);
+    }
+}
+
+apr_status_t
+dims_send_image(dims_request_rec *d)
+{
+    char buf[128];
+    unsigned char *blob;
+    char *format;
+    char *content_type;
+    size_t length;
+    apr_time_t start_time;
+
+    format = MagickGetImageFormat(d->wand);
+
+    MagickResetIterator(d->wand);
+
+    start_time = apr_time_now();
+    blob = MagickGetImagesBlob(d->wand, &length);
+    d->imagemagick_time += (apr_time_now() - start_time) / 1000;
+
+    /* Set the Content-Type based on the image format. */
+    content_type = apr_psprintf(d->pool, "image/%s", format);
+    ap_content_type_tolower(content_type);
+    ap_set_content_type(d->r, content_type);
+
+    /* A fetch that reached the origin reports what the origin said.
+     * dims_origin_status overrides that under DimsOriginStatusMode map. */
+    d->r->status = dims_origin_status(d);
+
+    if (d->r->status == 0) {
+        if (d->fetch_http_status != 0 && d->status != DIMS_FILE_NOT_FOUND) {
+            d->r->status = d->fetch_http_status;
+        } else {
+            d->r->status = dims_http_status(d->status);
+        }
+    }
+
+    if (blob == NULL) {
+        d->r->status = HTTP_BAD_REQUEST;
+    }
+
+    dims_set_cache_headers(d);
+
+    if(d->filename && d->config->include_disposition) {
+        dims_set_disposition(d, "inline", d->filename);
+    } else if(d->content_disposition_filename && d->send_content_disposition) {
+        dims_set_disposition(d, "attachment", d->content_disposition_filename);
     }
 
     if(d->status == DIMS_SUCCESS) {
@@ -488,19 +532,7 @@ dims_send_image(dims_request_rec *d)
         apr_table_set(d->r->subprocess_env, buf, d->client_id);
     }
 
-    char *etag = NULL;
-    if (d->etag) {
-        etag = ap_md5(d->pool,
-                (unsigned char *) apr_pstrcat(d->pool, d->request_hash, d->etag, NULL));
-    }
-
-    if (etag) {
-        apr_table_set(d->r->headers_out, "ETag", etag);
-    }
-
-    if(d->last_modified) {
-        apr_table_set(d->r->headers_out, "Last-Modified", d->last_modified);
-    }
+    dims_set_validators(d);
 
     /* The length written, not a second measurement of the wand.
      * MagickGetImagesBlob serializes every image; MagickGetImageLength reports
@@ -838,6 +870,23 @@ apr_status_t
 dims_process_image(dims_request_rec *d)
 {
     apr_time_t start_time = apr_time_now();
+
+    /* Match the request validators before the image work starts.
+     * ap_meets_conditions reads ETag and Last-Modified from the response, so
+     * set them first. */
+    if (d->status == DIMS_SUCCESS) {
+        int rc;
+
+        dims_set_validators(d);
+        rc = ap_meets_conditions(d->r);
+
+        if (rc != OK) {
+            dims_set_cache_headers(d);
+            dims_free_request(d);
+            apr_atomic_inc32(&stats->success_count);
+            return rc;
+        }
+    }
 
     /* Hook in the progress monitor.  It gets passed a
      * dims_progress_rec which keeps track of the start time.

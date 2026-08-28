@@ -3,3 +3,6 @@
 
 # The code review and the remediation plan.
 specs/
+
+# CTest scratch output. Written by a ctest run in the source tree.
+/test/Testing/

@@ -340,6 +340,35 @@ test_dims5_error_image_without_a_geometry(void)
     dims_response_free(response);
 }
 
+/* /dims5/ returns 304 for a matching ETag, the same as /dims4/. */
+static void
+test_dims5_conditional_request(void)
+{
+    dims_response *first = dims5_request("resize/100x100", "grid.png", NULL);
+    const char *etag = dims_header_value(first, "ETag");
+    char header[512];
+    const char *headers[1];
+    char *url = dims_fixture_url("grid.png");
+    char *path = dims_sign_dims5("resize/100x100", url, NULL);
+    char full[2048];
+    dims_response *second;
+
+    CHECK(etag != NULL, "the first response must have an ETag");
+    snprintf(header, sizeof(header), "If-None-Match: %s", etag);
+    headers[0] = header;
+
+    snprintf(full, sizeof(full), "%s%s", dims5_url(), path);
+    second = dims_get_absolute_with_headers(full, headers, 1);
+
+    CHECK_INT(second->status, 304, "a request with a matching ETag");
+    CHECK_INT((long) second->body_len, 0, "the body length of a 304");
+
+    dims_response_free(first);
+    dims_response_free(second);
+    free(path);
+    free(url);
+}
+
 const dims_test dims_tests_dims5[] = {
     { "TestDims5Resize", test_dims5_resize, NULL },
     { "TestDims5SeveralCommands", test_dims5_several_commands, NULL },
@@ -357,5 +386,6 @@ const dims_test dims_tests_dims5[] = {
     { "TestDims5ErrorImage", test_dims5_error_image, NULL },
     { "TestDims5ErrorImageWithoutAGeometry",
       test_dims5_error_image_without_a_geometry, NULL },
+    { "TestDims5ConditionalRequest", test_dims5_conditional_request, NULL },
     DIMS_TEST_END
 };
