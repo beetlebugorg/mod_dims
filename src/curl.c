@@ -33,29 +33,64 @@ static char *url_encode(char *str) {
     return buf;
 }
 
-/**
- * This callback is called by the libcurl API to write data into
- * memory as it's being downloaded.
+/*
+ * Appends a chunk of the download to the buffer.
  *
- * The memory allocated here must be freed manually as it's not
- * allocated into an apache memory pool.
+ * Returning anything other than the chunk size aborts the transfer, which is
+ * how a failed allocation and an oversized source are reported.
  */
 static size_t
 dims_write_image_cb(void *ptr, size_t size, size_t nmemb, void *data)
 {
     dims_image_data_t *mem = (dims_image_data_t *) data;
-    size_t realsize = size * nmemb;
+    size_t realsize;
+    size_t needed;
 
-    /* Allocate more memory if needed. */
-    if(mem->size - mem->used <= realsize) {
-        mem->size = mem->size == 0 ? realsize : (mem->size + realsize) * 1.25;
-        mem->data = (char *) realloc(mem->data, mem->size);
+    /* size is always 1 from libcurl, but the product is still theirs to
+     * define, so do not let it wrap. */
+    if (size != 0 && nmemb > SIZE_MAX / size) {
+        return 0;
+    }
+    realsize = size * nmemb;
+
+    if (realsize > SIZE_MAX - mem->used) {
+        return 0;
+    }
+    needed = mem->used + realsize;
+
+    /* Zero means no limit, which is the default. */
+    if (mem->max_bytes > 0 && needed > mem->max_bytes) {
+        mem->exceeded_limit = 1;
+        return 0;
     }
 
-    if (mem->data) {
-        memcpy(&(mem->data[mem->used]), ptr, realsize);
-        mem->used += realsize;
+    /* One past the data, for the terminator below. */
+    if (needed + 1 > mem->size) {
+        size_t grown = (needed + 1) * 2;
+        char *moved;
+
+        if (mem->max_bytes > 0 && grown > mem->max_bytes + 1) {
+            grown = mem->max_bytes + 1;
+        }
+
+        /* Assign only after realloc succeeds. Assigning straight into
+         * mem->data loses the old pointer when it fails, which leaks the
+         * buffer and leaves the caller holding NULL with a stale length. */
+        moved = (char *) realloc(mem->data, grown);
+        if (moved == NULL) {
+            return 0;
+        }
+
+        mem->data = moved;
+        mem->size = grown;
     }
+
+    memcpy(mem->data + mem->used, ptr, realsize);
+    mem->used = needed;
+
+    /* The SVG path hands this buffer to apr_pstrcat, which reads it as a
+     * string. Terminating it keeps that read inside the allocation. */
+    mem->data[mem->used] = '\0';
 
     return realsize;
 }
@@ -124,6 +159,8 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     image_data.data = NULL;
     image_data.size = 0;
     image_data.used = 0;
+    image_data.max_bytes = d->config->max_source_bytes;
+    image_data.exceeded_limit = 0;
     int extra_time = 0;
 
     /* Allow for some extra time to download the NOIMAGE image. */
@@ -149,6 +186,14 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, dims_write_header_cb);
     curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, (void *) d);
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, d->config->download_timeout + extra_time);
+
+    /* Stop a transfer whose declared length is already over the limit,
+     * before any of it is read. The write callback catches an origin that
+     * declares nothing and keeps sending. */
+    if (d->config->max_source_bytes > 0) {
+        curl_easy_setopt(curl_handle, CURLOPT_MAXFILESIZE_LARGE,
+                (curl_off_t) d->config->max_source_bytes);
+    }
     curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
@@ -174,6 +219,12 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     code = curl_easy_perform(curl_handle);
 
     curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &image_data.response_code);
+
+    if (image_data.exceeded_limit) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                "Source image is larger than DimsMaxSourceBytes (%" APR_SIZE_T_FMT
+                " bytes), on request: %s", d->config->max_source_bytes, d->r->uri);
+    }
     curl_easy_cleanup(curl_handle);
 
     *data = image_data;

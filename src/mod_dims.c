@@ -227,16 +227,36 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             return 1;
         }
 
-        char *actual_image_data = image_data.data;
+        static const char xml_header[] =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
+        static const size_t xml_header_len = sizeof(xml_header) - 1;
 
-        // Ensure SVGs have the appropriate XML header.
-        if (image_data.size >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
-            actual_image_data = apr_pstrcat(d->pool, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n", image_data.data, NULL);
-            image_data.used += 55;
+        char *actual_image_data = image_data.data;
+        size_t actual_image_len = image_data.used;
+
+        /*
+         * ImageMagick wants the declaration before it will read an SVG, and
+         * an SVG that starts at <svg has none.
+         *
+         * The length is carried rather than recomputed. This used apr_pstrcat,
+         * which reads the download buffer as a string: it ran off the end of
+         * the allocation looking for a terminator, and the concatenated result
+         * was whatever length that search happened to find. The buffer is
+         * terminated now, but the size still comes from the bytes received,
+         * not from a search.
+         */
+        if (image_data.used >= 4 && strncmp(image_data.data, "<svg", 4) == 0) {
+            actual_image_len = xml_header_len + image_data.used;
+            actual_image_data = apr_palloc(d->pool, actual_image_len + 1);
+
+            memcpy(actual_image_data, xml_header, xml_header_len);
+            memcpy(actual_image_data + xml_header_len, image_data.data,
+                   image_data.used);
+            actual_image_data[actual_image_len] = '\0';
         }
 
         start_time = apr_time_now();
-        if(MagickReadImageBlob(d->wand, actual_image_data, image_data.used)
+        if(MagickReadImageBlob(d->wand, actual_image_data, actual_image_len)
                 == MagickFalse) {
             ExceptionType et;
 

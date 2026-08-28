@@ -27,6 +27,7 @@ extern const dims_test dims_tests_cache_headers[];
 extern const dims_test dims_tests_errors[];
 extern const dims_test dims_tests_status[];
 extern const dims_test dims_tests_no_error_image[];
+extern const dims_test dims_tests_source_limit[];
 
 static const dims_test_group groups[] = {
     { "test_resize.c", dims_tests_resize },
@@ -43,6 +44,7 @@ static const dims_test_group groups[] = {
     { "test_errors.c", dims_tests_errors },
     { "test_status.c", dims_tests_status },
     { "test_no_error_image.c", dims_tests_no_error_image },
+    { "test_source_limit.c", dims_tests_source_limit },
     { NULL, NULL }
 };
 
