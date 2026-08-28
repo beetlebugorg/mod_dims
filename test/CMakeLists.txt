@@ -27,7 +27,6 @@ add_executable(dims_test
     http/test_thumbnail.c
     http/test_watermark.c
     lib/common.c
-    lib/environment.c
     lib/golden.c
     lib/imagesize.c
     lib/request.c
@@ -108,7 +107,6 @@ add_executable(dims_unit_test
     unit/test_url.c
     unit/test_thumbnail.c
     unit/test_watermark.c
-    lib/environment.c
     lib/golden.c
     lib/test.c
     ${CMAKE_SOURCE_DIR}/src/encryption.c

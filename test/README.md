@@ -58,21 +58,23 @@ is how each pull request proves it closed the defect.
 
 ## The golden files
 
-Golden bytes depend on the ImageMagick build, so the directory name carries the
-distribution and the ImageMagick version:
+One set, named for the case and nothing else:
 
 ```
-golden/debian12-im6.9/grid.TestResize.golden.png
+golden/grid.TestResize.golden.png
 ```
 
-`lib/environment.c` builds the name. Regenerating on a different build writes a
-new directory rather than overwriting someone else's.
+The name says nothing about the toolchain, because the bytes do not depend on
+it. Eight image libraries moved from the distribution's packages to versions
+built from source, several of them years newer, and all 91 files stayed byte
+for byte identical. So did a move from Debian 12 to Debian 13, which changed
+glibc and the compiler.
 
-The name carries no architecture. amd64 and arm64 were measured to produce all
-90 files byte for byte identical, so they share one set, and the arm64 CI job
-runs the same cases against the same baselines. Two sets would let the
-architectures drift apart with nothing to notice, because each would only ever
-be compared against itself.
+The same holds across architectures. amd64 and arm64 were measured identical,
+and the arm64 job runs the same cases against the same baselines.
+
+That is what makes the comparison worth making. A byte that moves is a change
+in what the module produces, not in what compiled it.
 
 A change that moves a golden file needs a reason in the pull request, and each
 one attaches before and after images. A golden change anywhere else is a bug.

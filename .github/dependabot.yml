@@ -1,0 +1,30 @@
+# What Dependabot can see, and what it cannot.
+#
+# It reads the actions in .github/workflows and the FROM lines in docker/. It
+# cannot read the eight image libraries the toolchain compiles, because those
+# are an ARG and a checksum inside a RUN, which no ecosystem understands.
+# Those are checked by hand. docker/Dockerfile.builder says so.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ""
+    labels:
+      - dependencies
+
+  # The base image is pinned by tag and digest together. Dependabot moves both,
+  # which is the point: a digest that stayed while the tag moved would name a
+  # different image under the same version.
+  - package-ecosystem: docker
+    directories:
+      - /docker
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ""
+    labels:
+      - dependencies

@@ -8,7 +8,6 @@
  */
 
 #include "golden.h"
-#include "environment.h"
 #include "test.h"
 
 #include <errno.h>
@@ -26,7 +25,7 @@ golden_dir(void)
                                                 : "/build/mod_dims/test/golden";
 }
 
-/* Creates the environment directory. Returns 0 on success. */
+/* Creates the golden directory. Returns 0 on success. */
 static int
 ensure_dir(const char *path)
 {
@@ -103,14 +102,13 @@ first_difference(const unsigned char *a, size_t a_len, const unsigned char *b, s
 void
 assert_golden(const char *name, const unsigned char *body, size_t body_len, const char *ext)
 {
-    char dir[512];
+    const char *dir = golden_dir();
     char golden_path[1024];
     char failed_path[1024];
     unsigned char *golden;
     size_t golden_len = 0;
     long offset;
 
-    snprintf(dir, sizeof(dir), "%s/%s", golden_dir(), dims_test_environment());
     snprintf(golden_path, sizeof(golden_path), "%s/%s.golden%s", dir, name, ext);
     snprintf(failed_path, sizeof(failed_path), "%s/%s.failed%s", dir, name, ext);
 
