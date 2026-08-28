@@ -372,11 +372,18 @@ dims_send_image(dims_request_rec *d)
      * A fetch that reached the origin reports whatever the origin said, which
      * is why an origin error becomes the caller's error. dims_http_status
      * covers the cases the module decided itself.
+     *
+     * DimsOriginStatusMode map replaces the forwarded status with one of
+     * three. It is the only value that changes what a caller sees.
      */
-    if (d->fetch_http_status != 0 && d->status != DIMS_FILE_NOT_FOUND) {
-        d->r->status = d->fetch_http_status;
-    } else if (d->status != DIMS_SUCCESS) {
-        d->r->status = dims_http_status(d->status);
+    d->r->status = dims_origin_status(d);
+
+    if (d->r->status == 0) {
+        if (d->fetch_http_status != 0 && d->status != DIMS_FILE_NOT_FOUND) {
+            d->r->status = d->fetch_http_status;
+        } else {
+            d->r->status = dims_http_status(d->status);
+        }
     }
 
     if (blob == NULL) {
@@ -624,7 +631,9 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
      * developer the image is missing, which is wrong for a bad request.
      */
     if (status != DIMS_SUCCESS) {
-        return dims_http_status(d->status);
+        int mapped = dims_origin_status(d);
+
+        return (mapped != 0) ? mapped : dims_http_status(d->status);
     }
 
     return DECLINED;

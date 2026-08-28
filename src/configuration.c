@@ -53,6 +53,8 @@ dims_create_config(apr_pool_t *p, server_rec *s)
      */
     config->allow_private_addresses = 1;
     config->allowlist_signed = 0;
+    config->origin_status_mode = DIMS_ORIGIN_STATUS_FORWARD;
+    config->status_verbose = 1;
 
     return (void *) config;
 }
@@ -361,6 +363,32 @@ dims_config_set_allowlist_signed(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 static const char *
+dims_config_set_origin_status_mode(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+
+    if (strcasecmp(arg, "forward") == 0) {
+        config->origin_status_mode = DIMS_ORIGIN_STATUS_FORWARD;
+    } else if (strcasecmp(arg, "map") == 0) {
+        config->origin_status_mode = DIMS_ORIGIN_STATUS_MAP;
+    } else {
+        return "DimsOriginStatusMode must be forward or map";
+    }
+
+    return NULL;
+}
+
+static const char *
+dims_config_set_status_verbose(cmd_parms *cmd, void *dummy, int arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->status_verbose = arg;
+    return NULL;
+}
+
+static const char *
 dims_config_set_no_image_url(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -469,6 +497,16 @@ const command_rec dims_directives[] =
                   "Whether the host allowlist applies to a signed request and "
                   "to a redirect. Set log to record what enforcing would "
                   "refuse, or enforce to refuse it. The default is log."),
+    AP_INIT_TAKE1("DimsOriginStatusMode",
+                  dims_config_set_origin_status_mode, NULL, RSRC_CONF,
+                  "How a failure at the origin reaches the caller. Set forward "
+                  "to report the status the origin returned, or map to report "
+                  "404 for a missing source, 504 for a timeout, and 502 for "
+                  "every other origin failure. The default is forward."),
+    AP_INIT_FLAG("DimsStatusVerbose",
+                  dims_config_set_status_verbose, NULL, RSRC_CONF,
+                  "Whether the status handler prints the mod_dims, ImageMagick, "
+                  "and libcurl versions. The default is On."),
     AP_INIT_TAKE1("DimsDownloadTimeout",
                   dims_config_set_download_timeout, NULL, RSRC_CONF,
                   "Timeout for downloading remote images."
