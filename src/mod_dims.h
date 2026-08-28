@@ -195,7 +195,6 @@ struct dims_config_rec {
     /* Where the ICC profiles live. Set from DimsProfileDir. */
     const char *profile_dir;
 
-    char *secret_key;
     const char *encryption_algorithm;
     long max_expiry_period;
     char *default_image_prefix;

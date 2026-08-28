@@ -41,7 +41,6 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->map_size = (MagickSizeType) DIMS_MAP_SIZE_MB * 1024 * 1024;
     config->disk_size = (MagickSizeType) DIMS_DISK_SIZE_MB * 1024 * 1024;
 
-    config->secret_key = apr_pstrdup(p,"m0d1ms");
     config->encryption_algorithm = "AES/ECB/PKCS5Padding";
     config->max_expiry_period= 0; // never expire
 
