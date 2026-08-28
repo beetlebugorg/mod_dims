@@ -229,14 +229,29 @@ dims_handle_request(dims_request_rec *d)
         }
 
         /* Fetch the image into a buffer. */
-        if(fetch_url && dims_fetch_remote_image(d, fetch_url) != 0) {
-            /* If image failed to download replace it with
-             * the NOIMAGE image.
+        if (fetch_url && dims_fetch_remote_image(d, fetch_url) != 0) {
+            /*
+             * The source failed. Send the error image instead, and when there
+             * is none, report what went wrong.
+             *
+             * This returned DECLINED, which leaked the wand and handed the
+             * request back to httpd. httpd looked for a file at the request
+             * path, did not find one, and answered 404. The status was right
+             * by accident and said nothing about what happened.
              */
-            if(dims_fetch_remote_image(d, NULL) != 0) {
-                return DECLINED;
+            /*
+             * Report the status the source failure produced, and a plain
+             * failure when it produced none.
+             *
+             * DIMS_IGNORE alone is not enough. dims_fetch_remote_image only
+             * sets a status when the origin answered 404; for any other
+             * failure the request is still marked successful, and asking
+             * dims_cleanup to keep that status answers 200 with no body.
+             */
+            if (dims_fetch_remote_image(d, NULL) != 0) {
+                return dims_cleanup(d, NULL,
+                        d->status != DIMS_SUCCESS ? DIMS_IGNORE : DIMS_FAILURE);
             }
-            d->use_no_image = 1;
         }
 
         return dims_process_image(d);

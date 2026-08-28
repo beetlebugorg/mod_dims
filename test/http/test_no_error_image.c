@@ -105,10 +105,34 @@ test_missing_source_is_not_found(void)
     free(url);
 }
 
+
+/*
+ * An origin that fails with anything other than 404.
+ *
+ * dims_fetch_remote_image only records a status for a 404, so this request
+ * reaches the end still marked successful. Asking dims_cleanup to keep that
+ * status answers 200 with no body, which is worse than the 404 this used to
+ * give: a caller and every cache in front of it would store an empty success.
+ */
+static void
+test_origin_failure_is_not_success(void)
+{
+    char *url = dims_fixture_url("broken.png");
+    char *path = dims_sign_dims4("resize/100x100", url, NULL, NULL);
+    long status = status_of(path);
+
+    dims_test_logf("an origin 500 returns %ld", status);
+    CHECK(status >= 400, "an origin failure must not answer success, got %ld", status);
+
+    free(path);
+    free(url);
+}
+
 const dims_test dims_tests_no_error_image[] = {
     { "TestUnknownClientIsAServerError", test_unknown_client_is_a_server_error, NULL },
     { "TestWrongSignatureIsABadRequest", test_wrong_signature_is_a_bad_request, NULL },
     { "TestExpiredSignatureIsABadRequest", test_expired_signature_is_a_bad_request, NULL },
-    { "TestMissingSourceIsNotFound", test_missing_source_is_not_found, "null error image URL" },
+    { "TestMissingSourceIsNotFound", test_missing_source_is_not_found, NULL },
+    { "TestOriginFailureIsNotSuccess", test_origin_failure_is_not_success, NULL },
     DIMS_TEST_END
 };
