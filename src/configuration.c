@@ -10,6 +10,7 @@
 
 #include <ctype.h>
 #include <strings.h>
+#include <limits.h>
 
 void *
 dims_create_config(apr_pool_t *p, server_rec *s)
@@ -55,6 +56,11 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->allowlist_signed = 0;
     config->origin_status_mode = DIMS_ORIGIN_STATUS_FORWARD;
     config->status_verbose = 1;
+
+    /* The cache holds fetched overlays, and an evicted one is fetched again,
+     * so a bound costs a caller nothing. */
+    config->overlay_cache_max_entries = 1024;
+    config->overlay_cache_max_age = 86400;
 
     return (void *) config;
 }
@@ -363,6 +369,39 @@ dims_config_set_allowlist_signed(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 static const char *
+dims_config_set_overlay_cache_max_entries(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    char *end = NULL;
+    long value = strtol(arg, &end, 10);
+
+    if (end == arg || *end != '\0' || value < 0 || value > INT_MAX) {
+        return "DimsOverlayCacheMaxEntries must be a count, or 0 for no limit";
+    }
+
+    config->overlay_cache_max_entries = (int) value;
+    return NULL;
+}
+
+static const char *
+dims_config_set_overlay_cache_max_age(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    char *end = NULL;
+    long value = strtol(arg, &end, 10);
+
+    if (end == arg || *end != '\0' || value < 0) {
+        return "DimsOverlayCacheMaxAge must be a number of seconds, or 0 to "
+               "never expire";
+    }
+
+    config->overlay_cache_max_age = value;
+    return NULL;
+}
+
+static const char *
 dims_config_set_origin_status_mode(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -497,6 +536,14 @@ const command_rec dims_directives[] =
                   "Whether the host allowlist applies to a signed request and "
                   "to a redirect. Set log to record what enforcing would "
                   "refuse, or enforce to refuse it. The default is log."),
+    AP_INIT_TAKE1("DimsOverlayCacheMaxEntries",
+                  dims_config_set_overlay_cache_max_entries, NULL, RSRC_CONF,
+                  "Largest number of overlay images to keep on disk. The oldest "
+                  "go first. The default is 1024, and 0 means no limit."),
+    AP_INIT_TAKE1("DimsOverlayCacheMaxAge",
+                  dims_config_set_overlay_cache_max_age, NULL, RSRC_CONF,
+                  "How long an overlay image stays on disk, in seconds. The "
+                  "default is 86400, and 0 means it never expires."),
     AP_INIT_TAKE1("DimsOriginStatusMode",
                   dims_config_set_origin_status_mode, NULL, RSRC_CONF,
                   "How a failure at the origin reaches the caller. Set forward "

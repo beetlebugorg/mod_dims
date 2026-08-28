@@ -26,14 +26,6 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo && \
 
 ENV LC_ALL=C
 
-# The watermark cache builds its directory as TMPDIR + "dims-cache/". A libc
-# that defines P_tmpdir without a trailing slash makes the module try to create
-# /tmpdims-cache at the filesystem root, and the watermark command then falls
-# back to the error image. Setting TMPDIR with a trailing slash makes the
-# watermark path deterministic here. Fixing the concatenation in the module is
-# a separate change.
-ENV TMPDIR=/tmp/
-
 # The loopback guard case needs a real image on 127.0.0.1, or a refusal cannot
 # be told apart from an unreachable address.
 COPY test/origin/grid.png /usr/local/apache2/htdocs/grid.png
