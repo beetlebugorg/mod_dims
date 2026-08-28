@@ -47,6 +47,7 @@ add_library(mod_dims MODULE
     src/configuration.c
     src/curl.c
     src/encryption.c
+    src/status.c
     src/mod_dims.c
     src/operations/autolevel.c
     src/operations/brightness.c
