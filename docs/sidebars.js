@@ -9,6 +9,7 @@ const sidebars = {
       link: {type: 'doc', id: 'endpoints/index'},
       items: ['endpoints/dims4', 'endpoints/dims3', 'endpoints/status', 'endpoints/local'],
     },
+    'signing',
     {
       type: 'category',
       label: 'Operations',
@@ -56,7 +57,6 @@ const sidebars = {
       link: {type: 'doc', id: 'configuration/index'},
       items: [
         'configuration/clients',
-        'configuration/signing',
         'configuration/image-sources',
         'configuration/cache-control',
         'configuration/output',

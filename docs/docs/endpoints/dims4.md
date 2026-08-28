@@ -32,17 +32,10 @@ neither can be changed without the secret.
 ## The signature
 
 An MD5 digest, hexadecimal, truncated to its first six characters. The message
-is these joined with nothing between them:
+is the expiry, the client's secret, the commands, and the image URL joined with
+nothing between them.
 
-1. `expires`
-2. the client's secret
-3. the commands, with a trailing slash
-4. the image URL
-5. the value of each parameter listed in `_keys`, in that order
-
-```
-md5("2147483647" + "a-secret" + "resize/100x100/" + "https://example.com/cat.jpg")
-```
+[Signing](/signing) has the full construction, a worked example, and code.
 
 A request whose `expires` has passed is refused, and so is one further ahead
 than [`DimsSecretMaxExpiryPeriod`](/configuration/clients) allows.

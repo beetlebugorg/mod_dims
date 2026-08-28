@@ -1,3 +1,7 @@
+---
+sidebar_position: 3
+---
+
 # Signing
 
 A `/dims4/` request is signed with the client's secret. The signature covers
