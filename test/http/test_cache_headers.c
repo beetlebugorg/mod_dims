@@ -133,6 +133,63 @@ test_conditional_request_returns_304(void)
     free(url);
 }
 
+/*
+ * libcurl reports every response in a redirect chain. Only the last one
+ * describes the body. The hop here sends its own cache headers and the target
+ * does not send any.
+ */
+static void
+test_redirect_headers_do_not_survive(void)
+{
+    char *url = dims_fixture_url("redirect-cached");
+    char *path = dims_sign_dims4("resize/100x100", url, NULL, NULL);
+    dims_response *response = dims_get(path);
+    const char *etag = dims_header_value(response, "ETag");
+    const char *modified = dims_header_value(response, "Last-Modified");
+
+    CHECK_INT(response->status, 200,
+              "a redirect to a target that does not send them");
+
+    dims_test_logf("ETag [%s] Last-Modified [%s]", etag ? etag : "(none)",
+                   modified ? modified : "(none)");
+    CHECK(etag == NULL || strstr(etag, "from-the-redirect") == NULL,
+          "the hop's ETag must not describe the body: %s", etag);
+    CHECK(modified == NULL || strstr(modified, "1970") == NULL,
+          "the hop's Last-Modified must not describe the body: %s", modified);
+    CHECK(modified == NULL,
+          "a target that does not send Last-Modified must not produce one: %s",
+          modified);
+
+    dims_response_free(response);
+    free(path);
+    free(url);
+}
+
+/*
+ * The header comes from the bytes written. A multi-frame source made it
+ * disagree with the body, because one call serialized every frame and the
+ * other measured the current one.
+ */
+static void
+test_content_length_matches_a_multi_frame_body(void)
+{
+    dims_response *response = dims_request_ops("format/gif", "animated.gif");
+    const char *header = dims_header_value(response, "Content-Length");
+    dims_image_size size;
+
+    CHECK_INT(response->status, 200, "an animated GIF");
+    size = dims_must_size(response->body, response->body_len);
+    dims_test_logf("%ld frames, %zu bytes, Content-Length %s", size.frames,
+                   response->body_len, header ? header : "(none)");
+
+    CHECK(header != NULL, "the response must have Content-Length");
+    if (header != NULL) {
+        CHECK_INT(atol(header), (long) response->body_len, "Content-Length");
+    }
+
+    dims_response_free(response);
+}
+
 const dims_test dims_tests_cache_headers[] = {
     { "TestTrustedSourceMaxAge", test_trusted_source_max_age, NULL },
     { "TestSourceMaxAgeAboveTheWindow", test_source_max_age_above_the_window, NULL },
@@ -144,5 +201,9 @@ const dims_test dims_tests_cache_headers[] = {
     { "TestEtagIsStable", test_etag_is_stable, NULL },
     { "TestConditionalRequestReturns304", test_conditional_request_returns_304,
       "conditional requests are never read" },
+    { "TestRedirectHeadersDoNotSurvive", test_redirect_headers_do_not_survive,
+      NULL },
+    { "TestContentLengthMatchesAMultiFrameBody",
+      test_content_length_matches_a_multi_frame_body, NULL },
     DIMS_TEST_END
 };

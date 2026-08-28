@@ -132,7 +132,16 @@ dims_write_header_cb(void *ptr, size_t size, size_t nmemb, void *data)
         }
     }
 
-    if (colon != NULL) {
+    /* A status line starts a new response. libcurl reports every response in
+     * a redirect chain, and only the last one describes the body. */
+    if (colon == NULL) {
+        if (realsize > 5 && strncmp(start, "HTTP/", 5) == 0) {
+            d->cache_control = NULL;
+            d->edge_control = NULL;
+            d->last_modified = NULL;
+            d->etag = NULL;
+        }
+    } else {
         const char *value_start = colon + 1;
         const char *value_end = end;
 
@@ -203,6 +212,13 @@ dims_get_image_data(dims_request_rec *d, char *fetch_url, dims_image_data_t *dat
     CURLcode code;
 
     dims_image_data_t image_data;
+
+    /* Each transfer describes its own response. */
+    d->cache_control = NULL;
+    d->edge_control = NULL;
+    d->last_modified = NULL;
+    d->etag = NULL;
+
     image_data.data = NULL;
     image_data.size = 0;
     image_data.used = 0;

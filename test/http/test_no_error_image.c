@@ -3,7 +3,8 @@
  *
  * Every client on the main test server has an error image, through
  * DimsDefaultImageURL, so a failure there answers with a picture and the
- * status comes from the response writer. The server on port 8001 has none,
+ * status comes from the response writer. The server on port 8001 does not
+ * have one,
  * which is the only way to reach the other status path.
  *
  * That path answered 404 for every failure until the two mappings were made
