@@ -30,7 +30,7 @@ FROM httpd:${HTTPD_VERSION}@${HTTPD_DIGEST}
 
 # Bump this when any pinned version below changes. The tag names the
 # ImageMagick version and this number, so two toolchains cannot share a name.
-ARG BUILDER_REVISION=3
+ARG BUILDER_REVISION=4
 
 ARG IMAGEMAGICK_VERSION=7.1.2-30
 ARG IMAGEMAGICK_SHA256=3034a64f22398e15ee3dd1e6b1aa83d838cfc47df1bb246ae0eca9590e6ace72
@@ -77,7 +77,7 @@ RUN apt-get -y update && \
     apt-get install -y --no-install-recommends \
         build-essential cmake nasm ca-certificates pkg-config wget xz-utils \
         libapr1-dev libaprutil1-dev \
-        libcurl4-openssl-dev libssl-dev && \
+        libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Every delegate installs into one prefix, and each one after the first
@@ -166,4 +166,40 @@ RUN wget -q -O im.tar.gz \
         --without-magick-plus-plus && \
     make -j"$(nproc)" && make install && \
     cd .. && rm -rf "ImageMagick-${IMAGEMAGICK_VERSION}" im.tar.gz
+
+# libcurl fetches every source image, so its version is a security surface. The
+# distribution's build lags, so it comes from source too, with HTTP/2 through
+# nghttp2. It links the base image's OpenSSL, which the runtime image shares.
+ARG NGHTTP2_VERSION=1.70.0
+ARG NGHTTP2_SHA256=e05cb1388eaca3830aded4ccf20044b6e1ac1a61411dcca11b0437c4285c8bc2
+ARG CURL_VERSION=8.21.0
+ARG CURL_SHA256=aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6
+
+# nghttp2 gives libcurl HTTP/2. Only the library, none of the tools.
+RUN fetch "https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz" \
+        "${NGHTTP2_SHA256}" && \
+    cd "nghttp2-${NGHTTP2_VERSION}" && \
+    ./configure --prefix=${PREFIX} --enable-lib-only --without-jemalloc && \
+    make -j"$(nproc)" && make install && cd .. && rm -rf "nghttp2-${NGHTTP2_VERSION}"
+
+# libcurl, from source into the same prefix. It links the base image's OpenSSL
+# and the zlib and nghttp2 built above. Every protocol the module does not use
+# is off, so the build cannot reach one even if a URL names it. The network
+# guard already restricts the scheme; this is the second line.
+RUN fetch "https://curl.se/download/curl-${CURL_VERSION}.tar.xz" \
+        "${CURL_SHA256}" && \
+    cd "curl-${CURL_VERSION}" && \
+    ./configure --prefix=${PREFIX} \
+        --with-openssl \
+        --with-zlib=${PREFIX} \
+        --with-nghttp2=${PREFIX} \
+        --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
+        --enable-http \
+        --disable-static --disable-manual --disable-libcurl-option \
+        --without-libpsl \
+        --disable-ftp --disable-file --disable-ldap --disable-ldaps \
+        --disable-rtsp --disable-dict --disable-telnet --disable-tftp \
+        --disable-pop3 --disable-imap --disable-smtp --disable-gopher \
+        --disable-mqtt --disable-smb && \
+    make -j"$(nproc)" && make install && cd .. && rm -rf "curl-${CURL_VERSION}"
 
