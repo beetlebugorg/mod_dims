@@ -30,6 +30,65 @@ test_grayscale(void)
                        "true", 512, 512);
 }
 
+/*
+ * grayscale must change the pixels, not only the colorspace label. The fixture
+ * has to have color for the case to mean anything, so the source is measured
+ * first as a control.
+ */
+static void
+test_grayscale_converts_the_pixels(void)
+{
+    dims_request_rec *d = dims_fixture_request("pexels-photo-1539116.jpeg", NULL);
+    const char *err = NULL;
+    char args[] = "true";
+    size_t width, height, i, colored = 0;
+    unsigned char *pixels;
+
+    if (d == NULL) {
+        return;
+    }
+
+    width = MagickGetImageWidth(d->wand);
+    height = MagickGetImageHeight(d->wand);
+    pixels = malloc(width * height * 3);
+    CHECK(pixels != NULL, "cannot allocate the pixel buffer");
+
+    if (pixels != NULL) {
+        MagickExportImagePixels(d->wand, 0, 0, width, height, "RGB", CharPixel,
+                                pixels);
+        for (i = 0; i < width * height; i++) {
+            if (pixels[i * 3] != pixels[i * 3 + 1] ||
+                    pixels[i * 3 + 1] != pixels[i * 3 + 2]) {
+                colored++;
+            }
+        }
+        dims_test_logf("the source has %zu of %zu pixels with color", colored,
+                       width * height);
+        CHECK(colored > 0, "the fixture must have color before the operation");
+
+        CHECK_INT(dims_grayscale_operation(d, args, &err), DIMS_SUCCESS,
+                  "grayscale");
+
+        colored = 0;
+        CHECK(MagickExportImagePixels(d->wand, 0, 0, width, height, "RGB",
+                                      CharPixel, pixels) == MagickTrue,
+              "cannot read the pixels back");
+        for (i = 0; i < width * height; i++) {
+            if (pixels[i * 3] != pixels[i * 3 + 1] ||
+                    pixels[i * 3 + 1] != pixels[i * 3 + 2]) {
+                colored++;
+            }
+        }
+
+        dims_test_logf("%zu of %zu pixels still have color", colored,
+                       width * height);
+        CHECK_INT((long) colored, 0, "the count of pixels that still have color");
+        free(pixels);
+    }
+
+    dims_fixture_free(d);
+}
+
 static void
 test_invert(void)
 {
@@ -70,6 +129,7 @@ const dims_test dims_tests_unit_adjustments[] = {
     { "TestAutolevel", test_autolevel, NULL },
     { "TestBrightness", test_brightness, NULL },
     { "TestGrayscale", test_grayscale, NULL },
+    { "TestGrayscaleConvertsThePixels", test_grayscale_converts_the_pixels, NULL },
     { "TestInvert", test_invert, NULL },
     { "TestSepia", test_sepia, NULL },
     { "TestSharpen", test_sharpen, NULL },
