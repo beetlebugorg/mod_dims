@@ -18,8 +18,9 @@
 /*
  * The shared curl handle and the locks it needs.
  *
- * Sharing lets one process reuse the DNS cache across requests instead of
- * resolving again on every one.
+ * Sharing lets one process reuse the DNS cache and the TLS session cache across
+ * requests, so it does not resolve again on every one and can resume a TLS
+ * session instead of a full handshake.
  */
 typedef struct {
     CURLSH *share;
