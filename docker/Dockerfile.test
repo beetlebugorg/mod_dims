@@ -30,6 +30,11 @@ ENV LC_ALL=C
 # be told apart from an unreachable address.
 COPY test/origin/grid.png /usr/local/apache2/htdocs/grid.png
 
+# A local image under a location the server denies. The local-source
+# authorization case reads it through /dims3/ to prove the access check runs.
+RUN mkdir -p /usr/local/apache2/htdocs/protected && \
+    cp /usr/local/apache2/htdocs/grid.png /usr/local/apache2/htdocs/protected/grid.png
+
 # The container runs as the invoking user. httpd cannot drop privileges when
 # it did not start as root, so the User and Group directives go away, and the
 # pid file moves somewhere any uid can write.

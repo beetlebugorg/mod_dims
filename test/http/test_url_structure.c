@@ -269,6 +269,30 @@ test_status_shape(void)
     CHECK_INT(status_of("/dims-status/"), 200, "the status endpoint");
 }
 
+/*
+ * A root-relative url= names a local file under the document root. A file the
+ * server serves is read.
+ */
+static void
+test_local_source_is_served(void)
+{
+    CHECK_INT(status_of("/dims3/" DIMS_TEST_CLIENT "/resize/50x50/?url=/grid.png"),
+              200, "a local image the server serves");
+}
+
+/*
+ * A file under a denied location must not be read through the module. The
+ * subrequest runs httpd's access control, and the module honors it, so the
+ * request gets the access-control status rather than the image.
+ */
+static void
+test_local_source_denied_is_forbidden(void)
+{
+    CHECK_INT(status_of("/dims3/" DIMS_TEST_CLIENT
+                        "/resize/50x50/?url=/protected/grid.png"),
+              403, "a local image under a denied location");
+}
+
 const dims_test dims_tests_url_structure[] = {
     { "TestDims3Shape", test_dims3_shape, NULL },
     { "TestDims3ClientSegment", test_dims3_client_segment, NULL },
@@ -282,5 +306,8 @@ const dims_test dims_tests_url_structure[] = {
     { "TestLegacyEndpointIsGone", test_legacy_endpoint_is_gone, NULL },
     { "TestLegacyCommandsStillRun", test_legacy_commands_still_run, NULL },
     { "TestStatusShape", test_status_shape, NULL },
+    { "TestLocalSourceIsServed", test_local_source_is_served, NULL },
+    { "TestLocalSourceDeniedIsForbidden", test_local_source_denied_is_forbidden,
+      NULL },
     DIMS_TEST_END
 };
