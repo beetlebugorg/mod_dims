@@ -10,7 +10,7 @@
 #
 # Build the toolchain locally with `make builder-local` and point this at
 # mod_dims:builder-local to try a change before publishing it.
-ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r2
 
 FROM ${BUILDER_IMAGE}
 

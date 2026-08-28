@@ -10,7 +10,7 @@
 #
 # It starts with no environment set. Every DIMS_ variable below has a default.
 
-ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r2
 ARG HTTPD_VERSION=2.4.62
 ARG HTTPD_DIGEST=sha256:4c7788695c832bf415a662dfb5160f1895e65fc65c025e85f436ee2c9e7d7f3e
 
@@ -46,12 +46,15 @@ ENV DIMS_CACHE_EXPIRE=604800
 ENV DIMS_NO_IMAGE_CACHE_EXPIRE=60
 ENV LC_ALL="C"
 
-# The runtime libraries ImageMagick links, and nothing else.
+# The image libraries are not installed here. The builder compiles each one
+# from source into /usr/local/imagemagick, and that whole prefix is copied
+# below, so the version ImageMagick was compiled against is the version it
+# loads.
+#
+# curl is for the health check. ca-certificates is for fetching an https
+# source.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates curl \
-        libpng16-16 libjpeg62-turbo libtiff6 libwebp7 libwebpdemux2 libwebpmux3 \
-        liblcms2-2 libfreetype6 libxml2 libgomp1 && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /build/mod_dims/build/libmod_dims.so /usr/local/apache2/modules/

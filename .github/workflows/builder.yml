@@ -54,7 +54,8 @@ jobs:
         id: version
         run: |
           version=$(sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' docker/Dockerfile.builder)
-          echo "tag=builder-im${version}" >> "$GITHUB_OUTPUT"
+          revision=$(sed -n 's/^ARG BUILDER_REVISION=//p' docker/Dockerfile.builder)
+          echo "tag=builder-im${version}-r${revision}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -93,7 +94,8 @@ jobs:
         id: version
         run: |
           version=$(sed -n 's/^ARG IMAGEMAGICK_VERSION=//p' docker/Dockerfile.builder)
-          echo "tag=builder-im${version}" >> "$GITHUB_OUTPUT"
+          revision=$(sed -n 's/^ARG BUILDER_REVISION=//p' docker/Dockerfile.builder)
+          echo "tag=builder-im${version}-r${revision}" >> "$GITHUB_OUTPUT"
 
       - name: Join the architectures
         run: |
