@@ -58,6 +58,13 @@ sanitize: up
 	$(IN_CONTAINER) sh -c 'ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1 \
 	    /tmp/build-asan/test/dims_unit_test'
 
+.PHONY: valgrind
+# Run the request path under valgrind memcheck. Slower than the sanitizers and
+# heavier than a unit run, so it is a manual target, not part of `make test`.
+valgrind: build
+	$(COMPOSE) up -d origin
+	$(COMPOSE) run --rm --no-deps dims /build/mod_dims/test/valgrind/run.sh
+
 logs:
 	$(COMPOSE) logs dims
 

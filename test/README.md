@@ -10,10 +10,21 @@ make test           # run the suite
 make test-update    # rewrite the golden files, then run again
 make test RUN=--run=TestResize
 make test-shell     # a shell inside the service container
+make sanitize       # the unit cases under AddressSanitizer
+make valgrind       # the request path under valgrind memcheck
 make down           # stop the services
 ```
 
 Everything runs in Docker. The host needs no toolchain.
+
+`make sanitize` and `make valgrind` are two views of the same question. The
+sanitizers run the unit cases, so they cover the operations. valgrind runs the
+request path inside httpd, so it covers the handler, the fetch, the pipeline,
+and cleanup. valgrind is slow, so it is a manual target, not part of `make
+test`. It reports a leak only when a block allocated in module code is
+definitely lost. ImageMagick frees its process-global state at
+`MagickWandTerminus`, which the signal stop skips, so `test/valgrind/dims.supp`
+holds the one-time init that would otherwise show as lost.
 
 ## What it is made of
 
