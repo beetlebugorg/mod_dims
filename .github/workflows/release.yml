@@ -2,10 +2,8 @@ name: Release
 
 # A v tag publishes the server image and creates the release.
 #
-# The tag has to name the version CMakeLists.txt declares. Deriving the
-# version from the tag instead would let a tag ship a binary that reports a
-# different one, so the tag is checked against the source and a mismatch stops
-# the run.
+# The tag is the version. It passes into the build as DIMS_VERSION, so the
+# binary reports the tag it shipped under. A tag push is the whole bump.
 
 on:
   push:
@@ -35,23 +33,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check the tag matches CMakeLists.txt
+      - name: Read the tag
         id: read
         run: |
           set -eu
           tag="${GITHUB_REF_NAME#v}"
-
-          # project() takes numeric components only, so the pre-release name
-          # sits beside it. The two joined are what the module reports.
-          numeric=$(sed -n 's/^[[:space:]]*VERSION[[:space:]]*//p' CMakeLists.txt | head -1)
-          suffix=$(sed -n 's/^set(DIMS_VERSION_SUFFIX "\(.*\)")$/\1/p' CMakeLists.txt | head -1)
-          source_version="${numeric}${suffix}"
-
-          if [ "$tag" != "$source_version" ]; then
-            echo "::error::tag ${GITHUB_REF_NAME} names ${tag}, CMakeLists.txt declares ${source_version}"
-            exit 1
-          fi
-
           echo "version=${tag}" >> "$GITHUB_OUTPUT"
 
           # A version with a suffix is a pre-release. It never moves the latest
@@ -121,6 +107,7 @@ jobs:
           push: true
           build-args: |
             DIMS_COMMIT=${{ needs.check.outputs.commit }}
+            DIMS_VERSION=${{ needs.check.outputs.version }}
           tags: ${{ env.REGISTRY }}:${{ needs.check.outputs.version }}-${{ matrix.arch }}
           # No provenance attestation. With it each per architecture tag is an
           # index holding the image plus an unknown/unknown manifest, and

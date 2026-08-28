@@ -1,9 +1,9 @@
 /*
  * The version and the build this module came from.
  *
- * CMake generates this from version.h.in. DIMS_VERSION is the project()
- * version and the pre-release suffix beside it, which is the one place the
- * version is written.
+ * CMake generates this from version.h.in. DIMS_VERSION comes from the git tag,
+ * which is the one place the version is written. A container build passes it in
+ * as -DDIMS_VERSION, because the build context excludes .git.
  * DIMS_COMMIT is the short git commit, or "unknown" when the tree is not a
  * git checkout. It is read when CMake configures, not on every build, so a
  * build without a reconfigure keeps the commit it was configured with.
