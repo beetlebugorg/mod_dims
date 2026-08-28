@@ -8,8 +8,14 @@
 
 #include "encryption.h"
 
+#include <apr_escape.h>
+#include <apr_lib.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
+#include <openssl/kdf.h>
+#include <openssl/core_names.h>
+#include <openssl/params.h>
+#include <openssl/sha.h>
 #include <string.h>
 
 int
@@ -196,4 +202,69 @@ aes_128_gcm_decrypt(request_rec *r, unsigned char *key, unsigned char *base64_en
         ERR_print_errors_cb(aes_errors, r);
         return NULL;
     }
+}
+
+/* The salt the key derivation uses. Changing it invalidates every eurl. */
+static const unsigned char dims_kdf_salt[] = "go-dims";
+
+int
+dims_derive_key(const char *secret, unsigned char *key)
+{
+    EVP_KDF *kdf;
+    EVP_KDF_CTX *ctx;
+    OSSL_PARAM params[5];
+    OSSL_PARAM *at = params;
+    int ok;
+
+    if (secret == NULL || key == NULL) {
+        return 0;
+    }
+
+    if (strncmp(secret, "sha1:", 5) == 0) {
+        unsigned char digest[SHA_DIGEST_LENGTH];
+        char hex[SHA_DIGEST_LENGTH * 2 + 1];
+        int i;
+
+        secret += 5;
+        SHA1((const unsigned char *) secret, strlen(secret), digest);
+
+        if (apr_escape_hex(hex, digest, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
+            return 0;
+        }
+
+        for (i = 0; i < DIMS_AES_KEY_BYTES; i++) {
+            key[i] = (unsigned char) apr_toupper(hex[i]);
+        }
+
+        return 1;
+    }
+
+    if (strncmp(secret, "hkdf:", 5) == 0) {
+        secret += 5;
+    }
+
+    kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
+    if (kdf == NULL) {
+        return 0;
+    }
+
+    ctx = EVP_KDF_CTX_new(kdf);
+    EVP_KDF_free(kdf);
+    if (ctx == NULL) {
+        return 0;
+    }
+
+    *at++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
+            (char *) "SHA256", 0);
+    *at++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
+            (void *) secret, strlen(secret));
+    *at++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
+            (void *) dims_kdf_salt, sizeof(dims_kdf_salt) - 1);
+    *at++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO, (void *) "", 0);
+    *at = OSSL_PARAM_construct_end();
+
+    ok = EVP_KDF_derive(ctx, key, DIMS_AES_KEY_BYTES, params) > 0;
+    EVP_KDF_CTX_free(ctx);
+
+    return ok;
 }

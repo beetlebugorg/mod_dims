@@ -1,5 +1,21 @@
 # Clients
 
+## DimsSigningKey
+
+```apacheconf
+DimsSigningKey a-long-random-string
+```
+
+The key [`/dims5/`](/endpoints/dims5) signatures are checked against, and the
+key an `eurl` is decrypted with. Without it no `/dims5/` request is served.
+
+A leading `sha1:` derives the encryption key the way the older endpoints do,
+so one key works across all of them. Without the prefix the key is derived
+with HKDF-SHA256, which is the better path.
+
+`/dims5/` has no client id, so this one key covers the endpoint. `/dims3/` and
+`/dims4/` keep their per client secrets.
+
 ## DimsAddClient
 
 ```apacheconf

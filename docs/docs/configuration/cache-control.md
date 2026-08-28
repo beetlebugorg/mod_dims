@@ -21,6 +21,20 @@ How long an error image may be cached, in seconds. Default 60.
 
 It is short on purpose. A long one caches a failure across a whole CDN.
 
+## DimsErrorBackground
+
+```apacheconf
+DimsErrorBackground "#cccccc"
+```
+
+Draws the image a failed request answers with, in this colour, at the size the
+commands asked for. A page that asked for 100 by 100 gets 100 by 100 whether
+the request succeeded or not.
+
+Any colour ImageMagick reads works, as a name or a hex value.
+
+It takes precedence over `DimsDefaultImageURL`, and needs no fetch.
+
 ## DimsDefaultImageURL
 
 ```apacheconf

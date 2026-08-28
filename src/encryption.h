@@ -35,4 +35,20 @@ char *aes_128_decrypt(request_rec *r, unsigned char *key,
 char *aes_128_gcm_decrypt(request_rec *r, unsigned char *key,
                           unsigned char *base64_encrypted_text);
 
+/* The AES key length both schemes use. */
+#define DIMS_AES_KEY_BYTES 16
+
+/*
+ * Derives the AES key from a secret.
+ *
+ * A secret with a sha1: prefix takes the older path: SHA-1 of the rest, hex
+ * encoded, the first 16 characters uppercased. That is 64 bits of material
+ * spread across 16 bytes.
+ *
+ * Anything else takes HKDF-SHA256, with a hkdf: prefix stripped first.
+ *
+ * key must have room for DIMS_AES_KEY_BYTES.
+ */
+int dims_derive_key(const char *secret, unsigned char *key);
+
 #endif

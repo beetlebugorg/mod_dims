@@ -29,8 +29,9 @@ keeps one original and serves as many renditions as it needs.
 **Image variants on demand.** Define a rendition in a template or in frontend
 code. There is no build step, no batch job, and no second copy of every image.
 
-**Signed URLs.** A `/dims4/` URL is signed with a shared secret, so a caller
-cannot change the image or the transformation.
+**Signed URLs.** A signed URL cannot be altered by a caller. `/dims5/` signs
+with HMAC-SHA256 and covers every parameter that shapes the result. `/dims4/`
+signs with a shared secret and stays supported.
 
 ## Getting started
 

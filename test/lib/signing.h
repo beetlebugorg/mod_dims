@@ -40,6 +40,24 @@ char *dims_sign_dims4_with(const char *signature, const char *expires,
                            const char *commands, const char *image_url,
                            const char *extra, const char *keys);
 
+/* The key the /dims5/ test server checks against. */
+#define DIMS_TEST_SIGNING_KEY "0123456789abcdef0123456789abcdef"
+
+/*
+ * Builds a signed /dims5/ path.
+ *
+ * commands has no leading slash and keeps its trailing one. extra is the query
+ * string appended after url=, with no leading ampersand, or NULL.
+ *
+ * The caller frees the result.
+ */
+char *dims_sign_dims5(const char *commands, const char *image_url,
+                      const char *extra);
+
+/* The full length digest /dims5/ compares. The caller frees. */
+char *dims_signature_dims5(const char *key, const char *commands,
+                           const char *image_url, const char *signed_query);
+
 /* The six hexadecimal characters mod_dims compares. The caller frees. */
 char *dims_signature_dims4(const char *expires, const char *secret,
                            const char *commands, const char *image_url,

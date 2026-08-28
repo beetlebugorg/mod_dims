@@ -17,10 +17,10 @@ defaults rather than inheriting from the main server.
 ```apacheconf
 LoadModule dims_module modules/libmod_dims.so
 
-DimsAddClient development - 604800 604800 trust 300 86400 a-secret
+DimsSigningKey a-long-random-string
 
-<Location /dims4/>
-    SetHandler dims4
+<Location /dims5/>
+    SetHandler dims5
 </Location>
 ```
 
@@ -40,6 +40,7 @@ DimsAddClient development - 604800 604800 trust 300 86400 a-secret
 | `DimsDisableEncodedFetch` | 0 |
 | `DimsDownloadTimeout` | 3000 |
 | `DimsEncryptionAlgorithm` | `AES/ECB/PKCS5Padding` |
+| `DimsErrorBackground` | none |
 | `DimsIgnoreDefaultOutputFormat` | none |
 | `DimsImagemagickAreaSize` | 128 |
 | `DimsImagemagickDiskSize` | 2048 |
@@ -55,6 +56,7 @@ DimsAddClient development - 604800 604800 trust 300 86400 a-secret
 | `DimsOverlayCacheMaxEntries` | 1024 |
 | `DimsProfileDir` | `share/mod_dims/profiles` |
 | `DimsSecretMaxExpiryPeriod` | 0 |
+| `DimsSigningKey` | none |
 | `DimsStatusVerbose` | `On` |
 | `DimsStripMetadata` | true |
 | `DimsUserAgentEnabled` | false |

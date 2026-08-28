@@ -583,6 +583,85 @@ dims_free_request(dims_request_rec *d)
 }
 
 /*
+ * Draws the image a failed request answers with.
+ *
+ * The size comes from the commands, so a page that asked for 100 by 100 gets
+ * 100 by 100 and keeps its layout. A request whose size cannot be read gets a
+ * square, because something has to be sent.
+ */
+int
+dims_draw_error_image(dims_request_rec *d)
+{
+    static const size_t fallback = 512;
+    size_t width = fallback;
+    size_t height = fallback;
+    PixelWand *colour;
+    int ok;
+
+    if (d->wand == NULL || d->config->error_background == NULL) {
+        return 0;
+    }
+
+    /* The requested geometry, when the commands hold one. */
+    if (d->unparsed_commands != NULL) {
+        const char *cmds = d->unparsed_commands;
+        RectangleInfo rec;
+
+        while (*cmds != '\0') {
+            char *command = ap_getword(d->pool, &cmds, '/');
+            char *args;
+
+            if (*command == '\0') {
+                break;
+            }
+
+            args = ap_getword(d->pool, &cmds, '/');
+
+            if (strcmp(command, "resize") == 0 ||
+                    strcmp(command, "thumbnail") == 0 ||
+                    strcmp(command, "crop") == 0 ||
+                    strcmp(command, "legacy_thumbnail") == 0 ||
+                    strcmp(command, "legacy_crop") == 0) {
+                memset(&rec, 0, sizeof(rec));
+
+                if (ParseAbsoluteGeometry(args, &rec) != NoValue) {
+                    if (rec.width > 0) {
+                        width = rec.width;
+                    }
+                    if (rec.height > 0) {
+                        height = rec.height;
+                    }
+                    if (rec.width > 0 && rec.height == 0) {
+                        height = rec.width;
+                    }
+                    if (rec.height > 0 && rec.width == 0) {
+                        width = rec.height;
+                    }
+                }
+            }
+        }
+    }
+
+    colour = NewPixelWand();
+    if (!PixelSetColor(colour, d->config->error_background)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
+                "DimsErrorBackground is not a colour ImageMagick reads: %s",
+                d->config->error_background);
+        DestroyPixelWand(colour);
+        return 0;
+    }
+
+    ok = MagickNewImage(d->wand, width, height, colour) != MagickFalse;
+    DestroyPixelWand(colour);
+
+    if (ok) {
+        MagickSetImageFormat(d->wand, "PNG");
+    }
+
+    return ok;
+}
+
+/*
  * Ends a failed request.
  *
  * Records the status, frees the wand, logs the reason, and sends the error
@@ -602,7 +681,15 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
                 "mod_dims error, '%s', on request: %s ", err_msg, d->r->uri);
     }
 
-    if (d->no_image_url) {
+    if (d->config->error_background) {
+        d->wand = NewMagickWand();
+
+        if (dims_draw_error_image(d)) {
+            return dims_send_image(d);
+        }
+
+        dims_free_request(d);
+    } else if (d->no_image_url) {
         d->wand = NewMagickWand();
         if (!dims_fetch_remote_image(d, NULL)) {
             return dims_send_image(d);

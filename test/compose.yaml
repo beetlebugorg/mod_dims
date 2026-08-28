@@ -32,6 +32,11 @@ services:
     depends_on:
       - origin
     command: ["httpd-foreground"]
+    environment:
+      # An eurl produced by an independent implementation of the scheme, so a
+      # change to the derivation, the salt, or the cipher fails the case rather
+      # than passing unnoticed. It decrypts to the grid.png fixture.
+      DIMS_TEST_EURL: "AAECAwQFBgcICQoLGoQQhvOu+NISeOUF0pjRytnK48uKUhOlRjazksCwy7hyzMKL36y33578wA=="
     networks: [dims]
     volumes:
       - ./golden:/build/mod_dims/test/golden

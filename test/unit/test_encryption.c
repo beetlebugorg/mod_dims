@@ -154,6 +154,56 @@ test_ecb_rejects_a_short_value(void)
     dims_fixture_free(fixture);
 }
 
+/*
+ * HKDF-SHA256 over the secret, with the fixed salt. A change to the salt, the
+ * hash, or the length invalidates every eurl a caller holds.
+ */
+static void
+test_derive_key_hkdf(void)
+{
+    unsigned char key[DIMS_AES_KEY_BYTES];
+    unsigned char again[DIMS_AES_KEY_BYTES];
+    unsigned char other[DIMS_AES_KEY_BYTES];
+    unsigned char prefixed[DIMS_AES_KEY_BYTES];
+
+    CHECK(dims_derive_key("a-secret", key), "a secret derives a key");
+    CHECK(dims_derive_key("a-secret", again), "and again");
+    CHECK(memcmp(key, again, sizeof(key)) == 0, "the same secret, the same key");
+
+    CHECK(dims_derive_key("another", other), "another secret");
+    CHECK(memcmp(key, other, sizeof(key)) != 0, "a different secret, a different key");
+
+    /* The hkdf: prefix selects this path and is not part of the secret. */
+    CHECK(dims_derive_key("hkdf:a-secret", prefixed), "a prefixed secret");
+    CHECK(memcmp(key, prefixed, sizeof(key)) == 0,
+          "hkdf:a-secret and a-secret derive the same key");
+
+    CHECK(!dims_derive_key(NULL, key), "no secret");
+}
+
+/*
+ * A sha1: prefix takes the older path: SHA-1 of the rest, hex encoded, the
+ * first 16 characters uppercased.
+ */
+static void
+test_derive_key_sha1(void)
+{
+    unsigned char key[DIMS_AES_KEY_BYTES];
+    unsigned char hkdf[DIMS_AES_KEY_BYTES];
+    int i;
+
+    CHECK(dims_derive_key("sha1:a-secret", key), "a sha1 secret");
+
+    for (i = 0; i < DIMS_AES_KEY_BYTES; i++) {
+        CHECK((key[i] >= '0' && key[i] <= '9') || (key[i] >= 'A' && key[i] <= 'F'),
+              "byte %d is an uppercase hex character, got %c", i, key[i]);
+    }
+
+    CHECK(dims_derive_key("a-secret", hkdf), "the same secret without the prefix");
+    CHECK(memcmp(key, hkdf, sizeof(key)) != 0,
+          "the two paths must not agree");
+}
+
 const dims_test dims_tests_unit_encryption[] = {
     { "TestGcmRejectsAShortValue", test_gcm_rejects_a_short_value, NULL },
     { "TestGcmRejectsNoValue", test_gcm_rejects_no_value, NULL },
@@ -161,5 +211,7 @@ const dims_test dims_tests_unit_encryption[] = {
     { "TestEcbRoundTripTerminatesInsideTheBuffer",
       test_ecb_round_trip_terminates_inside_the_buffer, NULL },
     { "TestEcbRejectsAShortValue", test_ecb_rejects_a_short_value, NULL },
+    { "TestDeriveKeyHkdf", test_derive_key_hkdf, NULL },
+    { "TestDeriveKeySha1", test_derive_key_sha1, NULL },
     DIMS_TEST_END
 };

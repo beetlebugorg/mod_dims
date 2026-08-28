@@ -9,7 +9,7 @@ slug: /
 on request.
 
 ```
-/dims4/CLIENT/6d3dcb/2147483647/resize/100x100/?url=https://example.com/cat.jpg
+/dims5/resize/100x100/?url=https://example.com/cat.jpg&sig=ecd30f9f...
 ```
 
 That fetches `cat.jpg`, resizes it to fit 100 by 100, and returns it.
@@ -30,7 +30,7 @@ keeps one original and serves as many renditions as it needs.
 **Image variants on demand.** Ask for a size in a template or in frontend
 code. There is no build step, no batch job, and no second copy of every image.
 
-**Signed URLs.** A request cannot be altered without the shared secret.
+**Signed URLs.** A request cannot be altered without the signing key.
 
 ## Where to start
 
