@@ -8,8 +8,8 @@
 #include "../curl.h"
 #include "../netguard.h"
 #include "../url.h"
+#include "../overlay_cache.h"
 
-#include <openssl/sha.h>
 #include <paths.h>
 #include <unistd.h>
 
@@ -51,8 +51,6 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
     char *filename;
     char *cache_dir;
     const char *tmp_dir;
-    unsigned char hash[SHA_DIGEST_LENGTH];
-    char hex[SHA_DIGEST_LENGTH * 2 + 1];
     float opacity = 0.0f;
     double size = 0.0;
     GravityType gravity = UndefinedGravity;
@@ -89,22 +87,10 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         return DIMS_FAILURE;
     }
 
-    /* strrchr answers NULL when the overlay carries no slash. */
+    /* strrchr answers NULL when the overlay has no slash. */
     filename = strrchr(overlay_url, '/');
     if (filename == NULL || *(filename + 1) == '\0') {
         *err = "Overlay url has no filename!";
-        return DIMS_FAILURE;
-    }
-    filename++;
-
-    /* Hash the overlay basename. sizeof on a pointer would hash eight bytes
-     * of the address instead, so two overlays sharing a prefix would share a
-     * cache entry and the address would change the key between runs. */
-    SHA1((const unsigned char *) filename, strlen(filename), hash);
-
-    // Convert to hex.
-    if (apr_escape_hex(hex, hash, SHA_DIGEST_LENGTH, 0, NULL) != APR_SUCCESS) {
-        *err = "Unable to hash the overlay filename!";
         return DIMS_FAILURE;
     }
 
@@ -126,14 +112,18 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         #endif
     }
 
-    cache_dir = apr_pstrcat(d->pool, tmp_dir, "dims-cache/", NULL);
+    cache_dir = dims_overlay_cache_dir(d->pool, tmp_dir);
 
     if (apr_dir_make_recursive(cache_dir, APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE, d->pool) != APR_SUCCESS) {
         *err = "Unable to create cache directory!";
         return DIMS_FAILURE;
     }
 
-    filename = apr_pstrcat(d->pool, cache_dir, hex, NULL);
+    filename = dims_overlay_cache_path(d->pool, cache_dir, overlay_url);
+    if (filename == NULL) {
+        *err = "Unable to name the overlay cache entry!";
+        return DIMS_FAILURE;
+    }
 
     overlay_wand = NewMagickWand();
 
@@ -183,6 +173,12 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         }
 
         apr_file_close(cached_file);
+
+        /* Bound the cache on the way in. No signature covers the overlay URL, so any
+         * caller can add an entry. */
+        dims_overlay_cache_prune(d->pool, cache_dir,
+                d->config->overlay_cache_max_entries,
+                d->config->overlay_cache_max_age, apr_time_now());
     }
 
     /* Each is read below whether or not its token was present, so each needs

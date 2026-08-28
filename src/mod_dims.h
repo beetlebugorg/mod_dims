@@ -171,6 +171,11 @@ struct dims_config_rec {
      * DimsStatusVerbose. */
     int status_verbose;
 
+    /* Bounds on the overlay cache. Zero turns either off. Set from
+     * DimsOverlayCacheMaxEntries and DimsOverlayCacheMaxAge. */
+    int overlay_cache_max_entries;
+    long overlay_cache_max_age;
+
     int curl_queue_size;
     char *secret_key;
     const char *encryption_algorithm;

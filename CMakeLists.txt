@@ -50,6 +50,7 @@ add_library(mod_dims MODULE
     src/error.c
     src/handler.c
     src/netguard.c
+    src/overlay_cache.c
     src/url.c
     src/status.c
     src/mod_dims.c
