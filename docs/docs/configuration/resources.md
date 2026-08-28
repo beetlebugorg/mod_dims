@@ -59,7 +59,7 @@ DimsImagemagickAreaSize 128
 Megabytes any single image may use. Default 128. An image larger than this is
 cached on disk rather than in memory.
 
-## Sizing them
+## Choosing values
 
 With `ServerLimit 16` and the defaults, sixteen processes may each hold 512 MB
 of pixel cache and write 2 GB to disk. Divide the memory a host has by the

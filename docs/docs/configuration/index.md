@@ -12,7 +12,7 @@ defaults rather than inheriting from the main server.
 | [Output](/configuration/output) | what the response contains |
 | [Resources](/configuration/resources) | what a request may consume |
 
-## A minimal configuration
+## A basic configuration
 
 ```apacheconf
 LoadModule dims_module modules/libmod_dims.so

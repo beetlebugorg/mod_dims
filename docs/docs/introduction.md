@@ -35,7 +35,6 @@ code. There is no build step, no batch job, and no second copy of every image.
 ## Where to start
 
 - [Installation](/installation) runs the container.
-- [Endpoints](/endpoints/) describes each URL shape.
-- [Signing](/signing) shows how to sign a request.
+- [Endpoints](/endpoints/) describes each URL shape, and how to sign one.
 - [Operations](/operations/) describes each command.
 - [Configuration](/configuration/) describes each directive.

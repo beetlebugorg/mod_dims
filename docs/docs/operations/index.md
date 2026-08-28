@@ -62,7 +62,7 @@ Several commands take an ImageMagick geometry.
 A `+` in an offset sometimes arrives as a space, because some clients escape it
 as `%20`. `crop` converts a space back to a `+`.
 
-## A source with more than one frame
+## Multi-frame sources
 
 An animated GIF is returned unchanged by default, with every command skipped.
 Set [`DimsAnimatedImages`](/configuration/output) to `transform` to run the
