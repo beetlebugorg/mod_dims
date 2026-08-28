@@ -164,7 +164,7 @@ jobs:
       - name: Serve an image
         run: |
           docker run -d --name dims-origin \
-            -v "$PWD/test/origin:/usr/local/apache2/htdocs:ro" httpd:2.4.62
+            -v "$PWD/test/origin:/usr/local/apache2/htdocs:ro" httpd:2.4.68
           origin=$(docker inspect -f \
             '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dims-origin)
           docker rm -f dims-ci
