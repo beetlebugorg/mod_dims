@@ -7,6 +7,7 @@
 #include "request.h"
 
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -212,6 +213,73 @@ dims_sign_dims4(const char *commands, const char *image_url, const char *extra,
     path = dims_sign_dims4_with(signature, DIMS_TEST_EXPIRES, commands, image_url,
                                 extra, keys);
     free(signature);
+
+    return path;
+}
+
+char *
+dims_signature_dims5(const char *key, const char *commands,
+                     const char *image_url, const char *signed_query)
+{
+    static const char hex[] = "0123456789abcdef";
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int length = 0;
+    char *message;
+    char *out;
+    unsigned int i;
+
+    message = malloc(strlen(commands) + strlen(image_url) +
+                     strlen(signed_query ? signed_query : "") + 3);
+    sprintf(message, "%s\n%s\n%s", commands, image_url,
+            signed_query ? signed_query : "");
+
+    HMAC(EVP_sha256(), key, (int) strlen(key),
+         (const unsigned char *) message, strlen(message), digest, &length);
+    free(message);
+
+    out = malloc((size_t) length * 2 + 1);
+    for (i = 0; i < length; i++) {
+        out[i * 2] = hex[digest[i] >> 4];
+        out[i * 2 + 1] = hex[digest[i] & 0x0F];
+    }
+    out[length * 2] = '\0';
+
+    return out;
+}
+
+char *
+dims_sign_dims5(const char *commands, const char *image_url, const char *extra)
+{
+    char *encoded = dims_urlencode(image_url);
+    char *with_slash;
+    char *signature;
+    char *path;
+    size_t len;
+
+    /* The signed commands keep a trailing slash and lose a leading one. */
+    len = strlen(commands) + 2;
+    with_slash = malloc(len);
+    snprintf(with_slash, len, "%s%s", commands,
+             commands[strlen(commands) - 1] == '/' ? "" : "/");
+
+    signature = dims_signature_dims5(DIMS_TEST_SIGNING_KEY, with_slash,
+                                     image_url, extra);
+
+    len = strlen(with_slash) + strlen(encoded) + strlen(signature) +
+          strlen(extra ? extra : "") + 64;
+    path = malloc(len);
+
+    if (extra != NULL && *extra != '\0') {
+        snprintf(path, len, "/dims5/%s?%s&url=%s&sig=%s", with_slash, extra,
+                 encoded, signature);
+    } else {
+        snprintf(path, len, "/dims5/%s?url=%s&sig=%s", with_slash, encoded,
+                 signature);
+    }
+
+    free(with_slash);
+    free(signature);
+    free(encoded);
 
     return path;
 }

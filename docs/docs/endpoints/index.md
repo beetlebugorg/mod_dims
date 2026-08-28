@@ -4,13 +4,15 @@ Four handlers, each set on a location.
 
 | Handler | URL | Checked by |
 |---|---|---|
+| [`dims5`](/endpoints/dims5) | `/dims5/<commands>/?url=&sig=` | a signature |
 | [`dims4`](/endpoints/dims4) | `/dims4/<client>/<signature>/<expires>/<commands>/?url=` | a signature |
 | [`dims3`](/endpoints/dims3) | `/dims3/<client>/<commands>/?url=` | the host allowlist |
 | [`dims-status`](/endpoints/status) | `/dims-status/` | nothing |
 | [`dims-local`](/endpoints/local) | a file on disk | nothing |
 
-`/dims4/` is the one to use. A signature covers the commands and the image
-URL, so a caller cannot change either without the secret.
+`/dims5/` is the one to use. Its signature covers the commands, the image URL,
+and every query parameter apart from five, and it compares a full HMAC-SHA256
+rather than the first six characters of an MD5.
 
 ## Commands
 

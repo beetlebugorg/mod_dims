@@ -63,11 +63,10 @@ which doubles the memory each request uses and changes every output byte.
 ```apacheconf
 LoadModule dims_module modules/libmod_dims.so
 
-DimsAddClient development - 604800 604800 trust 300 86400 a-secret
-DimsAddWhitelist images.example.com
+DimsSigningKey a-long-random-string
 
-<Location /dims4/>
-    SetHandler dims4
+<Location /dims5/>
+    SetHandler dims5
 </Location>
 
 <Location /dims-status/>

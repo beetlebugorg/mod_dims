@@ -13,6 +13,7 @@ add_executable(dims_test
     http/test_allowlist.c
     http/test_cache_headers.c
     http/test_crop.c
+    http/test_dims5.c
     http/test_errors.c
     http/test_origin_status.c
     http/test_output.c
@@ -104,6 +105,7 @@ add_executable(dims_unit_test
     unit/test_netguard.c
     unit/test_overlay_cache.c
     unit/test_param.c
+    unit/test_signature.c
     unit/test_url.c
     unit/test_thumbnail.c
     unit/test_watermark.c
@@ -112,6 +114,7 @@ add_executable(dims_unit_test
     ${CMAKE_SOURCE_DIR}/src/encryption.c
     ${CMAKE_SOURCE_DIR}/src/netguard.c
     ${CMAKE_SOURCE_DIR}/src/overlay_cache.c
+    ${CMAKE_SOURCE_DIR}/src/signature.c
     ${CMAKE_SOURCE_DIR}/src/url.c
     ${CMAKE_SOURCE_DIR}/src/operations/autolevel.c
     ${CMAKE_SOURCE_DIR}/src/operations/brightness.c

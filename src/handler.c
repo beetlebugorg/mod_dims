@@ -11,6 +11,7 @@
 #include "curl.h"
 #include "netguard.h"
 #include "url.h"
+#include "dims5.h"
 #include "encryption.h"
 #include "status.h"
 #include "pipeline.h"
@@ -26,6 +27,16 @@ dims_handle_request(dims_request_rec *d)
     apr_time_t now_time;
 
     d->wand = NewMagickWand();
+
+    if (d->scheme == DIMS_SCHEME_DIMS5) {
+        apr_status_t verified = dims5_verify(d);
+
+        if (verified != DIMS_SUCCESS) {
+            return dims_cleanup(d, NULL, verified);
+        }
+
+        goto verified;
+    }
 
     /* Check to make sure the client id is valid. */
     if(*d->unparsed_commands == '/') {
@@ -139,8 +150,10 @@ dims_handle_request(dims_request_rec *d)
             "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);
     }
 
+verified:
     d->request_hash = ap_md5(d->pool,
-            (unsigned char *) apr_pstrcat(d->pool, d->client_id,
+            (unsigned char *) apr_pstrcat(d->pool,
+                d->client_id ? d->client_id : "",
                 d->unparsed_commands, d->image_url, NULL));
 
     dims_set_optimal_geometry(d);
@@ -510,6 +523,10 @@ dims_handler(request_rec *r)
             const char *path = apr_filepath_name_get(uri.path);
             d->content_disposition_filename = apr_pstrdup(d->r->pool, path);
         }
+
+        return dims_handle_request(d);
+    } else if(strcmp(r->handler, "dims5") == 0) {
+        d->scheme = DIMS_SCHEME_DIMS5;
 
         return dims_handle_request(d);
     } else if(strcmp(r->handler, "dims-status") == 0) {

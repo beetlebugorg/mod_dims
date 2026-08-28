@@ -58,6 +58,8 @@ add_library(mod_dims MODULE
     src/netguard.c
     src/overlay_cache.c
     src/profile.c
+    src/dims5.c
+    src/signature.c
     src/url.c
     src/status.c
     src/mod_dims.c

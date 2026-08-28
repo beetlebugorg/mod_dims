@@ -7,7 +7,7 @@ const sidebars = {
       type: 'category',
       label: 'Endpoints',
       link: {type: 'doc', id: 'endpoints/index'},
-      items: ['endpoints/dims4', 'endpoints/dims3', 'endpoints/status', 'endpoints/local'],
+      items: ['endpoints/dims5', 'endpoints/dims4', 'endpoints/dims3', 'endpoints/status', 'endpoints/local'],
     },
     {
       type: 'category',

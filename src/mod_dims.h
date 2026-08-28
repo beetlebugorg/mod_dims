@@ -71,6 +71,12 @@ typedef enum {
     DIMS_ANIMATED_TRANSFORM
 } dims_animated_mode;
 
+/* Which endpoint a request arrived at. */
+typedef enum {
+    DIMS_SCHEME_LEGACY = 0,
+    DIMS_SCHEME_DIMS5
+} dims_scheme;
+
 /* How a failure at the origin reaches the caller. Set from
  * DimsOriginStatusMode. */
 typedef enum {
@@ -175,6 +181,14 @@ struct dims_config_rec {
     int overlay_cache_max_entries;
     long overlay_cache_max_age;
 
+    /* The key /dims5/ signatures are checked against. Set from
+     * DimsSigningKey. */
+    const char *signing_key;
+
+    /* The colour a generated error image is filled with. Set from
+     * DimsErrorBackground. */
+    const char *error_background;
+
     /* How a multi-frame source is handled. Set from DimsAnimatedImages. */
     int animated_mode;
 
@@ -260,6 +274,9 @@ struct dims_request_rec {
     
     /* Use a whitelist, or use a secret key passed on the URI */
     int use_secret_key;
+
+    /* Which endpoint this request arrived at. */
+    int scheme;
 
     /* Whether the allowlist follows this fetch to every redirect hop. */
     int net_apply_allowlist;

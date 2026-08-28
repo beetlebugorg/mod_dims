@@ -60,6 +60,8 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->overlay_cache_max_entries = 1024;
     config->overlay_cache_max_age = 86400;
     config->animated_mode = DIMS_ANIMATED_PASSTHROUGH;
+    config->signing_key = NULL;
+    config->error_background = NULL;
     config->profile_dir = DIMS_PROFILE_DIR;
 
     return (void *) config;
@@ -378,6 +380,25 @@ dims_config_set_profile_dir(cmd_parms *cmd, void *dummy, const char *arg)
 }
 
 static const char *
+dims_config_set_error_background(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->error_background = arg;
+    return NULL;
+}
+
+static const char *
+dims_config_set_signing_key(cmd_parms *cmd, void *dummy, const char *arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->signing_key = (arg == NULL || strcmp(arg, "-") == 0)
+            ? NULL : arg;
+    return NULL;
+}
+
+static const char *
 dims_config_set_animated_images(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -571,6 +592,19 @@ const command_rec dims_directives[] =
                   "Where the ICC colour profiles live. They convert a CMYK "
                   "source that has no profile of its own. The default is "
                   DIMS_PROFILE_DIR "."),
+    AP_INIT_TAKE1("DimsErrorBackground",
+                  dims_config_set_error_background, NULL, RSRC_CONF,
+                  "The colour a failed request answers with, as a name or a hex "
+                  "value such as #cccccc. The image is drawn at the size the "
+                  "request asked for, so a page keeps its layout. Without this "
+                  "a failure answers with its status and no body, unless "
+                  "DimsDefaultImageURL is set."),
+    AP_INIT_TAKE1("DimsSigningKey",
+                  dims_config_set_signing_key, NULL, RSRC_CONF,
+                  "The key /dims5/ signatures are checked against, and the key "
+                  "an eurl is decrypted with. A leading sha1: derives the "
+                  "encryption key the way the older endpoints do. Without this "
+                  "no /dims5/ request is served."),
     AP_INIT_TAKE1("DimsAnimatedImages",
                   dims_config_set_animated_images, NULL, RSRC_CONF,
                   "How a source with more than one frame is handled. Set "

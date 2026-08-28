@@ -40,6 +40,7 @@ $ docker run -e DIMS_WHITELIST="images.pexels.com" mod-dims:latest
 
 | Environment Variables | Description | Default |
 |-----------------------|-------------|---------|
+| `DIMS_SIGNING_KEY` | The key `/dims5/` signatures are checked against. A single dash means none, and every `/dims5/` request is then refused. | "-" |
 | `DIMS_CLIENT` | Name of client | development |
 | `DIMS_WHITELIST` | Hosts /dims3/ may fetch from, separated by spaces. Empty matches no host. | "" |
 | `DIMS_DEFAULT_IMAGE_URL` | URL to the image sent when a request fails. A single dash means none. | "-" |

@@ -39,6 +39,12 @@ extern apr_hash_t *ops;
 /* Parses the command string and runs each operation, then sends the result. */
 apr_status_t dims_process_image(dims_request_rec *d);
 
+/*
+ * Draws a solid image in the configured colour, at the size the request asked
+ * for. Returns zero when it cannot.
+ */
+int dims_draw_error_image(dims_request_rec *d);
+
 /* Frees the wand, logs the reason, and sends the error image when one is
  * configured. */
 apr_status_t dims_cleanup(dims_request_rec *d, const char *err_msg, int status);
