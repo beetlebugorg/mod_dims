@@ -28,6 +28,14 @@
             return dims_cleanup(d, NULL, d->status);   \
     } while (0);
 
+/*
+ * The command name to operation table, built once per process at startup.
+ *
+ * A shared global rather than something on the request, because it is the same
+ * for every request and building it per request would be wasted work.
+ */
+extern apr_hash_t *ops;
+
 /* Parses the command string and runs each operation, then sends the result. */
 apr_status_t dims_process_image(dims_request_rec *d);
 
