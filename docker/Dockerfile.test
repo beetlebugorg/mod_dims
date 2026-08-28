@@ -14,6 +14,11 @@ ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r3
 
 FROM ${BUILDER_IMAGE}
 
+# valgrind for `make valgrind`. The test network is internet-isolated, so the
+# tool has to be present in the image rather than installed at run time.
+RUN apt-get update && apt-get install -y --no-install-recommends valgrind && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /build/mod_dims
 COPY . /build/mod_dims
 

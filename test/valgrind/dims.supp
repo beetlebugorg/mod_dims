@@ -1,0 +1,35 @@
+# Suppressions for the valgrind request-path run.
+#
+# These cover one-time process init. ImageMagick's MagickWandGenesis, the curl
+# global init, and the operation hash allocate for the lifetime of the worker
+# and free at a clean shutdown. The run stops httpd with a signal, so those
+# blocks show as lost. A per-request leak does not route through these frames.
+
+{
+   dims-child-init-once
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:dims_child_init
+}
+{
+   dims-post-config-once
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:dims_init
+}
+{
+   dims-profiles-load-once
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:dims_profiles_load
+}
+{
+   dims-status-version-strings
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:dims_status_handler
+}
