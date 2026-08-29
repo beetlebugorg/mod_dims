@@ -1,0 +1,26 @@
+# Throwaway image that builds the soak corpus.
+#
+# It starts from the toolchain image, so the ImageMagick that classifies a
+# file is the ImageMagick the module runs, under the policy the module ships.
+# unzip is added for the govdocs1 archives. Neither this image nor unzip is a
+# module dependency, and neither ships in the server image.
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r4
+
+FROM ${BUILDER_IMAGE}
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends unzip ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# The policy the server image runs. A file this image refuses is a file the
+# module refuses, so the manifest holds the expected result for each source.
+COPY docker/policy.xml /usr/local/imagemagick/etc/ImageMagick-7/policy.xml
+
+ENV LD_LIBRARY_PATH=/usr/local/imagemagick/lib
+ENV PATH=/usr/local/imagemagick/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV LC_ALL=C
+
+COPY test/endurance/corpus-build.sh /usr/local/bin/corpus-build
+RUN chmod 0755 /usr/local/bin/corpus-build
+
+ENTRYPOINT ["/usr/local/bin/corpus-build"]

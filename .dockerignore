@@ -3,3 +3,7 @@
 build
 specs
 test/golden
+
+# The soak corpus and its run output. Gigabytes, and no image needs them.
+test/endurance/corpus/
+test/endurance/runs/
