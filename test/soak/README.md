@@ -5,6 +5,9 @@ throughput on a fixed CPU and memory budget with no failures. It is an
 operational tool. It is not part of `make test`, and nothing in the module or
 the C test harness depends on it.
 
+`test/endurance/` answers a different question: whether the module survives
+hours of signed requests without a crash, a leak, or a wrong answer.
+
 ## What it does
 
 `run.sh` runs the production server image under a hard CPU and memory limit,

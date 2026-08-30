@@ -1,0 +1,50 @@
+# The server image with an instrumented module.
+#
+# The runtime is the toolchain image rather than the production base, because
+# AddressSanitizer has to be preloaded from the same toolchain that compiled
+# the module. The configuration is docker/dims.conf, the one the production
+# image runs, so the only difference is how the module was built.
+#
+#   --build-arg DIMS_SANITIZE=address,undefined   for the asan mode
+#   --build-arg DIMS_SANITIZE=                    for the valgrind mode
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r4
+
+FROM ${BUILDER_IMAGE}
+
+ARG DIMS_SANITIZE=address,undefined
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends valgrind gdb && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build/mod_dims
+COPY . /build/mod_dims
+
+RUN cmake -B build-debug -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DDIMS_SANITIZE="${DIMS_SANITIZE}" >/dev/null && \
+    cmake --build build-debug --target mod_dims -j"$(nproc)" && \
+    cp build-debug/libmod_dims.so /usr/local/apache2/modules/libmod_dims.so
+
+COPY docker/policy.xml /usr/local/imagemagick/etc/ImageMagick-7/policy.xml
+COPY docker/dims.conf /usr/local/apache2/conf/extra/dims.conf
+COPY profiles/ /usr/local/share/mod_dims/profiles/
+COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/dims-entrypoint
+
+# The same listener and the same include the production image sets up.
+RUN sed -i 's|^Listen 80$|Listen 8000|' /usr/local/apache2/conf/httpd.conf && \
+    sed -i 's|^#LoadModule authz_core_module|LoadModule authz_core_module|' \
+        /usr/local/apache2/conf/httpd.conf && \
+    printf 'ServerName dims\n' >> /usr/local/apache2/conf/httpd.conf && \
+    echo "Include conf/extra/dims.conf" >> /usr/local/apache2/conf/httpd.conf
+
+# Where the sanitizer runtime is, so the entrypoint can preload it.
+RUN gcc -print-file-name=libasan.so > /usr/local/lib/libasan.path
+
+ENV LD_LIBRARY_PATH=/usr/local/imagemagick/lib
+ENV PATH=/usr/local/imagemagick/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV LC_ALL=C
+
+EXPOSE 8000
+
+ENTRYPOINT ["/usr/local/bin/dims-entrypoint"]
+CMD ["httpd", "-DFOREGROUND"]

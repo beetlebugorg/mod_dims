@@ -1,0 +1,17 @@
+# The soak client. A throwaway image: it never ships and the module never
+# links it. It builds from the toolchain image so the client and the module
+# use one libcurl and one OpenSSL.
+ARG BUILDER_IMAGE=ghcr.io/beetlebugorg/mod_dims:builder-im7.1.2-30-r4
+
+FROM ${BUILDER_IMAGE}
+
+WORKDIR /build/mod_dims
+COPY . /build/mod_dims
+
+RUN cmake -B build-soak -DCMAKE_BUILD_TYPE=RelWithDebInfo >/dev/null && \
+    cmake --build build-soak --target dims_soak -j"$(nproc)" && \
+    cp build-soak/test/endurance/dims_soak /usr/local/bin/dims_soak
+
+ENV LC_ALL=C
+
+ENTRYPOINT ["/usr/local/bin/dims_soak"]

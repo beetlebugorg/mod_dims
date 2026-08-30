@@ -38,6 +38,8 @@ holds the one-time init that would otherwise show as lost.
 | `golden/<env>/` | one file per case |
 | `lib/` | the runner, the golden comparison, the signer, the request helper |
 | `http/` | the cases |
+| `soak/` | the worker configuration sweep |
+| `endurance/` | the multi-hour signed request soak |
 
 ## Design rules
 

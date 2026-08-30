@@ -193,3 +193,10 @@ add_test(NAME ExampleConfigIsValid
         -DDIMS_MODULE=$<TARGET_FILE:mod_dims>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckModuleLoads.cmake)
 set_tests_properties(ExampleConfigIsValid PROPERTIES LABELS "contract")
+
+# -- The soak client
+#
+# Built here so the compiler checks it. It has no case: see
+# test/endurance/README.md.
+
+add_subdirectory(endurance)

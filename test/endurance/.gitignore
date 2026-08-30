@@ -1,0 +1,6 @@
+# The corpus and every run artifact. The images come from Wikimedia Commons at
+# run time, and a run writes megabytes of samples and failures.
+corpus/
+runs/
+report.txt
+*.log
