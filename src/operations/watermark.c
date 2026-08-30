@@ -306,6 +306,15 @@ dims_watermark_operation (dims_request_rec *d, char *args, const char **err) {
         final_height = largest_size;
     }
 
+    /* A small source scales the overlay to less than a pixel, and no image has
+     * a side of none. */
+    if (final_width < 1) {
+        final_width = 1;
+    }
+    if (final_height < 1) {
+        final_height = 1;
+    }
+
     if (MagickScaleImage(overlay_wand, final_width, final_height) == MagickFalse) {
         status = (d->status == DIMS_IMAGEMAGICK_TIMEOUT)
                 ? DIMS_IMAGEMAGICK_TIMEOUT : DIMS_FAILURE;

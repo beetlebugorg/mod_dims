@@ -18,5 +18,8 @@ resize/50%          half the size
 
 A JPEG source is resampled at 2x1x1 chroma subsampling.
 
+A side never falls below one pixel. A percentage rounds down, so a small image
+scaled by a small percentage would otherwise ask for a side of no pixels.
+
 [`DimsOptimizeResize`](/configuration/output) makes ImageMagick decode a large
 JPEG at a smaller scale first, which is faster and slightly softer.

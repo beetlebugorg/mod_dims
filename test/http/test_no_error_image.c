@@ -186,6 +186,38 @@ test_watermark_short_argument_list_is_a_bad_request(void)
     free(url);
 }
 
+/*
+ * A crop region entirely off the image, and one whose offset is exactly the
+ * width. Both leave nothing to cut out. go-dims refuses the first pair, and
+ * the second used to answer 500 while the offsets on either side of it were
+ * accepted.
+ */
+static void
+test_crop_outside_the_image_is_a_bad_request(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char *path;
+
+    path = dims_sign_dims4("crop/256x256+768+768", url, NULL, NULL);
+    CHECK_INT(status_of(path), 400, "an x offset past the image");
+    free(path);
+
+    path = dims_sign_dims4("crop/256x256+0+768", url, NULL, NULL);
+    CHECK_INT(status_of(path), 400, "a y offset past the image");
+    free(path);
+
+    path = dims_sign_dims4("crop/50x50+512+0", url, NULL, NULL);
+    CHECK_INT(status_of(path), 400, "an x offset of exactly the width");
+    free(path);
+
+    /* One column remains, so this one is a crop rather than a refusal. */
+    path = dims_sign_dims4("crop/50x50+511+0", url, NULL, NULL);
+    CHECK_INT(status_of(path), 200, "one pixel inside the edge");
+    free(path);
+
+    free(url);
+}
+
 const dims_test dims_tests_no_error_image[] = {
     { "TestUnknownClientIsAServerError", test_unknown_client_is_a_server_error, NULL },
     { "TestWrongSignatureIsABadRequest", test_wrong_signature_is_a_bad_request, NULL },
@@ -196,6 +228,8 @@ const dims_test dims_tests_no_error_image[] = {
       test_quality_out_of_range_is_a_bad_request, NULL },
     { "TestWatermarkShortArgumentListIsABadRequest",
       test_watermark_short_argument_list_is_a_bad_request, NULL },
+    { "TestCropOutsideTheImageIsABadRequest",
+      test_crop_outside_the_image_is_a_bad_request, NULL },
     { "TestBadGeometryReportsTheModuleStatus",
       test_bad_geometry_reports_the_module_status, NULL },
     DIMS_TEST_END

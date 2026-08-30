@@ -19,6 +19,8 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, const char **err) {
         return DIMS_FAILURE;
     }
 
+    dims_geometry_least_one_pixel(&rec);
+
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
         const double factors[3] = { 2.0, 1.0, 1.0 };
@@ -33,6 +35,7 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, const char **err) {
         RectangleInfo sampleRec = rec;
         sampleRec.width *= d->optimize_resize;
         sampleRec.height *= d->optimize_resize;
+        dims_geometry_least_one_pixel(&sampleRec);
 
         orig_width = MagickGetImageWidth(d->wand);
         orig_height = MagickGetImageHeight(d->wand);
@@ -52,7 +55,13 @@ dims_thumbnail_operation (dims_request_rec *d, char *args, const char **err) {
             return DIMS_FAILURE;
         }
 
-        MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
+        if (!dims_geometry_crop_fits(GetImageFromMagickWand(d->wand), &rec)) {
+            *err = "The crop region lies outside the image";
+            return DIMS_BAD_ARGUMENTS;
+        }
+
+        MAGICK_CROP_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y),
+                      d, err, "The crop region lies outside the image");
     }
 
     MAGICK_CHECK(MagickSetImagePage(d->wand, rec.width, rec.height, rec.x, rec.y), d);

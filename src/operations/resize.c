@@ -18,6 +18,8 @@ dims_resize_operation (dims_request_rec *d, char *args, const char **err) {
         return DIMS_FAILURE;
     }
 
+    dims_geometry_least_one_pixel(&rec);
+
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
         const double factors[3] = { 2.0, 1.0, 1.0 };
@@ -32,6 +34,7 @@ dims_resize_operation (dims_request_rec *d, char *args, const char **err) {
         RectangleInfo sampleRec = rec;
         sampleRec.width *= d->optimize_resize;
         sampleRec.height *= d->optimize_resize;
+        dims_geometry_least_one_pixel(&sampleRec);
 
         orig_width = MagickGetImageWidth(d->wand);
         orig_height = MagickGetImageHeight(d->wand);
