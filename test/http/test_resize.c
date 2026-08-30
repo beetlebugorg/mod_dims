@@ -63,6 +63,16 @@ test_resize_fill_with_crop(void)
                     50, 100);
 }
 
+/*
+ * A percentage that rounds a side to no pixels answers with a single pixel
+ * rather than ending the request.
+ */
+static void
+test_resize_below_one_pixel(void)
+{
+    dims_run_golden("TestResizeBelowOnePixel", "grid.png", "resize/0.1%", 1, 1);
+}
+
 const dims_test dims_tests_resize[] = {
     { "TestResize", test_resize, NULL },
     { "TestResizeOnlySmaller", test_resize_only_smaller, NULL },
@@ -72,5 +82,6 @@ const dims_test dims_tests_resize[] = {
     { "TestResizeIgnoreAspectRatioWidthOnly", test_resize_ignore_aspect_ratio_width_only, NULL },
     { "TestResizeFill", test_resize_fill, NULL },
     { "TestResizeFillWithCrop", test_resize_fill_with_crop, NULL },
+    { "TestResizeBelowOnePixel", test_resize_below_one_pixel, NULL },
     DIMS_TEST_END
 };

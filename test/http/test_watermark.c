@@ -212,7 +212,36 @@ test_watermark_cached_overlay_is_revalidated(void)
     free(url);
 }
 
+/*
+ * The overlay is scaled to a fraction of the larger side of the source, so a
+ * source of one pixel scales it to less than a pixel. No image has a side of
+ * none, so the overlay keeps one and the request is answered.
+ */
+static void
+test_watermark_on_a_one_pixel_source(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char *overlay = dims_fixture_url("overlay.png");
+    char *encoded = dims_urlencode(overlay);
+    char extra[1024];
+    char *path;
+    dims_response *response;
+
+    snprintf(extra, sizeof(extra), "overlay=%s", encoded);
+    path = dims_sign_dims4("resize/1x1!/watermark/0.2,0.8,ne", url, extra, "overlay");
+    response = dims_get(path);
+
+    CHECK_INT(response->status, 200, "a watermark on a one pixel source");
+
+    dims_response_free(response);
+    free(path);
+    free(encoded);
+    free(overlay);
+    free(url);
+}
+
 const dims_test dims_tests_watermark[] = {
+
     { "TestWatermark", test_watermark, NULL },
     { "TestWatermarkShortArgumentsAreStable",
       test_watermark_short_arguments_are_stable, NULL },
@@ -222,5 +251,7 @@ const dims_test dims_tests_watermark[] = {
       test_watermark_overlay_off_allowlist_is_refused, NULL },
     { "TestWatermarkCachedOverlayIsRevalidated",
       test_watermark_cached_overlay_is_revalidated, NULL },
+    { "TestWatermarkOnAOnePixelSource",
+      test_watermark_on_a_one_pixel_source, NULL },
     DIMS_TEST_END
 };

@@ -34,4 +34,22 @@
         }                                           \
     } while (0)
 
+/*
+ * Runs a crop and returns a bad request when ImageMagick refuses it.
+ *
+ * The geometry checks above catch the regions go-dims names, and this catches
+ * the rest. A region ImageMagick will not cut is the caller's geometry, not a
+ * fault in the service, so it must not end the request with 500.
+ */
+#define MAGICK_CROP_CHECK(func, rec, err, message)  \
+    do {                                            \
+        apr_status_t code = func;                   \
+        if (rec->status == DIMS_IMAGEMAGICK_TIMEOUT) { \
+            return DIMS_IMAGEMAGICK_TIMEOUT;        \
+        } else if (code == MagickFalse) {           \
+            *(err) = (message);                     \
+            return DIMS_BAD_ARGUMENTS;              \
+        }                                           \
+    } while (0)
+
 #endif

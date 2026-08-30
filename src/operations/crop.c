@@ -5,6 +5,7 @@
  */
 
 #include "operations.h"
+#include "geometry.h"
 
 apr_status_t
 dims_crop_operation (dims_request_rec *d, char *args, const char **err) {
@@ -41,7 +42,15 @@ dims_crop_operation (dims_request_rec *d, char *args, const char **err) {
 
     DestroyExceptionInfo(ex_info);
 
-    MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
+    /* A region that lies off the image has nothing to cut out. go-dims answers
+     * 400 for it, and a signature is portable between the two. */
+    if (!dims_geometry_crop_fits(GetImageFromMagickWand(d->wand), &rec)) {
+        *err = "The crop region lies outside the image";
+        return DIMS_BAD_ARGUMENTS;
+    }
+
+    MAGICK_CROP_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y),
+                      d, err, "The crop region lies outside the image");
     MAGICK_CHECK(MagickSetImagePage(d->wand, rec.width, rec.height, rec.x, rec.y), d);
 
     return DIMS_SUCCESS;

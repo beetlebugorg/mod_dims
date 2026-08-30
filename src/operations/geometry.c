@@ -26,3 +26,49 @@ dims_parse_size_geometry(const Image *image, const char *geometry,
     return ParseMetaGeometry(geometry, &region->x, &region->y, &region->width,
                              &region->height);
 }
+
+int
+dims_geometry_crop_fits(const Image *image, RectangleInfo *region)
+{
+    ssize_t columns = (ssize_t) image->columns;
+    ssize_t rows = (ssize_t) image->rows;
+    ssize_t left = (region->x > 0) ? region->x : 0;
+    ssize_t top = (region->y > 0) ? region->y : 0;
+
+    /*
+     * A side of zero means the rest of the image. ParseGravityGeometry fills
+     * that in from the image, ParseAbsoluteGeometry does not, so the callers
+     * that use the second one arrive here with one.
+     */
+    if (region->width == 0 && columns > left) {
+        region->width = (size_t) (columns - left);
+    }
+    if (region->height == 0 && rows > top) {
+        region->height = (size_t) (rows - top);
+    }
+
+    if (region->width == 0 || region->height == 0) {
+        return 0;
+    }
+
+    /* Wholly right of, below, left of, or above the image. */
+    if (region->x >= columns || region->y >= rows ||
+            region->x + (ssize_t) region->width <= 0 ||
+            region->y + (ssize_t) region->height <= 0) {
+        return 0;
+    }
+
+    return 1;
+}
+
+void
+dims_geometry_least_one_pixel(RectangleInfo *region)
+{
+    if (region->width == 0) {
+        region->width = 1;
+    }
+
+    if (region->height == 0) {
+        region->height = 1;
+    }
+}

@@ -33,6 +33,18 @@ test_resize_rejects_bad_geometry(void)
     CHECK(code != DIMS_SUCCESS, "an unparsable geometry must not succeed");
 }
 
+/*
+ * A percentage rounds down, so a small image scaled by a small percentage asks
+ * for a side of no pixels. No image has one, so the side becomes a single
+ * pixel and the command succeeds.
+ */
+static void
+TestResizeBelowOnePixel_case(void)
+{
+    dims_run_operation("TestResizeBelowOnePixel", "grid.png", dims_resize_operation,
+                       "0.1%", 1, 1);
+}
+
 const dims_test dims_tests_unit_resize[] = {
     { "TestResize", TestResize_case, NULL },
     { "TestResizeOnlySmaller", TestResizeOnlySmaller_case, NULL },
@@ -41,6 +53,7 @@ const dims_test dims_tests_unit_resize[] = {
     { "TestResizeIgnoreAspectRatio", TestResizeIgnoreAspectRatio_case, NULL },
     { "TestResizeIgnoreAspectRatioWidthOnly", TestResizeIgnoreAspectRatioWidthOnly_case, NULL },
     { "TestResizeFill", TestResizeFill_case, NULL },
+    { "TestResizeBelowOnePixel", TestResizeBelowOnePixel_case, NULL },
     { "TestResizeRejectsBadGeometry", test_resize_rejects_bad_geometry, NULL },
     DIMS_TEST_END
 };

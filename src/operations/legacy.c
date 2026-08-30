@@ -39,11 +39,20 @@ dims_legacy_crop_operation (dims_request_rec *d, char *args, const char **err) {
     x = (width / 2) - (rec.width / 2);
     y = (height / 2) - (rec.height / 2);
 
+    rec.x = x;
+    rec.y = y;
+
+    if (!dims_geometry_crop_fits(GetImageFromMagickWand(d->wand), &rec)) {
+        *err = "The crop region lies outside the image";
+        return DIMS_BAD_ARGUMENTS;
+    }
+
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
         "legacy_crop will crop to %ldx%ld+%d+%d", 
         rec.width, rec.height, x, y);
 
-    MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, x, y), d);
+    MAGICK_CROP_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y),
+                      d, err, "The crop region lies outside the image");
 
     return DIMS_SUCCESS;
 }
@@ -61,6 +70,8 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, const char **e
         *err = "Parsing thumbnail (resize) geometry failed";
         return DIMS_FAILURE;
     }
+
+    dims_geometry_least_one_pixel(&rec);
 
     char *format = MagickGetImageFormat(d->wand);
     if (strcmp(format, "JPEG") == 0) {
@@ -89,10 +100,19 @@ dims_legacy_thumbnail_operation (dims_request_rec *d, char *args, const char **e
     x = (width / 2) - (rec.width / 2);
     y = (height / 2) - (rec.height / 2);
 
+    rec.x = x;
+    rec.y = y;
+
+    if (!dims_geometry_crop_fits(GetImageFromMagickWand(d->wand), &rec)) {
+        *err = "The crop region lies outside the image";
+        return DIMS_BAD_ARGUMENTS;
+    }
+
     ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r, 
         "legacy_thumbnail will crop to %ldx%ld+%d+%d", rec.width, rec.height, x, y);
 
-    MAGICK_CHECK(MagickCropImage(d->wand, rec.width, rec.height, x, y), d);
+    MAGICK_CROP_CHECK(MagickCropImage(d->wand, rec.width, rec.height, rec.x, rec.y),
+                      d, err, "The crop region lies outside the image");
 
     return DIMS_SUCCESS;
 }
