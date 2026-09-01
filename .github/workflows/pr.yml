@@ -182,6 +182,7 @@ jobs:
           docker rm -f dims-ci
           # The origin runs on a private network address, so this run opts in.
           docker run -d --name dims-ci \
+            -e DIMS_ENABLE_DIMS3=on \
             -e DIMS_WHITELIST="$origin" \
             -e DIMS_ALLOW_PRIVATE_ADDRESSES=on \
             mod-dims:ci

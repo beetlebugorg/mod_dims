@@ -50,4 +50,20 @@ export DIMS_MAX_WORKERS=$mw
 
 echo "mod_dims workers: ServerLimit=$sl ThreadsPerChild=$tpc MaxRequestWorkers=$mw" >&2
 
+# The legacy endpoints. httpd substitutes these into the SetHandler lines in
+# dims.conf. None leaves the location without a handler, so httpd returns 404.
+handler_name() {
+    case "$1" in
+        on|On|ON|true|True|TRUE|yes|Yes|YES|1) echo "$2" ;;
+        *) echo None ;;
+    esac
+}
+
+DIMS_DIMS3_HANDLER=$(handler_name "${DIMS_ENABLE_DIMS3:-off}" dims3)
+DIMS_DIMS4_HANDLER=$(handler_name "${DIMS_ENABLE_DIMS4:-on}" dims4)
+export DIMS_DIMS3_HANDLER
+export DIMS_DIMS4_HANDLER
+
+echo "mod_dims endpoints: dims5 dims4=$DIMS_DIMS4_HANDLER dims3=$DIMS_DIMS3_HANDLER" >&2
+
 exec "$@"

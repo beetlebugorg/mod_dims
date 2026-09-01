@@ -18,10 +18,12 @@ Built for `linux/amd64` and `linux/arm64`.
 
 ### Serving an image
 
-`/dims3/` needs an allowlist of the hosts an image may come from:
+`/dims3/` is off in the image, because it accepts an unsigned request. Turn it on
+and name the hosts an image may come from:
 
 ```bash
 docker run -p 8000:8000 \
+  -e DIMS_ENABLE_DIMS3=on \
   -e DIMS_WHITELIST="images.example.com" \
   ghcr.io/beetlebugorg/mod_dims:latest
 ```
