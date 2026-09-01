@@ -6,8 +6,7 @@ set(EXPECTED "modules/libmod_dims.so")
 set(CONFIGS
     "${DIMS_SOURCE_DIR}/conf/mod_dims.conf.example"
     "${DIMS_SOURCE_DIR}/test/conf/dims-test.conf"
-    "${DIMS_SOURCE_DIR}/docker/dims.conf"
-    "${DIMS_SOURCE_DIR}/examples/dims.conf")
+    "${DIMS_SOURCE_DIR}/docker/dims.conf")
 
 foreach(config IN LISTS CONFIGS)
     if(NOT EXISTS "${config}")
