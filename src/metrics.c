@@ -9,6 +9,8 @@
 #include "module.h"
 
 #include <ap_mpm.h>
+
+#include <unistd.h>
 #include <strings.h>
 
 dims_metrics_rec *dims_metrics;

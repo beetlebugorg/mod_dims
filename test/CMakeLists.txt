@@ -103,6 +103,7 @@ add_executable(dims_unit_test
     unit/test_resize.c
     unit/test_rotate.c
     unit/test_encryption.c
+    unit/test_metrics.c
     unit/test_netguard.c
     unit/test_overlay_cache.c
     unit/test_param.c
@@ -114,6 +115,7 @@ add_executable(dims_unit_test
     lib/golden.c
     lib/test.c
     ${CMAKE_SOURCE_DIR}/src/encryption.c
+    ${CMAKE_SOURCE_DIR}/src/metrics.c
     ${CMAKE_SOURCE_DIR}/src/netguard.c
     ${CMAKE_SOURCE_DIR}/src/overlay_cache.c
     ${CMAKE_SOURCE_DIR}/src/signature.c
