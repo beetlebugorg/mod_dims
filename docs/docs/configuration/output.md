@@ -7,7 +7,8 @@ DimsStripMetadata false
 ```
 
 Whether to remove EXIF, colour profiles, and comments when the request does not
-say. Default `true`.
+say. Default `true`. It applies to the error image as well as a successful
+response.
 
 A [`strip`](/operations/output/strip) command overrides it.
 
