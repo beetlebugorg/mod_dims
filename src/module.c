@@ -18,6 +18,7 @@
 #include "overlay_cache.h"
 #include "pipeline.h"
 #include "profile.h"
+#include "metrics.h"
 #include "status.h"
 
 #include <MagickWand/MagickWand.h>
@@ -129,6 +130,11 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     stats->download_timeout_count = 0;
     stats->imagemagick_timeout_count = 0;
 
+    status = dims_metrics_init(p, s);
+    if (status != APR_SUCCESS) {
+        return status;
+    }
+
     return OK;
 }
 
@@ -160,6 +166,8 @@ dims_child_init(apr_pool_t *p, server_rec *s)
             s->module_config, &dims_module);
 
     MagickWandGenesis();
+
+    dims_metrics_child_init();
 
     dims_profiles_load(p, s, config->profile_dir);
 
