@@ -79,9 +79,9 @@
     },
     {
       "id": 103,
-      "title": "Error ratio",
+      "title": "Server error ratio",
       "type": "stat",
-      "description": "",
+      "description": "Responses the module could not serve, as a share of all responses. A 4xx is the caller's request, so it counts in the panel beside this one.",
       "datasource": {
         "type": "prometheus",
         "uid": "PROM"
@@ -94,8 +94,8 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(dims_requests_total{outcome!=\"success\"}[1m])) / clamp_min(sum(rate(dims_requests_total[1m])), 0.001)",
-          "legendFormat": "errors",
+          "expr": "sum(rate(dims_responses_total{code=~\"5..\"}[1m])) / clamp_min(sum(rate(dims_responses_total[1m])), 0.001)",
+          "legendFormat": "5xx",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -274,10 +274,10 @@
       }
     },
     {
-      "id": 107,
-      "title": "Workers ready",
+      "id": 999,
+      "title": "Caller error ratio",
       "type": "stat",
-      "description": "",
+      "description": "Requests the module refused as malformed: a bad signature, an unknown client, or an argument it cannot parse. The caller sent these, so they report apart from a server error.",
       "datasource": {
         "type": "prometheus",
         "uid": "PROM"
@@ -290,8 +290,8 @@
       },
       "targets": [
         {
-          "expr": "dims_httpd_workers{state=\"ready\"}",
-          "legendFormat": "ready",
+          "expr": "sum(rate(dims_responses_total{code=~\"4..\"}[1m])) / clamp_min(sum(rate(dims_responses_total[1m])), 0.001)",
+          "legendFormat": "4xx",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -301,7 +301,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "percentunit",
           "custom": {},
           "color": {
             "mode": "palette-classic"

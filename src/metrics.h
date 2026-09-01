@@ -27,7 +27,7 @@ typedef enum {
  * DimsOriginStatusMode forward copies whatever the origin returned. The last
  * slot of each holds every code outside its list.
  */
-#define DIMS_CODE_COUNT 10
+#define DIMS_CODE_COUNT 11
 #define DIMS_ORIGIN_CODE_COUNT 13
 
 /* Image formats reported by name. The last slot holds every other format. */

@@ -66,12 +66,14 @@ static const char *const outcome_name[DIMS_OUTCOME_COUNT] = {
     "network_refused"
 };
 
+/* 304 answers a conditional request, so a caching client sees it often. */
 static const int code_value[DIMS_CODE_COUNT - 1] = {
-    200, 400, 403, 404, 429, 500, 502, 503, 504
+    200, 304, 400, 403, 404, 429, 500, 502, 503, 504
 };
 
 static const char *const code_name[DIMS_CODE_COUNT] = {
-    "200", "400", "403", "404", "429", "500", "502", "503", "504", "other"
+    "200", "304", "400", "403", "404", "429", "500", "502", "503", "504",
+    "other"
 };
 
 static const int origin_code_value[DIMS_ORIGIN_CODE_COUNT - 1] = {

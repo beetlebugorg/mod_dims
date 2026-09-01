@@ -20,8 +20,14 @@ no further setting.
 
 Six sections, from the top.
 
-**Overview** reports the request rate, the error ratio, the p99 latency,
-requests in flight, resident memory, and ready workers.
+**Overview** reports the request rate, the two error ratios, the p99 latency,
+requests in flight, and resident memory.
+
+The two ratios separate what the caller sent from what the module could not
+serve. A 4xx is a bad signature, an unknown client, or an argument the module
+cannot parse. A 5xx is the module or its source failing. A soak drives
+malformed requests on purpose, so its 4xx line stays high and says nothing
+about the module.
 
 **Request path** breaks the rate down by outcome, by status code, and by
 endpoint, with the latency quantiles beside them.
