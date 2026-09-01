@@ -30,10 +30,10 @@ allowlist starts empty, which matches no host.
 $ docker run -e DIMS_SECRET=mysecret mod-dims:latest
 ```
 
-## Set DIMS_WHITELIST to use /dims3/ based URLs
+## Set DIMS_ENABLE_DIMS3 and DIMS_WHITELIST to use /dims3/ based URLs
 
 ```shell
-$ docker run -e DIMS_WHITELIST="images.pexels.com" mod-dims:latest
+$ docker run -e DIMS_ENABLE_DIMS3=on -e DIMS_WHITELIST="images.pexels.com" mod-dims:latest
 ```
 
 # Configuration
@@ -43,6 +43,8 @@ $ docker run -e DIMS_WHITELIST="images.pexels.com" mod-dims:latest
 | `DIMS_SIGNING_KEY` | The key `/dims5/` signatures are checked against. A single dash means none, and every `/dims5/` request is then refused. | "-" |
 | `DIMS_CLIENT` | Name of client | development |
 | `DIMS_WHITELIST` | Hosts /dims3/ may fetch from, separated by spaces. Empty matches no host. | "" |
+| `DIMS_ENABLE_DIMS3` | Whether the image serves /dims3/. It accepts an unsigned request, so the image ships it off. | off |
+| `DIMS_ENABLE_DIMS4` | Whether the image serves /dims4/. | on |
 | `DIMS_DEFAULT_IMAGE_URL` | URL to the image sent when a request fails. A single dash means none. | "-" |
 | `DIMS_SECRET` | Shared secret for /dims4/ signatures. A single dash means none, and /dims4/ then refuses every request. | "-" |
 | `DIMS_DOWNLOAD_TIMEOUT` | Max time allowed for downloading source images, in milliseconds. | 60000 |
