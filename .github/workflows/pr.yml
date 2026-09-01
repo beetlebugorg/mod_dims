@@ -191,6 +191,22 @@ jobs:
             "http://127.0.0.1:8000/dims3/development/resize/100x100/?url=http://$origin/grid.png"
           docker exec dims-ci sh -c 'test -s /tmp/out.png'
 
+      # The metrics endpoint answers on its own port, and only when the
+      # environment turns it on.
+      - name: Scrape the metrics endpoint
+        run: |
+          docker rm -f dims-ci
+          docker run -d --name dims-ci -p 8001:8001 \
+            -e DIMS_METRICS_ENABLED=on mod-dims:ci
+          for i in $(seq 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8001/metrics; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8001/metrics | grep -q dims_requests_total
+          curl -fsS http://127.0.0.1:8001/metrics | grep -q dims_httpd_workers
+
       # The runtime user must not be able to rewrite the module it runs.
       - name: Check the file permissions
         run: |

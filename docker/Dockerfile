@@ -65,6 +65,7 @@ ENV DIMS_ALLOW_PRIVATE_ADDRESSES=off
 ENV DIMS_STATUS_VERBOSE=off
 ENV DIMS_ENABLE_DIMS3=off
 ENV DIMS_ENABLE_DIMS4=on
+ENV DIMS_METRICS_ENABLED=off
 ENV DIMS_ENCRYPTION_ALGORITHM=AES/GCM/NoPadding
 ENV LC_ALL="C"
 
@@ -105,7 +106,7 @@ RUN rm -rf /usr/local/apache2/build \
     chown -R root:root /usr/local/apache2 /usr/local/imagemagick && \
     chmod -R go-w /usr/local/apache2 /usr/local/imagemagick
 
-EXPOSE 8000
+EXPOSE 8000 8001
 USER 33
 
 # A real request, not a configuration check. The status handler answers
