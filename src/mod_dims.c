@@ -683,6 +683,20 @@ dims_draw_error_image(dims_request_rec *d)
 }
 
 /*
+ * Strips the metadata from the error image, when the configuration asks for it.
+ *
+ * The error image does not pass through dims_process_image, which is where the
+ * default strip runs, so DimsStripMetadata reaches it here.
+ */
+static void
+dims_strip_error_image(dims_request_rec *d)
+{
+    if (d->config->strip_metadata) {
+        MagickStripImage(d->wand);
+    }
+}
+
+/*
  * Ends a failed request.
  *
  * Records the status, frees the wand, logs the reason, and sends the error
@@ -706,6 +720,7 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
         d->wand = NewMagickWand();
 
         if (dims_draw_error_image(d)) {
+            dims_strip_error_image(d);
             return dims_send_image(d);
         }
 
@@ -713,6 +728,7 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
     } else if (d->no_image_url) {
         d->wand = NewMagickWand();
         if (!dims_fetch_remote_image(d, NULL)) {
+            dims_strip_error_image(d);
             return dims_send_image(d);
         }
         dims_free_request(d);
