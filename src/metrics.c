@@ -351,6 +351,25 @@ record_request(void *baton)
         apr_atomic_inc64(&m->source_format[d->source_format_index]);
     }
 
+    if (d->source_frames > 0) {
+        dims_metrics_observe(&m->source_frames, &dims_frame_buckets,
+                d->source_frames);
+    }
+
+    /* ImageMagick ran when it timed the work, whatever the outcome. */
+    if (d->imagemagick_time > 0) {
+        dims_metrics_observe(&m->imagemagick_duration, &dims_duration_buckets,
+                (apr_uint64_t) d->imagemagick_time * 1000);
+    }
+
+    /* The response, when one was written. */
+    if (d->output_format_index >= 0) {
+        apr_atomic_inc64(&m->output_format[d->output_format_index]);
+        apr_atomic_add64(&m->output_bytes_total, d->output_bytes);
+        dims_metrics_observe(&m->output_bytes, &dims_byte_buckets,
+                d->output_bytes);
+    }
+
     return APR_SUCCESS;
 }
 

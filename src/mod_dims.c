@@ -503,6 +503,10 @@ dims_send_image(dims_request_rec *d)
     blob = MagickGetImagesBlob(d->wand, &length);
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
+    /* What the caller receives. The pool cleanup reports it. */
+    d->output_format_index = dims_metrics_format_index(format);
+    d->output_bytes = (blob != NULL) ? (apr_uint64_t) length : 0;
+
     /* Set the Content-Type based on the image format. */
     content_type = apr_psprintf(d->pool, "image/%s", format);
     ap_content_type_tolower(content_type);
@@ -980,6 +984,8 @@ dims_process_image(dims_request_rec *d)
     /* Flatten images (i.e animated gif) if there's an overlay or file type is `psd`. Otherwise, pass through. */
     size_t images = MagickGetNumberImages(d->wand);
     bool should_flatten = false;
+
+    d->source_frames = (apr_uint64_t) images;
 
     if (images > 1) {
         int i;

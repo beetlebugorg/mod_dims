@@ -266,6 +266,55 @@ test_metrics_counts_the_source(void)
     dims_response_free(after);
 }
 
+/* A response reports its format, its size, and the ImageMagick time. */
+static void
+test_metrics_counts_the_output(void)
+{
+    dims_response *before = scrape();
+    double was = dims_prom_value(before,
+            "dims_output_format_total{format=\"webp\"}");
+    dims_response *image;
+    dims_response *after;
+
+    image = dims_request_ops("resize/40x40/format/webp", "grid.png");
+    CHECK_INT(image->status, 200, "the image request");
+    dims_response_free(image);
+
+    after = scrape();
+
+    CHECK(dims_prom_value(after, "dims_output_format_total{format=\"webp\"}")
+              >= was + 1,
+          "the webp output counter moved from %g", was);
+    CHECK(dims_prom_value(after, "dims_output_bytes_total") > 0,
+          "the output byte total");
+    CHECK(dims_prom_value(after, "dims_output_bytes_count") >= 1,
+          "the output size histogram");
+    CHECK(dims_prom_value(after, "dims_imagemagick_duration_seconds_count")
+              >= 1,
+          "the ImageMagick duration histogram");
+
+    dims_response_free(before);
+    dims_response_free(after);
+}
+
+/* A single frame source counts in the first bucket. */
+static void
+test_metrics_counts_frames(void)
+{
+    dims_response *image = dims_request_ops("resize/40x40", "grid.png");
+    dims_response *after;
+
+    dims_response_free(image);
+    after = scrape();
+
+    CHECK(dims_prom_value(after, "dims_source_frames_count") >= 1,
+          "the frame histogram counted a source");
+    CHECK(dims_prom_value(after, "dims_source_frames_bucket{le=\"1\"}") >= 1,
+          "a single frame source is the first bucket");
+
+    dims_response_free(after);
+}
+
 const dims_test dims_tests_metrics[] = {
     { "TestMetricsContentType", test_metrics_content_type, NULL },
     { "TestMetricsFormat", test_metrics_format, NULL },
@@ -275,6 +324,8 @@ const dims_test dims_tests_metrics[] = {
     { "TestMetricsCountsARefusal", test_metrics_counts_a_refusal, NULL },
     { "TestMetricsInFlightSettles", test_metrics_in_flight_settles, NULL },
     { "TestMetricsCountsTheSource", test_metrics_counts_the_source, NULL },
+    { "TestMetricsCountsTheOutput", test_metrics_counts_the_output, NULL },
+    { "TestMetricsCountsFrames", test_metrics_counts_frames, NULL },
     { "TestMetricsDisabled", test_metrics_disabled, NULL },
     DIMS_TEST_END
 };

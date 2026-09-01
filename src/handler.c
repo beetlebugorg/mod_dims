@@ -361,6 +361,8 @@ dims_handler(request_rec *r)
     d->endpoint = -1;
     d->source_format_index = -1;
     d->output_format_index = -1;
+    d->output_bytes = 0;
+    d->source_frames = 0;
     d->image_url = NULL;
     d->filename = NULL;
     d->cache_control = NULL;

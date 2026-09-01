@@ -244,6 +244,10 @@ struct dims_request_rec {
     int source_format_index;
     int output_format_index;
 
+    /* Bytes written to the caller, and frames in the source. */
+    apr_uint64_t output_bytes;
+    apr_uint64_t source_frames;
+
     /* The URL to the NOIMAGE image in case of failures. */
     char *no_image_url;
 
