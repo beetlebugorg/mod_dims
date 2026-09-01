@@ -29,9 +29,10 @@ DimsAllowPrivateAddresses off
 
 # The hosts an image may come from. A leading *. matches subdomains only, not
 # the apex. This list applies to /dims3/. A signed request skips it unless you
-# enable DimsAllowlistSigned below.
-DimsAddWhitelist images.example.com
-DimsAddWhitelist *.cdn.example.com
+# enable DimsAllowlistSigned below. Name a host before /dims3/ can fetch a
+# source.
+# DimsAddWhitelist images.example.com
+# DimsAddWhitelist *.cdn.example.com
 
 # Apply the host allowlist to a signed request and to a redirect. A signed
 # request skips the allowlist by default. Enable this once the allowlist covers
