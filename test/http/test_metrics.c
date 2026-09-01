@@ -237,6 +237,35 @@ test_metrics_in_flight_settles(void)
     dims_response_free(response);
 }
 
+/* A fetch records its origin status, its size, and the format it read. */
+static void
+test_metrics_counts_the_source(void)
+{
+    dims_response *image = dims_request_ops("resize/40x40", "grid.png");
+    dims_response *after;
+
+    CHECK_INT(image->status, 200, "the image request");
+    dims_response_free(image);
+
+    after = scrape();
+
+    CHECK(dims_prom_value(after, "dims_origin_responses_total{code=\"200\"}")
+              >= 1,
+          "the origin 200 counter");
+    CHECK(dims_prom_value(after, "dims_source_format_total{format=\"png\"}")
+              >= 1,
+          "the PNG source counter");
+    CHECK(dims_prom_value(after, "dims_source_bytes_total") > 0,
+          "the source byte total");
+    CHECK(dims_prom_value(after, "dims_source_bytes_count") >= 1,
+          "the source size histogram");
+    CHECK(dims_prom_value(after, "dims_source_fetch_duration_seconds_count")
+              >= 1,
+          "the fetch duration histogram");
+
+    dims_response_free(after);
+}
+
 const dims_test dims_tests_metrics[] = {
     { "TestMetricsContentType", test_metrics_content_type, NULL },
     { "TestMetricsFormat", test_metrics_format, NULL },
@@ -245,6 +274,7 @@ const dims_test dims_tests_metrics[] = {
     { "TestMetricsCountsASuccess", test_metrics_counts_a_success, NULL },
     { "TestMetricsCountsARefusal", test_metrics_counts_a_refusal, NULL },
     { "TestMetricsInFlightSettles", test_metrics_in_flight_settles, NULL },
+    { "TestMetricsCountsTheSource", test_metrics_counts_the_source, NULL },
     { "TestMetricsDisabled", test_metrics_disabled, NULL },
     DIMS_TEST_END
 };

@@ -324,6 +324,33 @@ record_request(void *baton)
     dims_metrics_observe(&m->request_duration[endpoint], &dims_duration_buckets,
             micros);
 
+    /*
+     * The source, when the request reached one. fetch_http_status names a
+     * source fetch, and download_time alone names an error image fetch.
+     * download_time counts milliseconds, so a fetch inside one millisecond
+     * reports zero and belongs in the first bucket.
+     */
+    if (d->fetch_http_status != 0 || d->download_time > 0) {
+        dims_metrics_observe(&m->download_duration, &dims_duration_buckets,
+                (apr_uint64_t) d->download_time * 1000);
+    }
+
+    if (d->original_image_size > 0) {
+        apr_atomic_add64(&m->source_bytes_total,
+                (apr_uint64_t) d->original_image_size);
+        dims_metrics_observe(&m->source_bytes, &dims_byte_buckets,
+                (apr_uint64_t) d->original_image_size);
+    }
+
+    if (d->fetch_http_status != 0) {
+        apr_atomic_inc64(&m->origin_responses[
+                dims_metrics_origin_code_index(d->fetch_http_status)]);
+    }
+
+    if (d->source_format_index >= 0) {
+        apr_atomic_inc64(&m->source_format[d->source_format_index]);
+    }
+
     return APR_SUCCESS;
 }
 

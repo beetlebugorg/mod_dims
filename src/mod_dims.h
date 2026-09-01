@@ -240,6 +240,10 @@ struct dims_request_rec {
     /* Which endpoint served this, as a dims_endpoint_t. */
     int endpoint;
 
+    /* Slots in the metrics format table, or -1 before the format is known. */
+    int source_format_index;
+    int output_format_index;
+
     /* The URL to the NOIMAGE image in case of failures. */
     char *no_image_url;
 

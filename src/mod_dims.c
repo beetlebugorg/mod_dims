@@ -29,6 +29,7 @@
 #include "mod_dims.h"
 #include "curl.h"
 #include "netguard.h"
+#include "metrics.h"
 #include "status.h"
 #include "pipeline.h"
 #include "svgguard.h"
@@ -315,6 +316,16 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             return 1;
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
+
+        /* The format the wand read, kept as a metrics slot because the string
+         * belongs to ImageMagick. The error image reports its own format, so
+         * only a source fetch records one. */
+        if (url != NULL) {
+            char *source_format = MagickGetImageFormat(d->wand);
+
+            d->source_format_index = dims_metrics_format_index(source_format);
+            MagickRelinquishMemory(source_format);
+        }
 
         if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
             d->original_image_size = image_data.used;

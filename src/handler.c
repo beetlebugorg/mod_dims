@@ -358,6 +358,9 @@ dims_handler(request_rec *r)
     d->client_config = NULL;
     d->no_image_url = d->config->no_image_url;
     d->use_no_image = 0;
+    d->endpoint = -1;
+    d->source_format_index = -1;
+    d->output_format_index = -1;
     d->image_url = NULL;
     d->filename = NULL;
     d->cache_control = NULL;
