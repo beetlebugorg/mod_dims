@@ -345,6 +345,49 @@ test_metrics_reports_resources(void)
     dims_response_free(response);
 }
 
+/*
+ * The scoreboard holds a slot per thread across the daemon ceiling, so the
+ * states add up to the ceiling times the thread count. The scrape itself is a
+ * busy worker, so at least one is not ready.
+ */
+static void
+test_metrics_reports_the_worker_pool(void)
+{
+    dims_response *response = scrape();
+    static const char *const states[] = {
+        "dead", "starting", "ready", "busy_read", "busy_write",
+        "busy_keepalive", "busy_log", "busy_dns", "closing", "graceful",
+        "idle_kill", NULL
+    };
+    char name[128];
+    double total = 0;
+    double limit;
+    double threads;
+    int i;
+
+    for (i = 0; states[i] != NULL; i++) {
+        snprintf(name, sizeof(name), "dims_httpd_workers{state=\"%s\"}",
+                states[i]);
+        total += dims_prom_value(response, name);
+    }
+
+    limit = dims_prom_value(response, "dims_httpd_processes_limit");
+    threads = dims_prom_value(response, "dims_httpd_threads_per_process");
+
+    CHECK(limit >= 1, "a daemon ceiling");
+    CHECK(threads >= 1, "a thread count");
+    CHECK_INT((long) total, (long) (limit * threads),
+              "the worker states add up to the scoreboard");
+
+    CHECK(dims_prom_value(response, "dims_httpd_processes") >= 1,
+          "a live process");
+    CHECK(dims_prom_value(response, "dims_httpd_workers{state=\"busy_write\"}")
+              >= 1,
+          "the scrape is a busy worker");
+
+    dims_response_free(response);
+}
+
 const dims_test dims_tests_metrics[] = {
     { "TestMetricsContentType", test_metrics_content_type, NULL },
     { "TestMetricsFormat", test_metrics_format, NULL },
@@ -357,6 +400,8 @@ const dims_test dims_tests_metrics[] = {
     { "TestMetricsCountsTheOutput", test_metrics_counts_the_output, NULL },
     { "TestMetricsCountsFrames", test_metrics_counts_frames, NULL },
     { "TestMetricsReportsResources", test_metrics_reports_resources, NULL },
+    { "TestMetricsReportsTheWorkerPool", test_metrics_reports_the_worker_pool,
+      NULL },
     { "TestMetricsDisabled", test_metrics_disabled, NULL },
     DIMS_TEST_END
 };

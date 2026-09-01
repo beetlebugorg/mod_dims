@@ -8,6 +8,9 @@
 #include "metrics.h"
 #include "module.h"
 
+#include <ap_mpm.h>
+#include <scoreboard.h>
+
 #include <stdio.h>
 
 /*
@@ -179,6 +182,94 @@ write_process(request_rec *r, const dims_metrics_rec *m)
     }
 }
 
+/*
+ * The httpd worker pool, read from the scoreboard rather than the metrics
+ * block. The scoreboard is the server's own record, so a scrape reports what
+ * every worker is doing now.
+ */
+static void
+write_httpd(request_rec *r)
+{
+    static const char *const state_name[SERVER_NUM_STATUS] = {
+        "dead", "starting", "ready", "busy_read", "busy_write",
+        "busy_keepalive", "busy_log", "busy_dns", "closing", "graceful",
+        "idle_kill"
+    };
+    apr_uint64_t state[SERVER_NUM_STATUS];
+    apr_uint64_t connections = 0, write_completion = 0, lingering = 0;
+    apr_uint64_t keep_alive = 0, suspended = 0;
+    int daemons = 0, threads = 0, generation = 0;
+    int processes = 0;
+    int i, j;
+
+    memset(state, 0, sizeof(state));
+
+    ap_mpm_query(AP_MPMQ_MAX_DAEMONS, &daemons);
+    ap_mpm_query(AP_MPMQ_MAX_THREADS, &threads);
+    ap_mpm_query(AP_MPMQ_GENERATION, &generation);
+
+    if (threads < 1) {
+        threads = 1;
+    }
+
+    if (ap_exists_scoreboard_image()) {
+        for (i = 0; i < daemons; i++) {
+            process_score *ps = ap_get_scoreboard_process(i);
+
+            if (ps->pid != 0 && !ps->quiescing) {
+                processes++;
+                connections += ps->connections;
+                write_completion += ps->write_completion;
+                lingering += ps->lingering_close;
+                keep_alive += ps->keep_alive;
+                suspended += ps->suspended;
+            }
+
+            for (j = 0; j < threads; j++) {
+                worker_score *ws = ap_get_scoreboard_worker_from_indexes(i, j);
+
+                if (ws != NULL && ws->status < SERVER_NUM_STATUS) {
+                    state[ws->status]++;
+                }
+            }
+        }
+    }
+
+    head(r, "dims_httpd_workers", "Worker threads by scoreboard state.",
+            "gauge");
+    for (i = 0; i < SERVER_NUM_STATUS; i++) {
+        ap_rprintf(r, "dims_httpd_workers{state=\"%s\"} %" APR_UINT64_T_FMT "\n",
+                state_name[i], state[i]);
+    }
+
+    head(r, "dims_httpd_processes", "Child processes serving requests.",
+            "gauge");
+    ap_rprintf(r, "dims_httpd_processes %d\n", processes);
+
+    head(r, "dims_httpd_processes_limit", "The daemon ceiling the MPM runs under.",
+            "gauge");
+    ap_rprintf(r, "dims_httpd_processes_limit %d\n", daemons);
+
+    head(r, "dims_httpd_threads_per_process", "Threads in one child.", "gauge");
+    ap_rprintf(r, "dims_httpd_threads_per_process %d\n", threads);
+
+    head(r, "dims_httpd_connections", "Connections by state.", "gauge");
+    ap_rprintf(r, "dims_httpd_connections{state=\"total\"} "
+            "%" APR_UINT64_T_FMT "\n", connections);
+    ap_rprintf(r, "dims_httpd_connections{state=\"write_completion\"} "
+            "%" APR_UINT64_T_FMT "\n", write_completion);
+    ap_rprintf(r, "dims_httpd_connections{state=\"lingering_close\"} "
+            "%" APR_UINT64_T_FMT "\n", lingering);
+    ap_rprintf(r, "dims_httpd_connections{state=\"keep_alive\"} "
+            "%" APR_UINT64_T_FMT "\n", keep_alive);
+    ap_rprintf(r, "dims_httpd_connections{state=\"suspended\"} "
+            "%" APR_UINT64_T_FMT "\n", suspended);
+
+    /* A restart increments this, so a dashboard sees the reload. */
+    head(r, "dims_httpd_generation", "The MPM generation.", "gauge");
+    ap_rprintf(r, "dims_httpd_generation %d\n", generation);
+}
+
 static void
 write_metrics(request_rec *r)
 {
@@ -279,6 +370,7 @@ write_metrics(request_rec *r)
             0, "");
 
     write_process(r, m);
+    write_httpd(r);
 }
 
 apr_status_t
