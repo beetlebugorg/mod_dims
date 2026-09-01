@@ -391,6 +391,8 @@ dims_handler(request_rec *r)
         /* Handle local filesystem images w/DIMS parameters. */
         d->filename = r->canonical_filename;
         d->unparsed_commands = r->path_info;
+        d->endpoint = DIMS_ENDPOINT_LOCAL;
+        dims_metrics_request_begin(d);
 
         return dims_handle_request(d);
     } else if ((strcmp(r->handler, "dims3") == 0) ||
@@ -398,6 +400,9 @@ dims_handler(request_rec *r)
         /* Handle new-style DIMS parameters. */
         char *p, *fixed_url = NULL, *commands = NULL, *eurl = NULL;
         int is_dims4 = strcmp(r->handler, "dims4") == 0;
+
+        d->endpoint = is_dims4 ? DIMS_ENDPOINT_DIMS4 : DIMS_ENDPOINT_DIMS3;
+        dims_metrics_request_begin(d);
 
         if (is_dims4) {
                d->use_secret_key = 1;
@@ -546,6 +551,8 @@ dims_handler(request_rec *r)
         return dims_handle_request(d);
     } else if(strcmp(r->handler, "dims5") == 0) {
         d->scheme = DIMS_SCHEME_DIMS5;
+        d->endpoint = DIMS_ENDPOINT_DIMS5;
+        dims_metrics_request_begin(d);
 
         return dims_handle_request(d);
     } else if(strcmp(r->handler, "dims-metrics") == 0) {

@@ -237,6 +237,9 @@ struct dims_request_rec {
     char *image_url;
     int use_no_image;
 
+    /* Which endpoint served this, as a dims_endpoint_t. */
+    int endpoint;
+
     /* The URL to the NOIMAGE image in case of failures. */
     char *no_image_url;
 

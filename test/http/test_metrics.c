@@ -163,11 +163,88 @@ test_metrics_disabled(void)
     dims_response_free(response);
 }
 
+/*
+ * A request moves its counter. The value is read before and after, because
+ * other cases in the run share the server and its counters.
+ */
+static void
+test_metrics_counts_a_success(void)
+{
+    dims_response *before = scrape();
+    double was = dims_prom_value(before,
+            "dims_requests_total{endpoint=\"dims4\",outcome=\"success\"}");
+    dims_response *image;
+    dims_response *after;
+
+    image = dims_request_ops("resize/40x40", "grid.png");
+    CHECK_INT(image->status, 200, "the image request");
+    dims_response_free(image);
+
+    after = scrape();
+    CHECK(dims_prom_value(after,
+                  "dims_requests_total{endpoint=\"dims4\",outcome=\"success\"}")
+              >= was + 1,
+          "the success counter moved from %g", was);
+    CHECK(dims_prom_value(after,
+                  "dims_responses_total{endpoint=\"dims4\",code=\"200\"}")
+              >= 1,
+          "the 200 counter");
+
+    dims_response_free(before);
+    dims_response_free(after);
+}
+
+/*
+ * A host outside the allowlist reports its own outcome on /dims3/, which is
+ * the endpoint that enforces the list.
+ */
+static void
+test_metrics_counts_a_refusal(void)
+{
+    dims_response *before = scrape();
+    double was = dims_prom_value(before, "dims_requests_total{endpoint=\"dims3\","
+            "outcome=\"hostname_not_in_whitelist\"}");
+    dims_response *refused;
+    dims_response *after;
+
+    refused = dims_get("/dims3/TEST/resize/40x40/"
+            "?url=http://notallowed:8080/grid.png");
+    dims_response_free(refused);
+
+    after = scrape();
+    CHECK(dims_prom_value(after, "dims_requests_total{endpoint=\"dims3\","
+                  "outcome=\"hostname_not_in_whitelist\"}") >= was + 1,
+          "the refusal counter moved from %g", was);
+    CHECK(dims_prom_value(after,
+                  "dims_request_duration_seconds_count{endpoint=\"dims3\"}")
+              >= 1,
+          "the duration histogram counted it");
+
+    dims_response_free(before);
+    dims_response_free(after);
+}
+
+/* Nothing is in flight while the scrape runs, because the scrape is not. */
+static void
+test_metrics_in_flight_settles(void)
+{
+    dims_response *response = scrape();
+
+    CHECK_INT((long) dims_prom_value(response,
+                      "dims_requests_in_flight{endpoint=\"dims4\"}"),
+              0, "in flight after the request ended");
+
+    dims_response_free(response);
+}
+
 const dims_test dims_tests_metrics[] = {
     { "TestMetricsContentType", test_metrics_content_type, NULL },
     { "TestMetricsFormat", test_metrics_format, NULL },
     { "TestMetricsHistograms", test_metrics_histograms, NULL },
     { "TestMetricsFamilies", test_metrics_families, NULL },
+    { "TestMetricsCountsASuccess", test_metrics_counts_a_success, NULL },
+    { "TestMetricsCountsARefusal", test_metrics_counts_a_refusal, NULL },
+    { "TestMetricsInFlightSettles", test_metrics_in_flight_settles, NULL },
     { "TestMetricsDisabled", test_metrics_disabled, NULL },
     DIMS_TEST_END
 };

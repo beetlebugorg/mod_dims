@@ -296,3 +296,47 @@ dims_metrics_observe(dims_histogram_rec *h, const dims_bucket_spec *spec,
     apr_atomic_inc64(&h->count);
 }
 
+
+/*
+ * The end of a request, reached through a pool cleanup so that every return
+ * path in the handler records exactly once.
+ */
+static apr_status_t
+record_request(void *baton)
+{
+    dims_request_rec *d = (dims_request_rec *) baton;
+    dims_metrics_rec *m = dims_metrics;
+    int endpoint = d->endpoint;
+    apr_uint64_t micros;
+
+    if (m == NULL || endpoint < 0 || endpoint >= DIMS_ENDPOINT_COUNT) {
+        return APR_SUCCESS;
+    }
+
+    apr_atomic_dec64(&m->in_flight[endpoint]);
+
+    apr_atomic_inc64(&m->requests[endpoint]
+            [dims_metrics_outcome_index(d->status)]);
+    apr_atomic_inc64(&m->responses[endpoint]
+            [dims_metrics_code_index(d->r->status)]);
+
+    micros = (apr_uint64_t) (apr_time_now() - d->start_time);
+    dims_metrics_observe(&m->request_duration[endpoint], &dims_duration_buckets,
+            micros);
+
+    return APR_SUCCESS;
+}
+
+void
+dims_metrics_request_begin(dims_request_rec *d)
+{
+    if (dims_metrics == NULL || d->endpoint < 0 ||
+            d->endpoint >= DIMS_ENDPOINT_COUNT) {
+        return;
+    }
+
+    apr_atomic_inc64(&dims_metrics->in_flight[d->endpoint]);
+
+    apr_pool_cleanup_register(d->r->pool, d, record_request,
+            apr_pool_cleanup_null);
+}
