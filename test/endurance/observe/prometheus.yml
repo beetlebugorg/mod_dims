@@ -1,0 +1,10 @@
+# Scrapes the soak server's metrics port. The soak joins dims-soak-net, and
+# the server answers to the alias "dims" on it.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: mod_dims
+    static_configs:
+      - targets: ['dims:8001']
