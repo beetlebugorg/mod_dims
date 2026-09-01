@@ -119,4 +119,7 @@ int dims_metrics_bucket_index(const dims_bucket_spec *spec, double value);
 void dims_metrics_observe(dims_histogram_rec *h, const dims_bucket_spec *spec,
                           apr_uint64_t value);
 
+/* Answers a location that sets the dims-metrics handler. */
+apr_status_t dims_metrics_handler(request_rec *r);
+
 #endif

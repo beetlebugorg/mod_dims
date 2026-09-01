@@ -295,3 +295,4 @@ dims_metrics_observe(dims_histogram_rec *h, const dims_bucket_spec *spec,
     apr_atomic_add64(&h->sum, value);
     apr_atomic_inc64(&h->count);
 }
+

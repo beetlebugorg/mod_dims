@@ -83,6 +83,7 @@ add_library(mod_dims MODULE
     src/svgguard.c
     src/url.c
     src/metrics.c
+    src/metrics_report.c
     src/status.c
     src/mod_dims.c
     src/module.c

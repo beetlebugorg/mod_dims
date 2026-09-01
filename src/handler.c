@@ -13,6 +13,7 @@
 #include "url.h"
 #include "dims5.h"
 #include "encryption.h"
+#include "metrics.h"
 #include "status.h"
 #include "pipeline.h"
 
@@ -547,6 +548,8 @@ dims_handler(request_rec *r)
         d->scheme = DIMS_SCHEME_DIMS5;
 
         return dims_handle_request(d);
+    } else if(strcmp(r->handler, "dims-metrics") == 0) {
+        return dims_metrics_handler(r);
     } else if(strcmp(r->handler, "dims-status") == 0) {
         return dims_status_handler(r);
     } else if(strcmp(r->handler, "dims-sizer") == 0) {

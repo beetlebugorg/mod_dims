@@ -182,6 +182,9 @@ struct dims_config_rec {
      * DimsStatusVerbose. */
     int status_verbose;
 
+    /* Whether the module serves /metrics. Set from DimsMetricsEnabled. */
+    int metrics_enabled;
+
     /* Bounds on the overlay cache. Zero turns either off. Set from
      * DimsOverlayCacheMaxEntries and DimsOverlayCacheMaxAge. */
     int overlay_cache_max_entries;
