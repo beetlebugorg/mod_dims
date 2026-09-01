@@ -164,6 +164,7 @@ if [ "$MODE" = valgrind ]; then
             --show-leak-kinds=definite,indirect \
             --errors-for-leak-kinds=definite,indirect \
             --num-callers=40 --error-exitcode=0 \
+            --keep-debuginfo=yes \
             --suppressions=/build/mod_dims/test/valgrind/dims.supp \
             --log-file=/tmp/valgrind.log \
             /usr/local/apache2/bin/httpd -X -DFOREGROUND >/dev/null
