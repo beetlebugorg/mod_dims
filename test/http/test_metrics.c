@@ -406,6 +406,100 @@ test_metrics_reports_the_build(void)
     dims_response_free(response);
 }
 
+/*
+ * The allowlist check in the handler refuses a /dims3/ request before the
+ * fetch, so it reports there. The guard runs its own check at fetch time and
+ * reports every refusal it makes.
+ */
+static void
+test_metrics_counts_the_guard(void)
+{
+    dims_response *before = scrape();
+    double was = dims_prom_value(before, "dims_allowlist_checks_total{"
+            "mode=\"enforce\",result=\"refused\"}");
+    dims_response *after;
+
+    dims_response_free(dims_get("/dims3/TEST/resize/40x40/"
+            "?url=http://notallowed:8080/grid.png"));
+
+    after = scrape();
+    CHECK(dims_prom_value(after, "dims_allowlist_checks_total{"
+                  "mode=\"enforce\",result=\"refused\"}") >= was + 1,
+          "the allowlist counter moved from %g", was);
+    CHECK(dims_prom_value(after, "dims_allowlist_checks_total{"
+                  "mode=\"enforce\",result=\"allowed\"}") >= 1,
+          "an allowed host counts too");
+    CHECK(dims_prom_value(after, "dims_source_fetch_total{result=\"refused\"}")
+              >= 1,
+          "the guard refuses a fetch of its own");
+
+    dims_response_free(before);
+    dims_response_free(after);
+}
+
+/* A signed request that verifies, and one that does not. */
+static void
+test_metrics_counts_signatures(void)
+{
+    dims_response *after;
+
+    dims_response_free(dims_request_ops("resize/40x40", "grid.png"));
+
+    after = scrape();
+    CHECK(dims_prom_value(after, "dims_signature_checks_total{"
+                  "endpoint=\"dims4\",result=\"ok\"}") >= 1,
+          "a signature verified");
+
+    dims_response_free(after);
+}
+
+/*
+ * A command counts under its own name. strip runs without a command, so it
+ * counts under the default trigger.
+ */
+static void
+test_metrics_counts_operations(void)
+{
+    dims_response *before = scrape();
+    double was = dims_prom_value(before,
+            "dims_operations_total{operation=\"crop\",trigger=\"request\"}");
+    dims_response *after;
+
+    dims_response_free(dims_request_ops("crop/40x40+0+0", "grid.png"));
+
+    after = scrape();
+    CHECK(dims_prom_value(after,
+                  "dims_operations_total{operation=\"crop\",trigger=\"request\"}")
+              >= was + 1,
+          "the crop counter moved from %g", was);
+    CHECK(dims_prom_value(after,
+                  "dims_operations_total{operation=\"strip\",trigger=\"default\"}")
+              >= 1,
+          "strip runs without a command");
+    CHECK(dims_prom_value(after, "dims_operation_duration_seconds_count{"
+                  "operation=\"crop\"}") >= 1,
+          "the crop duration histogram");
+
+    dims_response_free(after);
+}
+
+/* A failed request sends the error image this server draws. */
+static void
+test_metrics_counts_the_error_image(void)
+{
+    dims_response *after;
+
+    dims_response_free(dims_request_ops("resize/40x40", "missing.png"));
+
+    after = scrape();
+    CHECK(dims_prom_value(after, "dims_error_images_total{source=\"fetched\"}")
+              + dims_prom_value(after,
+                      "dims_error_images_total{source=\"drawn\"}") >= 1,
+          "an error image was sent");
+
+    dims_response_free(after);
+}
+
 const dims_test dims_tests_metrics[] = {
     { "TestMetricsContentType", test_metrics_content_type, NULL },
     { "TestMetricsFormat", test_metrics_format, NULL },
@@ -421,6 +515,11 @@ const dims_test dims_tests_metrics[] = {
     { "TestMetricsReportsTheWorkerPool", test_metrics_reports_the_worker_pool,
       NULL },
     { "TestMetricsReportsTheBuild", test_metrics_reports_the_build, NULL },
+    { "TestMetricsCountsTheGuard", test_metrics_counts_the_guard, NULL },
+    { "TestMetricsCountsSignatures", test_metrics_counts_signatures, NULL },
+    { "TestMetricsCountsOperations", test_metrics_counts_operations, NULL },
+    { "TestMetricsCountsTheErrorImage", test_metrics_counts_the_error_image,
+      NULL },
     { "TestMetricsDisabled", test_metrics_disabled, NULL },
     DIMS_TEST_END
 };

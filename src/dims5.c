@@ -6,6 +6,7 @@
  */
 
 #include "dims5.h"
+#include "metrics.h"
 #include "encryption.h"
 #include "signature.h"
 #include "url.h"
@@ -92,11 +93,13 @@ dims5_verify(dims_request_rec *d)
 
         decrypted = aes_128_gcm_decrypt(d->r, derived, (unsigned char *) eurl);
         if (decrypted == NULL) {
+            dims_metrics_eurl(0);
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                     "Cannot decrypt eurl, on request: %s", d->r->uri);
             return DIMS_BAD_URL;
         }
 
+        dims_metrics_eurl(1);
         image_url = decrypted;
     } else {
         image_url = query_value(d, "url");
@@ -123,10 +126,13 @@ dims5_verify(dims_request_rec *d)
                     dims_signed_query(d->pool, d->r->args)));
 
     if (expected == NULL || !dims_signature_equal(expected, signature)) {
+        dims_metrics_signature(DIMS_ENDPOINT_DIMS5, DIMS_SIG_MISMATCH);
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                 "Signature mismatch, on request: %s", d->r->uri);
         return DIMS_BAD_URL;
     }
+
+    dims_metrics_signature(DIMS_ENDPOINT_DIMS5, DIMS_SIG_OK);
 
     d->image_url = image_url;
     d->unparsed_commands = commands;

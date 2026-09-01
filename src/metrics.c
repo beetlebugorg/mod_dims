@@ -10,6 +10,8 @@
 
 #include <ap_mpm.h>
 
+#include <curl/curl.h>
+
 #include <stdio.h>
 #include <unistd.h>
 #include <strings.h>
@@ -434,4 +436,304 @@ dims_metrics_sample_process(void)
     }
 
     fclose(statm);
+}
+
+/* libcurl codes reported by name. The rest count under "other". */
+static const int curl_code_value[DIMS_CURL_CODE_COUNT - 1] = {
+    CURLE_OPERATION_TIMEDOUT,
+    CURLE_COULDNT_RESOLVE_HOST,
+    CURLE_COULDNT_CONNECT,
+    CURLE_SSL_CONNECT_ERROR,
+    CURLE_TOO_MANY_REDIRECTS,
+    CURLE_RECV_ERROR,
+    CURLE_SEND_ERROR,
+    CURLE_PARTIAL_FILE
+};
+
+static const char *const curl_code_name[DIMS_CURL_CODE_COUNT] = {
+    "operation_timedout", "couldnt_resolve_host", "couldnt_connect",
+    "ssl_connect_error", "too_many_redirects", "recv_error", "send_error",
+    "partial_file", "other"
+};
+
+static const char *const fetch_result_name[DIMS_FETCH_RESULT_COUNT] = {
+    "ok", "timeout", "transport_error", "refused", "http_error"
+};
+
+/* Indexed by dims_net_result, which starts at DIMS_NET_BAD_SCHEME. */
+static const char *const net_reason_name[DIMS_NET_REASON_COUNT] = {
+    "bad_scheme", "bad_url", "reserved_address", "private_address",
+    "host_not_allowed", "too_many_redirects"
+};
+
+static const char *const sig_result_name[DIMS_SIG_RESULT_COUNT] = {
+    "ok", "mismatch", "expired", "too_far_future", "missing_key", "bad_client"
+};
+
+/* The order dims_module.c registers them in the ops hash. */
+static const char *const operation_name[DIMS_OP_COUNT] = {
+    "strip", "resize", "crop", "thumbnail", "legacy_thumbnail", "legacy_crop",
+    "quality", "sharpen", "format", "brightness", "flipflop", "sepia",
+    "grayscale", "autolevel", "rotate", "invert", "watermark"
+};
+
+static const char *const exception_kind_name[DIMS_EXC_KIND_COUNT] = {
+    "blob", "cache", "coder", "configure", "corrupt_image", "delegate",
+    "draw", "file_open", "filter", "image", "missing_delegate", "module",
+    "monitor", "option", "policy", "random", "registry", "resource_limit",
+    "stream", "type", "wand", "other"
+};
+
+static const char *const exception_severity_name[DIMS_EXC_SEVERITY_COUNT] = {
+    "warning", "error", "fatal"
+};
+
+int
+dims_metrics_curl_code_index(int code)
+{
+    int i;
+
+    for (i = 0; i < DIMS_CURL_CODE_COUNT - 1; i++) {
+        if (curl_code_value[i] == code) {
+            return i;
+        }
+    }
+
+    return DIMS_CURL_CODE_COUNT - 1;
+}
+
+int
+dims_metrics_operation_index(const char *operation)
+{
+    int i;
+
+    if (operation == NULL) {
+        return -1;
+    }
+
+    for (i = 0; i < DIMS_OP_COUNT; i++) {
+        if (strcmp(operation_name[i], operation) == 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+/*
+ * ImageMagick names an exception by a kind and a severity in one enum, such as
+ * ResourceLimitError. The two are separate signals: a warning about a coder
+ * and a fatal cache failure read differently.
+ */
+void
+dims_metrics_exception_slot(int exception_type, int *kind, int *severity)
+{
+    struct { int warning; int kind; } table[] = {
+        { BlobWarning,            0  },
+        { CacheWarning,           1  },
+        { CoderWarning,           2  },
+        { ConfigureWarning,       3  },
+        { CorruptImageWarning,    4  },
+        { DelegateWarning,        5  },
+        { DrawWarning,            6  },
+        { FileOpenWarning,        7  },
+        { FilterWarning,          8  },
+        { ImageWarning,           9  },
+        { MissingDelegateWarning, 10 },
+        { ModuleWarning,          11 },
+        { MonitorWarning,         12 },
+        { OptionWarning,          13 },
+        { PolicyWarning,          14 },
+        { RandomWarning,          15 },
+        { RegistryWarning,        16 },
+        { ResourceLimitWarning,   17 },
+        { StreamWarning,          18 },
+        { TypeWarning,            19 },
+        { WandWarning,            20 }
+    };
+    size_t i;
+
+    *kind = DIMS_EXC_KIND_COUNT - 1;
+    *severity = 1;
+
+    /* Each kind occupies three consecutive values: warning, error, and fatal
+     * error. WandWarning has no fatal member, so it holds two. */
+    for (i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
+        int offset = exception_type - table[i].warning;
+
+        if (offset >= 0 && offset <= 2) {
+            *kind = table[i].kind;
+            *severity = offset;
+            return;
+        }
+    }
+}
+
+const char *
+dims_metrics_curl_code_name(int index)
+{
+    return (index < 0 || index >= DIMS_CURL_CODE_COUNT) ? ""
+            : curl_code_name[index];
+}
+
+const char *
+dims_metrics_operation_name(int index)
+{
+    return (index < 0 || index >= DIMS_OP_COUNT) ? "" : operation_name[index];
+}
+
+const char *
+dims_metrics_exception_kind_name(int index)
+{
+    return (index < 0 || index >= DIMS_EXC_KIND_COUNT) ? ""
+            : exception_kind_name[index];
+}
+
+const char *
+dims_metrics_exception_severity_name(int index)
+{
+    return (index < 0 || index >= DIMS_EXC_SEVERITY_COUNT) ? ""
+            : exception_severity_name[index];
+}
+
+const char *
+dims_metrics_fetch_result_name(int index)
+{
+    return (index < 0 || index >= DIMS_FETCH_RESULT_COUNT) ? ""
+            : fetch_result_name[index];
+}
+
+const char *
+dims_metrics_net_reason_name(int index)
+{
+    return (index < 0 || index >= DIMS_NET_REASON_COUNT) ? ""
+            : net_reason_name[index];
+}
+
+const char *
+dims_metrics_sig_result_name(int index)
+{
+    return (index < 0 || index >= DIMS_SIG_RESULT_COUNT) ? ""
+            : sig_result_name[index];
+}
+
+void
+dims_metrics_signature(int endpoint, dims_sig_result result)
+{
+    if (dims_metrics == NULL || endpoint < 0 ||
+            endpoint >= DIMS_ENDPOINT_COUNT) {
+        return;
+    }
+
+    apr_atomic_inc64(&dims_metrics->signature[endpoint][result]);
+}
+
+void
+dims_metrics_eurl(int ok)
+{
+    if (dims_metrics != NULL) {
+        apr_atomic_inc64(&dims_metrics->eurl[ok ? 0 : 1]);
+    }
+}
+
+void
+dims_metrics_netguard(int reason)
+{
+    /* DIMS_NET_OK is zero and names no refusal. */
+    if (dims_metrics == NULL || reason < 1 ||
+            reason > DIMS_NET_REASON_COUNT) {
+        return;
+    }
+
+    apr_atomic_inc64(&dims_metrics->netguard[reason - 1]);
+}
+
+void
+dims_metrics_allowlist(int mode, int allowed)
+{
+    if (dims_metrics == NULL || mode < 0 || mode > 2) {
+        return;
+    }
+
+    apr_atomic_inc64(&dims_metrics->allowlist[mode][allowed ? 0 : 1]);
+}
+
+void
+dims_metrics_operation(int op_index, int from_default, apr_time_t began,
+                       int failed)
+{
+    dims_metrics_rec *m = dims_metrics;
+
+    if (m == NULL || op_index < 0 || op_index >= DIMS_OP_COUNT) {
+        return;
+    }
+
+    apr_atomic_inc64(&m->operations[op_index][from_default ? 1 : 0]);
+
+    if (failed) {
+        apr_atomic_inc64(&m->operation_failures[op_index]);
+    }
+
+    dims_metrics_observe(&m->operation_duration[op_index],
+            &dims_duration_buckets, (apr_uint64_t) (apr_time_now() - began));
+}
+
+void
+dims_metrics_exception(int exception_type)
+{
+    int kind;
+    int severity;
+
+    if (dims_metrics == NULL || exception_type == UndefinedException) {
+        return;
+    }
+
+    dims_metrics_exception_slot(exception_type, &kind, &severity);
+    apr_atomic_inc64(&dims_metrics->exceptions[kind][severity]);
+}
+
+void
+dims_metrics_overlay_lookup(int result)
+{
+    if (dims_metrics != NULL && result >= 0 && result < 3) {
+        apr_atomic_inc64(&dims_metrics->overlay_lookups[result]);
+    }
+}
+
+void
+dims_metrics_overlay_eviction(void)
+{
+    if (dims_metrics != NULL) {
+        apr_atomic_inc64(&dims_metrics->overlay_evictions);
+    }
+}
+
+void
+dims_metrics_fetch(dims_fetch_result result, int curl_code)
+{
+    if (dims_metrics == NULL) {
+        return;
+    }
+
+    apr_atomic_inc64(&dims_metrics->fetch_results[result]);
+
+    if (result == DIMS_FETCH_TIMEOUT || result == DIMS_FETCH_TRANSPORT_ERROR ||
+            result == DIMS_FETCH_REFUSED) {
+        apr_atomic_inc64(&dims_metrics->fetch_errors[
+                dims_metrics_curl_code_index(curl_code)]);
+    }
+}
+
+void
+dims_metrics_error_image(int source, int failed)
+{
+    if (dims_metrics == NULL || source < 0 || source > 2) {
+        return;
+    }
+
+    apr_atomic_inc64(&dims_metrics->error_images[source]);
+
+    if (failed) {
+        apr_atomic_inc64(&dims_metrics->error_image_failures);
+    }
 }

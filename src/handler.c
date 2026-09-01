@@ -48,6 +48,7 @@ dims_handle_request(dims_request_rec *d)
 
     if(!(d->client_config =
             apr_hash_get(d->config->clients, d->client_id, APR_HASH_KEY_STRING))) {
+        dims_metrics_signature(d->endpoint, DIMS_SIG_BAD_CLIENT);
         return dims_cleanup(d, "Application ID is not valid", DIMS_BAD_CLIENT);
     }
 
@@ -68,11 +69,13 @@ dims_handle_request(dims_request_rec *d)
         now = apr_time_sec(now_time);
         if ( expires - now < 0 ) {
             ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r, "Image expired: %s now=%ld", d->r->uri,now);
+            dims_metrics_signature(d->endpoint, DIMS_SIG_EXPIRED);
             return dims_cleanup( d, "Image Key has expired", DIMS_BAD_URL);
         }
         if ( expires - now > d->config->max_expiry_period && d->config->max_expiry_period >0 ) {
             ap_log_rerror( APLOG_MARK, APLOG_DEBUG,0, d->r,
                 "Image expiry too far in the future:%s %s now=%ld",expires_str, d->r->uri,now);
+            dims_metrics_signature(d->endpoint, DIMS_SIG_TOO_FAR_FUTURE);
             return dims_cleanup(d, "Image key too far in the future", DIMS_BAD_URL);
         }
 
@@ -117,6 +120,7 @@ dims_handle_request(dims_request_rec *d)
         if (d->client_config->secret_key == NULL) {
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                 "Developer key not set for client '%s'", d->client_config->id);
+            dims_metrics_signature(d->endpoint, DIMS_SIG_MISSING_KEY);
             return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
         }
 
@@ -145,8 +149,10 @@ dims_handle_request(dims_request_rec *d)
             gen_hash[7] = '\0';
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r,
                 "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, hash, d->r->uri, d->image_url);
+            dims_metrics_signature(d->endpoint, DIMS_SIG_MISMATCH);
             return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
         }
+        dims_metrics_signature(d->endpoint, DIMS_SIG_OK);
         ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
             "secret key (%s) to validated (%s:%s)", hash,  d->unparsed_commands,d->image_url);
     }
@@ -257,6 +263,11 @@ verified:
             found = 1;
         } else {
             found = dims_host_allowed(d->config->whitelist, hostname);
+
+            /* This check refuses the request, so it counts as enforce. The
+             * guard runs its own check at fetch time under
+             * DimsAllowlistSigned. */
+            dims_metrics_allowlist(DIMS_ALLOWLIST_ENFORCE, found);
         }
 
         if(found) {

@@ -336,6 +336,138 @@ write_build(request_rec *r, const dims_config_rec *config)
             escape(r->pool, curl_version()));
 }
 
+/* The security, operation, and cache families. */
+static void
+write_detail(request_rec *r, const dims_metrics_rec *m)
+{
+    static const char *const mode_name[3] = { "skip", "log", "enforce" };
+    static const char *const overlay_name[3] = { "hit", "miss", "expired" };
+    static const char *const error_source[3] = { "drawn", "fetched", "none" };
+    char labels[96];
+    int i, j;
+
+    head(r, "dims_source_fetch_total", "Source fetches by result.", "counter");
+    for (i = 0; i < DIMS_FETCH_RESULT_COUNT; i++) {
+        ap_rprintf(r, "dims_source_fetch_total{result=\"%s\"} "
+                "%" APR_UINT64_T_FMT "\n",
+                dims_metrics_fetch_result_name(i), read64(&m->fetch_results[i]));
+    }
+
+    head(r, "dims_source_fetch_errors_total",
+            "Source fetch failures by libcurl code.", "counter");
+    for (i = 0; i < DIMS_CURL_CODE_COUNT; i++) {
+        ap_rprintf(r, "dims_source_fetch_errors_total{code=\"%s\"} "
+                "%" APR_UINT64_T_FMT "\n",
+                dims_metrics_curl_code_name(i), read64(&m->fetch_errors[i]));
+    }
+
+    head(r, "dims_netguard_refusals_total",
+            "Fetches the network guard refused, by reason.", "counter");
+    for (i = 0; i < DIMS_NET_REASON_COUNT; i++) {
+        ap_rprintf(r, "dims_netguard_refusals_total{reason=\"%s\"} "
+                "%" APR_UINT64_T_FMT "\n",
+                dims_metrics_net_reason_name(i), read64(&m->netguard[i]));
+    }
+
+    head(r, "dims_allowlist_checks_total",
+            "Allowlist checks by mode and result.", "counter");
+    for (i = 0; i < 3; i++) {
+        ap_rprintf(r, "dims_allowlist_checks_total{mode=\"%s\","
+                "result=\"allowed\"} %" APR_UINT64_T_FMT "\n",
+                mode_name[i], read64(&m->allowlist[i][0]));
+        ap_rprintf(r, "dims_allowlist_checks_total{mode=\"%s\","
+                "result=\"refused\"} %" APR_UINT64_T_FMT "\n",
+                mode_name[i], read64(&m->allowlist[i][1]));
+    }
+
+    head(r, "dims_signature_checks_total",
+            "Signature checks by endpoint and result.", "counter");
+    for (i = 0; i < DIMS_ENDPOINT_COUNT; i++) {
+        for (j = 0; j < DIMS_SIG_RESULT_COUNT; j++) {
+            ap_rprintf(r, "dims_signature_checks_total{endpoint=\"%s\","
+                    "result=\"%s\"} %" APR_UINT64_T_FMT "\n",
+                    dims_metrics_endpoint_name(i),
+                    dims_metrics_sig_result_name(j),
+                    read64(&m->signature[i][j]));
+        }
+    }
+
+    head(r, "dims_eurl_decrypt_total", "eurl decryptions by result.",
+            "counter");
+    ap_rprintf(r, "dims_eurl_decrypt_total{result=\"ok\"} "
+            "%" APR_UINT64_T_FMT "\n", read64(&m->eurl[0]));
+    ap_rprintf(r, "dims_eurl_decrypt_total{result=\"failed\"} "
+            "%" APR_UINT64_T_FMT "\n", read64(&m->eurl[1]));
+
+    /* One call, not one request. A multi-frame source runs the command loop
+     * once per frame, and strip and format also run without a command. */
+    head(r, "dims_operations_total", "Operation functions called.", "counter");
+    for (i = 0; i < DIMS_OP_COUNT; i++) {
+        ap_rprintf(r, "dims_operations_total{operation=\"%s\","
+                "trigger=\"request\"} %" APR_UINT64_T_FMT "\n",
+                dims_metrics_operation_name(i), read64(&m->operations[i][0]));
+        ap_rprintf(r, "dims_operations_total{operation=\"%s\","
+                "trigger=\"default\"} %" APR_UINT64_T_FMT "\n",
+                dims_metrics_operation_name(i), read64(&m->operations[i][1]));
+    }
+
+    head(r, "dims_operation_failures_total",
+            "Operation functions that reported a failure.", "counter");
+    for (i = 0; i < DIMS_OP_COUNT; i++) {
+        ap_rprintf(r, "dims_operation_failures_total{operation=\"%s\"} "
+                "%" APR_UINT64_T_FMT "\n",
+                dims_metrics_operation_name(i),
+                read64(&m->operation_failures[i]));
+    }
+
+    head(r, "dims_operation_duration_seconds", "Time in one operation call.",
+            "histogram");
+    for (i = 0; i < DIMS_OP_COUNT; i++) {
+        apr_snprintf(labels, sizeof(labels), "operation=\"%s\"",
+                dims_metrics_operation_name(i));
+        histogram(r, "dims_operation_duration_seconds",
+                &m->operation_duration[i], &dims_duration_buckets, 1, labels);
+    }
+
+    head(r, "dims_imagemagick_exceptions_total",
+            "ImageMagick exceptions by kind and severity.", "counter");
+    for (i = 0; i < DIMS_EXC_KIND_COUNT; i++) {
+        for (j = 0; j < DIMS_EXC_SEVERITY_COUNT; j++) {
+            ap_rprintf(r, "dims_imagemagick_exceptions_total{kind=\"%s\","
+                    "severity=\"%s\"} %" APR_UINT64_T_FMT "\n",
+                    dims_metrics_exception_kind_name(i),
+                    dims_metrics_exception_severity_name(j),
+                    read64(&m->exceptions[i][j]));
+        }
+    }
+
+    head(r, "dims_overlay_cache_lookups_total",
+            "Overlay cache lookups by result.", "counter");
+    for (i = 0; i < 3; i++) {
+        ap_rprintf(r, "dims_overlay_cache_lookups_total{result=\"%s\"} "
+                "%" APR_UINT64_T_FMT "\n",
+                overlay_name[i], read64(&m->overlay_lookups[i]));
+    }
+
+    head(r, "dims_overlay_cache_evictions_total",
+            "Overlays dropped to make room.", "counter");
+    ap_rprintf(r, "dims_overlay_cache_evictions_total %" APR_UINT64_T_FMT "\n",
+            read64(&m->overlay_evictions));
+
+    head(r, "dims_error_images_total", "Error images sent, by source.",
+            "counter");
+    for (i = 0; i < 3; i++) {
+        ap_rprintf(r, "dims_error_images_total{source=\"%s\"} "
+                "%" APR_UINT64_T_FMT "\n",
+                error_source[i], read64(&m->error_images[i]));
+    }
+
+    head(r, "dims_error_image_failures_total",
+            "Failed requests whose error image also failed.", "counter");
+    ap_rprintf(r, "dims_error_image_failures_total %" APR_UINT64_T_FMT "\n",
+            read64(&m->error_image_failures));
+}
+
 static void
 write_metrics(request_rec *r, const dims_config_rec *config)
 {
@@ -435,6 +567,7 @@ write_metrics(request_rec *r, const dims_config_rec *config)
     histogram(r, "dims_source_frames", &m->source_frames, &dims_frame_buckets,
             0, "");
 
+    write_detail(r, m);
     write_process(r, m);
     write_httpd(r);
     write_build(r, config);
