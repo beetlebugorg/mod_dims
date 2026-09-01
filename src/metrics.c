@@ -10,6 +10,7 @@
 
 #include <ap_mpm.h>
 
+#include <stdio.h>
 #include <unistd.h>
 #include <strings.h>
 
@@ -362,6 +363,8 @@ record_request(void *baton)
                 (apr_uint64_t) d->imagemagick_time * 1000);
     }
 
+    dims_metrics_sample_process();
+
     /* The response, when one was written. */
     if (d->output_format_index >= 0) {
         apr_atomic_inc64(&m->output_format[d->output_format_index]);
@@ -385,4 +388,50 @@ dims_metrics_request_begin(dims_request_rec *d)
 
     apr_pool_cleanup_register(d->r->pool, d, record_request,
             apr_pool_cleanup_null);
+}
+
+/*
+ * The four ImageMagick resources the module limits, in the order the exposition
+ * writer prints them.
+ */
+static const ResourceType resource_type[4] = {
+    AreaResource, MemoryResource, MapResource, DiskResource
+};
+
+void
+dims_metrics_sample_process(void)
+{
+    dims_process_rec *slot = my_process;
+    FILE *statm;
+    unsigned long resident = 0;
+    unsigned long virtual = 0;
+    int i;
+
+    if (slot == NULL) {
+        return;
+    }
+
+    for (i = 0; i < 4; i++) {
+        slot->imagemagick_resource[i] =
+                (apr_uint64_t) MagickGetResource(resource_type[i]);
+    }
+
+    /*
+     * The first two fields of statm are the virtual size and the resident set,
+     * both in pages. The file is Linux only, so a platform without it reports
+     * zero and the writer omits the two gauges.
+     */
+    statm = fopen("/proc/self/statm", "r");
+    if (statm == NULL) {
+        return;
+    }
+
+    if (fscanf(statm, "%lu %lu", &virtual, &resident) == 2) {
+        long page = sysconf(_SC_PAGESIZE);
+
+        slot->virtual_bytes = (apr_uint64_t) virtual * (apr_uint64_t) page;
+        slot->resident_bytes = (apr_uint64_t) resident * (apr_uint64_t) page;
+    }
+
+    fclose(statm);
 }

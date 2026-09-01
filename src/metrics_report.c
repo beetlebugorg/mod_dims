@@ -75,6 +75,110 @@ histogram(request_rec *r, const char *name, const dims_histogram_rec *h,
             read64(&h->count));
 }
 
+/*
+ * The per process gauges. Each child writes its own slot at the end of a
+ * request, so the endpoint sums the live slots and reports the widest one.
+ */
+static void
+write_process(request_rec *r, const dims_metrics_rec *m)
+{
+    static const char *const resource[4] = { "area", "memory", "map", "disk" };
+    apr_uint64_t sum[4] = { 0, 0, 0, 0 };
+    apr_uint64_t max[4] = { 0, 0, 0, 0 };
+    apr_uint64_t resident_sum = 0, resident_max = 0;
+    apr_uint64_t virtual_sum = 0, virtual_max = 0;
+    apr_uint32_t live = 0;
+    apr_uint32_t i;
+    int k;
+
+    for (i = 0; i < m->process_slots; i++) {
+        const dims_process_rec *slot = &m->process[i];
+        apr_uint64_t resident;
+        apr_uint64_t virt;
+
+        if (read64(&slot->pid) == 0) {
+            continue;
+        }
+
+        live++;
+
+        for (k = 0; k < 4; k++) {
+            apr_uint64_t value = read64(&slot->imagemagick_resource[k]);
+
+            sum[k] += value;
+            if (value > max[k]) {
+                max[k] = value;
+            }
+        }
+
+        resident = read64(&slot->resident_bytes);
+        resident_sum += resident;
+        if (resident > resident_max) {
+            resident_max = resident;
+        }
+
+        virt = read64(&slot->virtual_bytes);
+        virtual_sum += virt;
+        if (virt > virtual_max) {
+            virtual_max = virt;
+        }
+    }
+
+    head(r, "dims_imagemagick_resource_bytes",
+            "ImageMagick resource use, summed across the workers.", "gauge");
+    for (k = 0; k < 4; k++) {
+        ap_rprintf(r, "dims_imagemagick_resource_bytes{resource=\"%s\"} "
+                "%" APR_UINT64_T_FMT "\n", resource[k], sum[k]);
+    }
+
+    head(r, "dims_imagemagick_resource_max_bytes",
+            "ImageMagick resource use by the widest worker.", "gauge");
+    for (k = 0; k < 4; k++) {
+        ap_rprintf(r, "dims_imagemagick_resource_max_bytes{resource=\"%s\"} "
+                "%" APR_UINT64_T_FMT "\n", resource[k], max[k]);
+    }
+
+    /* The ceiling a worker runs under, from the same process the scrape
+     * reached. dims_child_init sets the same value in every worker. */
+    head(r, "dims_imagemagick_resource_limit_bytes",
+            "The DimsImagemagick limit a worker runs under.", "gauge");
+    ap_rprintf(r, "dims_imagemagick_resource_limit_bytes{resource=\"area\"} "
+            "%" APR_UINT64_T_FMT "\n",
+            (apr_uint64_t) MagickGetResourceLimit(AreaResource));
+    ap_rprintf(r, "dims_imagemagick_resource_limit_bytes{resource=\"memory\"} "
+            "%" APR_UINT64_T_FMT "\n",
+            (apr_uint64_t) MagickGetResourceLimit(MemoryResource));
+    ap_rprintf(r, "dims_imagemagick_resource_limit_bytes{resource=\"map\"} "
+            "%" APR_UINT64_T_FMT "\n",
+            (apr_uint64_t) MagickGetResourceLimit(MapResource));
+    ap_rprintf(r, "dims_imagemagick_resource_limit_bytes{resource=\"disk\"} "
+            "%" APR_UINT64_T_FMT "\n",
+            (apr_uint64_t) MagickGetResourceLimit(DiskResource));
+
+    head(r, "dims_workers", "Worker processes holding a metrics slot.",
+            "gauge");
+    ap_rprintf(r, "dims_workers %" APR_UINT64_T_FMT "\n", (apr_uint64_t) live);
+
+    /* /proc/self/statm is Linux only, so a platform without it reports no
+     * memory rather than zero. */
+    if (resident_sum > 0 || virtual_sum > 0) {
+        head(r, "dims_process_resident_bytes",
+                "Resident memory, summed across the workers.", "gauge");
+        ap_rprintf(r, "dims_process_resident_bytes %" APR_UINT64_T_FMT "\n",
+                resident_sum);
+
+        head(r, "dims_process_resident_max_bytes",
+                "Resident memory of the widest worker.", "gauge");
+        ap_rprintf(r, "dims_process_resident_max_bytes %" APR_UINT64_T_FMT "\n",
+                resident_max);
+
+        head(r, "dims_process_virtual_bytes",
+                "Virtual memory, summed across the workers.", "gauge");
+        ap_rprintf(r, "dims_process_virtual_bytes %" APR_UINT64_T_FMT "\n",
+                virtual_sum);
+    }
+}
+
 static void
 write_metrics(request_rec *r)
 {
@@ -173,6 +277,8 @@ write_metrics(request_rec *r)
     head(r, "dims_source_frames", "Frames in a source image.", "histogram");
     histogram(r, "dims_source_frames", &m->source_frames, &dims_frame_buckets,
             0, "");
+
+    write_process(r, m);
 }
 
 apr_status_t

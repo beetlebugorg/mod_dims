@@ -315,6 +315,36 @@ test_metrics_counts_frames(void)
     dims_response_free(after);
 }
 
+/*
+ * The limits come from the configuration, so the reported ceiling matches what
+ * dims-test.conf sets. The use is per worker and the endpoint sums the slots.
+ */
+static void
+test_metrics_reports_resources(void)
+{
+    dims_response *response;
+
+    /* A request first, so a worker has sampled itself. */
+    dims_response_free(dims_request_ops("resize/40x40", "grid.png"));
+
+    response = scrape();
+
+    CHECK_INT((long) dims_prom_value(response,
+                      "dims_imagemagick_resource_limit_bytes{resource=\"memory\"}"),
+              536870912, "the memory limit");
+    CHECK_INT((long) dims_prom_value(response,
+                      "dims_imagemagick_resource_limit_bytes{resource=\"disk\"}"),
+              2147483648L, "the disk limit");
+    CHECK(dims_prom_value(response, "dims_workers") >= 1,
+          "a worker holds a slot");
+    CHECK(dims_prom_value(response, "dims_process_resident_bytes") > 0,
+          "resident memory");
+    CHECK(dims_prom_value(response, "dims_process_resident_max_bytes") > 0,
+          "the widest worker");
+
+    dims_response_free(response);
+}
+
 const dims_test dims_tests_metrics[] = {
     { "TestMetricsContentType", test_metrics_content_type, NULL },
     { "TestMetricsFormat", test_metrics_format, NULL },
@@ -326,6 +356,7 @@ const dims_test dims_tests_metrics[] = {
     { "TestMetricsCountsTheSource", test_metrics_counts_the_source, NULL },
     { "TestMetricsCountsTheOutput", test_metrics_counts_the_output, NULL },
     { "TestMetricsCountsFrames", test_metrics_counts_frames, NULL },
+    { "TestMetricsReportsResources", test_metrics_reports_resources, NULL },
     { "TestMetricsDisabled", test_metrics_disabled, NULL },
     DIMS_TEST_END
 };

@@ -125,6 +125,13 @@ void dims_metrics_observe(dims_histogram_rec *h, const dims_bucket_spec *spec,
  */
 void dims_metrics_request_begin(dims_request_rec *d);
 
+/*
+ * Writes this child ImageMagick resource use and process memory into its slot.
+ * Runs at the end of a request, so a scrape reports what the last request
+ * left.
+ */
+void dims_metrics_sample_process(void);
+
 /* Answers a location that sets the dims-metrics handler. */
 apr_status_t dims_metrics_handler(request_rec *r);
 
