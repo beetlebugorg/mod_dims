@@ -11,6 +11,10 @@
 #include <ap_mpm.h>
 #include <scoreboard.h>
 
+#include <curl/curl.h>
+
+#include <string.h>
+
 #include <stdio.h>
 
 /*
@@ -25,6 +29,41 @@ static apr_uint64_t
 read64(const apr_uint64_t *value)
 {
     return apr_atomic_read64((apr_uint64_t *) value);
+}
+
+/*
+ * A label value with the three characters the format reserves escaped: a
+ * backslash, a double quote, and a newline. Every label the module writes is
+ * its own, apart from the library versions, which come from ImageMagick and
+ * libcurl.
+ */
+static const char *
+escape(apr_pool_t *pool, const char *value)
+{
+    apr_size_t len;
+    char *out;
+    apr_size_t w = 0;
+    apr_size_t i;
+
+    if (value == NULL) {
+        return "";
+    }
+
+    len = strlen(value);
+    out = apr_palloc(pool, len * 2 + 1);
+
+    for (i = 0; i < len; i++) {
+        switch (value[i]) {
+            case '\\': out[w++] = '\\'; out[w++] = '\\'; break;
+            case '"':  out[w++] = '\\'; out[w++] = '"';  break;
+            case '\n': out[w++] = '\\'; out[w++] = 'n';  break;
+            default:   out[w++] = value[i];              break;
+        }
+    }
+
+    out[w] = '\0';
+
+    return out;
 }
 
 static void
@@ -270,8 +309,35 @@ write_httpd(request_rec *r)
     ap_rprintf(r, "dims_httpd_generation %d\n", generation);
 }
 
+/*
+ * The build and the start time.
+ *
+ * dims_build_info names every library version, so DimsStatusVerbose off drops
+ * it the same way it drops the version lines from /dims-status/.
+ */
 static void
-write_metrics(request_rec *r)
+write_build(request_rec *r, const dims_config_rec *config)
+{
+    head(r, "dims_start_time_seconds",
+            "When the server last started, in seconds since the epoch.",
+            "gauge");
+    ap_rprintf(r, "dims_start_time_seconds %" APR_TIME_T_FMT "\n",
+            apr_time_sec(ap_scoreboard_image->global->restart_time));
+
+    if (config == NULL || !config->status_verbose) {
+        return;
+    }
+
+    head(r, "dims_build_info", "The running build, always 1.", "gauge");
+    ap_rprintf(r, "dims_build_info{version=\"%s\",commit=\"%s\","
+            "imagemagick=\"%s\",libcurl=\"%s\"} 1\n",
+            escape(r->pool, DIMS_VERSION), escape(r->pool, DIMS_COMMIT),
+            escape(r->pool, GetMagickVersion(NULL)),
+            escape(r->pool, curl_version()));
+}
+
+static void
+write_metrics(request_rec *r, const dims_config_rec *config)
 {
     dims_metrics_rec *m = dims_metrics;
     char labels[64];
@@ -371,6 +437,7 @@ write_metrics(request_rec *r)
 
     write_process(r, m);
     write_httpd(r);
+    write_build(r, config);
 }
 
 apr_status_t
@@ -390,7 +457,7 @@ dims_metrics_handler(request_rec *r)
     ap_set_content_type(r, "text/plain; version=0.0.4; charset=utf-8");
 
     if (!r->header_only) {
-        write_metrics(r);
+        write_metrics(r, config);
         ap_rflush(r);
     }
 

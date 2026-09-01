@@ -18,6 +18,11 @@ neither can be changed without the secret.
 | `expires` | when the URL stops working, in seconds since the epoch |
 | `commands` | the [operations](/operations/) to run |
 
+The `client` segment is a legacy of `/dims3/` and `/dims4/`.
+[`/dims5/`](/endpoints/dims5) dropped it. A server that serves several clients
+gives each its own `<VirtualHost>`, which separates the clients, the allowlist,
+and the keys.
+
 ## Query parameters
 
 | Name | Meaning |

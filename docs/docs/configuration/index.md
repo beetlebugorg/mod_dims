@@ -71,6 +71,7 @@ Two more are worth enabling as your deployment allows.
 | `DimsImagemagickMemorySize` | 512 |
 | `DimsImagemagickTimeout` | 3000 |
 | `DimsIncludeDisposition` | false |
+| `DimsMetricsEnabled` | `Off` |
 | `DimsMaxSourceBytes` | 0 |
 | `DimsNoImageCacheExpire` | 60 |
 | `DimsOptimizeResize` | 0 |

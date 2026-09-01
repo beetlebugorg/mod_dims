@@ -191,7 +191,7 @@ jobs:
             "http://127.0.0.1:8000/dims3/development/resize/100x100/?url=http://$origin/grid.png"
           docker exec dims-ci sh -c 'test -s /tmp/out.png'
 
-      # The metrics endpoint answers on its own port, and only when the
+      # The metrics endpoint serves its own port, and only when the
       # environment turns it on.
       - name: Scrape the metrics endpoint
         run: |

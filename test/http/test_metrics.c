@@ -195,7 +195,7 @@ test_metrics_counts_a_success(void)
 }
 
 /*
- * A host outside the allowlist reports its own outcome on /dims3/, which is
+ * A host outside the allowlist reports its own outcome on /dims3/. That is
  * the endpoint that enforces the list.
  */
 static void
@@ -388,6 +388,24 @@ test_metrics_reports_the_worker_pool(void)
     dims_response_free(response);
 }
 
+/* The build gauge names the versions, and the start time is a real clock. */
+static void
+test_metrics_reports_the_build(void)
+{
+    dims_response *response = scrape();
+
+    CHECK(dims_prom_contains(response, "dims_build_info{version=\""),
+          "the build gauge");
+    CHECK(dims_prom_contains(response, "imagemagick=\"ImageMagick"),
+          "the ImageMagick version");
+
+    /* Later than 2020, so the value is a clock rather than an uptime. */
+    CHECK(dims_prom_value(response, "dims_start_time_seconds") > 1577836800.0,
+          "the start time is an epoch second");
+
+    dims_response_free(response);
+}
+
 const dims_test dims_tests_metrics[] = {
     { "TestMetricsContentType", test_metrics_content_type, NULL },
     { "TestMetricsFormat", test_metrics_format, NULL },
@@ -402,6 +420,7 @@ const dims_test dims_tests_metrics[] = {
     { "TestMetricsReportsResources", test_metrics_reports_resources, NULL },
     { "TestMetricsReportsTheWorkerPool", test_metrics_reports_the_worker_pool,
       NULL },
+    { "TestMetricsReportsTheBuild", test_metrics_reports_the_build, NULL },
     { "TestMetricsDisabled", test_metrics_disabled, NULL },
     DIMS_TEST_END
 };

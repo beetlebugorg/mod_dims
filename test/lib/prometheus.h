@@ -14,7 +14,7 @@
 int dims_prom_contains(const dims_response *response, const char *text);
 
 /*
- * The value of the sample whose line starts with prefix, which is a metric
+ * The value of the sample whose line starts with prefix. A prefix is a metric
  * name and its label set:
  *
  *     dims_requests_total{endpoint="dims4",outcome="success"}
