@@ -54,6 +54,20 @@ dims_request_duration_seconds_count{endpoint="dims5"} 18427
 | `dims_output_bytes` | histogram | |
 | `dims_output_bytes_total` | counter | |
 | `dims_output_format_total` | counter | `format` |
+| `dims_source_fetch_total` | counter | `result` |
+| `dims_source_fetch_errors_total` | counter | `code` |
+| `dims_netguard_refusals_total` | counter | `reason` |
+| `dims_allowlist_checks_total` | counter | `mode`, `result` |
+| `dims_signature_checks_total` | counter | `endpoint`, `result` |
+| `dims_eurl_decrypt_total` | counter | `result` |
+| `dims_operations_total` | counter | `operation`, `trigger` |
+| `dims_operation_failures_total` | counter | `operation` |
+| `dims_operation_duration_seconds` | histogram | `operation` |
+| `dims_imagemagick_exceptions_total` | counter | `kind`, `severity` |
+| `dims_overlay_cache_lookups_total` | counter | `result` |
+| `dims_overlay_cache_evictions_total` | counter | |
+| `dims_error_images_total` | counter | `source` |
+| `dims_error_image_failures_total` | counter | |
 | `dims_imagemagick_resource_bytes` | gauge | `resource` |
 | `dims_imagemagick_resource_max_bytes` | gauge | `resource` |
 | `dims_imagemagick_resource_limit_bytes` | gauge | `resource` |
@@ -83,6 +97,36 @@ status the origin returned.
 `other`.
 
 `resource` holds `area`, `memory`, `map`, or `disk`.
+
+`result` on `dims_source_fetch_total` holds `ok`, `timeout`,
+`transport_error`, `refused`, or `http_error`. `code` on
+`dims_source_fetch_errors_total` holds a libcurl name such as
+`couldnt_resolve_host` or `ssl_connect_error`, and `other` for the rest.
+
+`reason` holds `bad_scheme`, `bad_url`, `reserved_address`,
+`private_address`, `host_not_allowed`, or `too_many_redirects`.
+
+`mode` holds `skip`, `log`, or `enforce`. Under
+[`DimsAllowlistSigned`](/configuration/image-sources) `log` the module records
+what enforcing would refuse and serves the request, so
+`dims_allowlist_checks_total{mode="log",result="refused"}` is the number to
+watch before setting `enforce`.
+
+`result` on a signature holds `ok`, `mismatch`, `expired`, `too_far_future`,
+`missing_key`, or `bad_client`.
+
+`operation` holds one of the seventeen command names. `trigger` holds
+`request` or `default`. `strip` runs when the command list holds none, and
+`format` runs under [`DimsDefaultOutputFormat`](/configuration/output), so
+both report `default`.
+
+`kind` holds an ImageMagick exception kind such as `resource_limit`,
+`corrupt_image`, or `policy`. `severity` holds `warning`, `error`, or
+`fatal`.
+
+`source` on an error image holds `drawn` for
+[`DimsErrorBackground`](/configuration/cache-control), `fetched` for
+[`DimsDefaultImageURL`](/configuration/cache-control), or `none`.
 
 ## The whole server
 
