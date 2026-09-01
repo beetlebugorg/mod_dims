@@ -279,6 +279,10 @@ verified:
                 return dims_cleanup(d, NULL,
                         d->status != DIMS_SUCCESS ? DIMS_IGNORE : DIMS_FAILURE);
             }
+
+            /* The commands now run against the error image, which a crop must
+             * not cut into. dims_run_commands reads this to rewrite one. */
+            d->use_no_image = 1;
         }
 
         return dims_process_image(d);

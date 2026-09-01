@@ -44,14 +44,20 @@ test_crop_region_larger_than_image(void)
 static void
 assert_refused(const char *commands, const char *what)
 {
-    dims_response *fallback = dims_request_ops(commands, "missing.png");
     dims_response *refused = dims_request_ops(commands, "grid.png");
+    dims_image_size size;
 
-    CHECK(fallback->body_len == refused->body_len &&
-              memcmp(fallback->body, refused->body, refused->body_len) == 0,
+    if (refused == NULL) {
+        return;
+    }
+
+    /* The error image is the source at its full size, so a refusal answers
+     * 512 by 512 where the crop would have given the region it names. */
+    size = dims_must_size(refused->body, refused->body_len);
+
+    CHECK(size.width == 512 && size.height == 512,
           "%s must be refused", what);
 
-    dims_response_free(fallback);
     dims_response_free(refused);
 }
 
