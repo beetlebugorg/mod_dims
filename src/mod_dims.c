@@ -562,19 +562,6 @@ dims_send_image(dims_request_rec *d)
     DestroyMagickWand(d->wand);
     d->wand = NULL;
 
-    /* After the image is sent record stats about this request. */
-    if(d->status == DIMS_SUCCESS) {
-        apr_atomic_inc32(&stats->success_count);
-    } else {
-        apr_atomic_inc32(&stats->failure_count);
-    }
-
-    if(d->status == DIMS_DOWNLOAD_TIMEOUT) {
-        apr_atomic_inc32(&stats->download_timeout_count);
-    } else if(d->status == DIMS_IMAGEMAGICK_TIMEOUT) {
-        apr_atomic_inc32(&stats->imagemagick_timeout_count);
-    }
-
     /* Record metrics for logging. */
     snprintf(buf, 128, "%d", d->status);
     apr_table_set(d->r->notes, "DIMS_STATUS", buf);
@@ -926,7 +913,6 @@ dims_process_image(dims_request_rec *d)
         if (rc != OK) {
             dims_set_cache_headers(d);
             dims_free_request(d);
-            apr_atomic_inc32(&stats->success_count);
             return rc;
         }
     }
