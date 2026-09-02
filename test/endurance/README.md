@@ -24,6 +24,20 @@ sends the same requests, so a failure repeats.
 Each request also carries the result it requires. The client compares the
 response against it and records every mismatch.
 
+A crop can fall outside the image, and the module refuses it when it does.
+The manifest records no source dimensions, so the generator cannot tell
+whether the crop it built lies inside one. A chain holding a crop or a
+thumbnail allows either result, and the report counts what it saw.
+
+`MODE=bench` drives only requests a decodable source must answer with an
+image: a safe operation, no mutation, no hostile argument, and no conditional
+request. Every failure in that mode is a real one, so a run measures
+throughput.
+
+```
+MODE=bench DURATION=300 bash test/endurance/run.sh
+```
+
 ## Requirements
 
 - Docker.
@@ -94,7 +108,7 @@ bash test/endurance/run.sh
 
 | Variable | Default | What it does |
 |---|---|---|
-| `MODE` | `soak` | `soak`, `asan`, or `valgrind` |
+| `MODE` | `soak` | `soak`, `bench`, `asan`, or `valgrind` |
 | `DURATION` | `10800` | seconds, so three hours |
 | `CONNECTIONS` | `16` | requests in flight |
 | `CPUS`, `MEM` | `4`, `2g` | the container limits |

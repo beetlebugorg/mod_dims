@@ -141,7 +141,9 @@ usage(void)
         "  --failures PATH     where to write the failing requests\n"
         "  --max-failures N    stop writing after this many\n"
         "  --dump N            print N planned requests and stop\n"
-"  --no-eurl           never encrypt the source URL\n"
+        "  --safe              build only requests a decodable source must\n"
+        "                      answer with an image, for a benchmark\n"
+        "  --no-eurl           never encrypt the source URL\n"
         "  --eurl-ecb          /dims4/ encrypts with AES-ECB, not AES-GCM\n");
 }
 
@@ -450,6 +452,10 @@ main(int argc, char **argv)
         const char *name = argv[i];
         const char *value = (i + 1 < argc) ? argv[i + 1] : NULL;
 
+        if (strcmp(name, "--safe") == 0) {
+            o.world.profile = DIMS_PROFILE_SAFE;
+            continue;
+        }
         if (strcmp(name, "--no-eurl") == 0) {
             o.world.use_eurl = 0;
             continue;

@@ -21,6 +21,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
 # soak      the production image, at speed, for hours
+# bench     the production image, driving only requests that must succeed
 # asan      the module built with AddressSanitizer and UndefinedBehaviorSanitizer
 # valgrind  one httpd process under memcheck, which reports the leaks at exit
 MODE=${MODE:-soak}
@@ -38,9 +39,10 @@ EURL=${EURL:-gcm}
 
 case "$MODE" in
     soak)     DURATION=${DURATION:-10800} ;;
+    bench)    DURATION=${DURATION:-300} ;;
     asan)     DURATION=${DURATION:-3600}; CONNECTIONS=${CONNECTIONS:-8} ;;
     valgrind) DURATION=${DURATION:-900}; CONNECTIONS=4 ;;
-    *) echo "MODE must be soak, asan, or valgrind" >&2; exit 2 ;;
+    *) echo "MODE must be soak, bench, asan, or valgrind" >&2; exit 2 ;;
 esac
 
 CLIENT=soakclient
@@ -82,7 +84,7 @@ log "build the images"
 docker build -q -f "$ROOT/docker/Dockerfile" -t "$SERVER_IMAGE" "$ROOT" >/dev/null
 docker build -q -f "$HERE/Dockerfile.client" -t "$CLIENT_IMAGE" "$ROOT" >/dev/null
 
-if [ "$MODE" != soak ]; then
+if [ "$MODE" != soak ] && [ "$MODE" != bench ]; then
     sanitize=address,undefined
     [ "$MODE" = valgrind ] && sanitize=
     docker build -q -f "$HERE/Dockerfile.debug" \
@@ -119,6 +121,9 @@ server_env+=(
     -e "DIMS_ENCRYPTION_ALGORITHM=$algorithm"
     # Port 8001 serves the metrics, so a run can be watched while it runs.
     -e "DIMS_METRICS_ENABLED=on"
+    # The generator sends /dims3/ requests, and the image ships that endpoint
+    # off. Without this httpd returns 404 for every one.
+    -e "DIMS_ENABLE_DIMS3=on"
     # A child that is never recycled keeps whatever it leaked, so the trend
     # below measures the module rather than the recycling interval. The
     # production default is 10000.
@@ -244,6 +249,9 @@ log "drive $DURATION seconds, $CONNECTIONS connections, seed $SEED"
 client_flags=()
 [ "$EURL" = none ] && client_flags+=(--no-eurl)
 [ "$EURL" = ecb ] && client_flags+=(--eurl-ecb)
+# A benchmark measures throughput, so every request must return an image and
+# any failure is a real one.
+[ "$MODE" = bench ] && client_flags+=(--safe)
 
 set +e
 docker run --rm --network "$NET" \
