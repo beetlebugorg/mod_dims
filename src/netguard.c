@@ -6,6 +6,7 @@
  */
 
 #include "netguard.h"
+#include "metrics.h"
 
 #include <string.h>
 #include <strings.h>
@@ -230,8 +231,8 @@ dims_host_allowed(apr_table_t *whitelist, const char *hostname)
     return found;
 }
 
-dims_net_result
-dims_validate_image_url(dims_request_rec *d, const char *url, dims_allowlist_mode mode)
+static dims_net_result
+validate_url(dims_request_rec *d, const char *url, dims_allowlist_mode mode)
 {
     apr_uri_t uri;
 
@@ -249,21 +250,39 @@ dims_validate_image_url(dims_request_rec *d, const char *url, dims_allowlist_mod
         return DIMS_NET_BAD_URL;
     }
 
-    if (mode != DIMS_ALLOWLIST_SKIP &&
-            !dims_host_allowed(d->config->whitelist, uri.hostname)) {
-        if (mode == DIMS_ALLOWLIST_ENFORCE) {
-            return DIMS_NET_HOST_NOT_ALLOWED;
-        }
+    if (mode != DIMS_ALLOWLIST_SKIP) {
+        int allowed = dims_host_allowed(d->config->whitelist, uri.hostname);
 
-        /* Report what enforcing would cost, so an operator can fill the
-         * allowlist from the log before setting the directive. */
-        ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, d->r,
-                      "DimsAllowlistSigned enforce would refuse %s: %s, "
-                      "on request: %s", uri.hostname,
-                      dims_net_reason(DIMS_NET_HOST_NOT_ALLOWED), d->r->uri);
+        dims_metrics_allowlist(mode, allowed);
+
+        if (!allowed) {
+            if (mode == DIMS_ALLOWLIST_ENFORCE) {
+                return DIMS_NET_HOST_NOT_ALLOWED;
+            }
+
+            /* Report what enforcing would cost, so an operator can fill the
+             * allowlist from the log before setting the directive. */
+            ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, d->r,
+                          "DimsAllowlistSigned enforce would refuse %s: %s, "
+                          "on request: %s", uri.hostname,
+                          dims_net_reason(DIMS_NET_HOST_NOT_ALLOWED),
+                          d->r->uri);
+        }
     }
 
     return DIMS_NET_OK;
+}
+
+/* Records the result, so every refusal counts once whatever refused it. */
+dims_net_result
+dims_validate_image_url(dims_request_rec *d, const char *url,
+                        dims_allowlist_mode mode)
+{
+    dims_net_result result = validate_url(d, url, mode);
+
+    dims_metrics_netguard(result);
+
+    return result;
 }
 
 /*

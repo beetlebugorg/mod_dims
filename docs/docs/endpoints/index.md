@@ -1,6 +1,6 @@
 # Endpoints
 
-Four handlers, each set on a location.
+Five handlers, each set on a location.
 
 | Handler | URL | Checked by |
 |---|---|---|
@@ -8,6 +8,7 @@ Four handlers, each set on a location.
 | [`dims4`](/endpoints/dims4) | `/dims4/<client>/<signature>/<expires>/<commands>/?url=` | a signature |
 | [`dims3`](/endpoints/dims3) | `/dims3/<client>/<commands>/?url=` | the host allowlist |
 | [`dims-status`](/endpoints/status) | `/dims-status/` | nothing |
+| [`dims-metrics`](/endpoints/metrics) | `/metrics` | nothing |
 | [`dims-local`](/endpoints/local) | a file on disk | nothing |
 
 `/dims5/` is the one to use. Its signature covers the commands, the image URL,

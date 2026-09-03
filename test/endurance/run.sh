@@ -117,6 +117,8 @@ server_env+=(
     -e "DIMS_ALLOW_PRIVATE_ADDRESSES=on"
     -e "DIMS_STATUS_VERBOSE=on"
     -e "DIMS_ENCRYPTION_ALGORITHM=$algorithm"
+    # Port 8001 serves the metrics, so a run can be watched while it runs.
+    -e "DIMS_METRICS_ENABLED=on"
     # A child that is never recycled keeps whatever it leaked, so the trend
     # below measures the module rather than the recycling interval. The
     # production default is 10000.
@@ -162,6 +164,7 @@ if [ "$MODE" = valgrind ]; then
             --show-leak-kinds=definite,indirect \
             --errors-for-leak-kinds=definite,indirect \
             --num-callers=40 --error-exitcode=0 \
+            --keep-debuginfo=yes \
             --suppressions=/build/mod_dims/test/valgrind/dims.supp \
             --log-file=/tmp/valgrind.log \
             /usr/local/apache2/bin/httpd -X -DFOREGROUND >/dev/null

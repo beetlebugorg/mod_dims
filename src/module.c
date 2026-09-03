@@ -18,6 +18,7 @@
 #include "overlay_cache.h"
 #include "pipeline.h"
 #include "profile.h"
+#include "metrics.h"
 #include "status.h"
 
 #include <MagickWand/MagickWand.h>
@@ -30,7 +31,6 @@ static int
 dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
 {
     apr_status_t status;
-    apr_size_t retsize;
     void *first_pass = NULL;
 
     /*
@@ -93,41 +93,10 @@ dims_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t* ptemp, server_rec *s)
     if (status != APR_SUCCESS)
         return HTTP_INTERNAL_SERVER_ERROR;
 
-    /* Create shared memory block */
-    status = apr_shm_create(&shm, sizeof(dims_stats_rec), NULL, p);
+    status = dims_metrics_init(p, s);
     if (status != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error creating shm block\n");
         return status;
     }
-
-    /* Check size of shared memory block */
-    retsize = apr_shm_size_get(shm);
-    if (retsize != sizeof(dims_stats_rec)) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error allocating shared memory block\n");
-        return status;
-    }
-
-    /* Init shm block */
-    stats = apr_shm_baseaddr_get(shm);
-    if (stats == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
-                     "mod_dims : Error creating status block.\n");
-        return status;
-    }
-    memset(stats, 0, retsize);
-
-    if (retsize < sizeof(dims_stats_rec)) {
-        ap_log_error(APLOG_MARK, APLOG_NOTICE, 0, s,
-                     "mod_dims : Not enough memory allocated!! Giving up");
-        return HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    stats->success_count = 1;
-    stats->failure_count = 0;
-    stats->download_timeout_count = 0;
-    stats->imagemagick_timeout_count = 0;
 
     return OK;
 }
@@ -160,6 +129,8 @@ dims_child_init(apr_pool_t *p, server_rec *s)
             s->module_config, &dims_module);
 
     MagickWandGenesis();
+
+    dims_metrics_child_init();
 
     dims_profiles_load(p, s, config->profile_dir);
 

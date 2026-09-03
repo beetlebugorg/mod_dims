@@ -6,6 +6,7 @@
  */
 
 #include "overlay_cache.h"
+#include "metrics.h"
 
 #include <apr_file_info.h>
 #include <apr_escape.h>
@@ -196,6 +197,7 @@ dims_overlay_memcache_get(const char *url)
 {
     dims_overlay_memcache *cache = overlay_memcache;
     MagickWand *clone = NULL;
+    int expired = 0;
     int i;
 
     if (cache == NULL || url == NULL) {
@@ -219,6 +221,7 @@ dims_overlay_memcache_get(const char *url)
             free(entry->url);
             entry->url = NULL;
             entry->wand = NULL;
+            expired = 1;
             break;
         }
 
@@ -231,6 +234,10 @@ dims_overlay_memcache_get(const char *url)
     }
 
     apr_thread_mutex_unlock(cache->mutex);
+
+    /* An entry past its age reports separately from a name the cache never
+     * held, because the two point at different settings. */
+    dims_metrics_overlay_lookup(expired ? 2 : (clone != NULL) ? 0 : 1);
 
     return clone;
 }
@@ -283,9 +290,11 @@ dims_overlay_memcache_put(const char *url, MagickWand *wand)
         return;
     }
 
+    /* The slot held another overlay, so storing this one drops it. */
     if (slot->url != NULL) {
         DestroyMagickWand(slot->wand);
         free(slot->url);
+        dims_metrics_overlay_eviction();
     }
 
     slot->url = key;

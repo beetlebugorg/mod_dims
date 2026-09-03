@@ -29,6 +29,7 @@
 #include "mod_dims.h"
 #include "curl.h"
 #include "netguard.h"
+#include "metrics.h"
 #include "status.h"
 #include "pipeline.h"
 #include "svgguard.h"
@@ -204,6 +205,8 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             d->status = DIMS_NETWORK_REFUSED;
             d->fetch_http_status = HTTP_BAD_REQUEST;
 
+            dims_metrics_fetch(DIMS_FETCH_REFUSED, 0);
+
             return 1;
         }
 
@@ -236,7 +239,21 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             if (d->net_refusal != DIMS_NET_OK) {
                 d->status = DIMS_NETWORK_REFUSED;
                 d->fetch_http_status = HTTP_BAD_REQUEST;
+
+                /* The socket callback refused it, so the guard has not
+                 * counted this one. */
+                if (code != CURLE_TOO_MANY_REDIRECTS) {
+                    dims_metrics_netguard(d->net_refusal);
+                }
             }
+
+            /* The libcurl code names what went wrong, where the outcome only
+             * says the fetch failed. */
+            dims_metrics_fetch(
+                    (d->net_refusal != DIMS_NET_OK) ? DIMS_FETCH_REFUSED
+                        : (code == CURLE_OPERATION_TIMEDOUT)
+                            ? DIMS_FETCH_TIMEOUT : DIMS_FETCH_TRANSPORT_ERROR,
+                    code);
 
             d->download_time = (apr_time_now() - start_time) / 1000;
 
@@ -255,12 +272,16 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
                 d->status = DIMS_FILE_NOT_FOUND;
             }
 
+            dims_metrics_fetch(DIMS_FETCH_HTTP_ERROR, 0);
+
             if(image_data.data) {
                 free(image_data.data);
             }
 
             return 1;
         }
+
+        dims_metrics_fetch(DIMS_FETCH_OK, 0);
 
         /* ImageMagick's SVG renderer reads a local file named by an <image>
          * href, so refuse a source that references an external resource before
@@ -315,6 +336,16 @@ dims_fetch_remote_image(dims_request_rec *d, const char *url)
             return 1;
         }
         d->imagemagick_time += (apr_time_now() - start_time) / 1000;
+
+        /* The format the wand read, kept as a metrics slot because the string
+         * belongs to ImageMagick. The error image reports its own format, so
+         * only a source fetch records one. */
+        if (url != NULL) {
+            char *source_format = MagickGetImageFormat(d->wand);
+
+            d->source_format_index = dims_metrics_format_index(source_format);
+            MagickRelinquishMemory(source_format);
+        }
 
         if(d->status != DIMS_DOWNLOAD_TIMEOUT) {
             d->original_image_size = image_data.used;
@@ -492,6 +523,10 @@ dims_send_image(dims_request_rec *d)
     blob = MagickGetImagesBlob(d->wand, &length);
     d->imagemagick_time += (apr_time_now() - start_time) / 1000;
 
+    /* What the caller receives. The pool cleanup reports it. */
+    d->output_format_index = dims_metrics_format_index(format);
+    d->output_bytes = (blob != NULL) ? (apr_uint64_t) length : 0;
+
     /* Set the Content-Type based on the image format. */
     content_type = apr_psprintf(d->pool, "image/%s", format);
     ap_content_type_tolower(content_type);
@@ -547,19 +582,6 @@ dims_send_image(dims_request_rec *d)
     DestroyMagickWand(d->wand);
     d->wand = NULL;
 
-    /* After the image is sent record stats about this request. */
-    if(d->status == DIMS_SUCCESS) {
-        apr_atomic_inc32(&stats->success_count);
-    } else {
-        apr_atomic_inc32(&stats->failure_count);
-    }
-
-    if(d->status == DIMS_DOWNLOAD_TIMEOUT) {
-        apr_atomic_inc32(&stats->download_timeout_count);
-    } else if(d->status == DIMS_IMAGEMAGICK_TIMEOUT) {
-        apr_atomic_inc32(&stats->imagemagick_timeout_count);
-    }
-
     /* Record metrics for logging. */
     snprintf(buf, 128, "%d", d->status);
     apr_table_set(d->r->notes, "DIMS_STATUS", buf);
@@ -600,6 +622,7 @@ dims_free_request(dims_request_rec *d)
 
     msg = MagickGetException(d->wand, &type);
     if (type != UndefinedException && msg) {
+        dims_metrics_exception(type);
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, d->r,
                 "Imagemagick error, '%s', on request: %s ", msg, d->r->uri);
     }
@@ -721,17 +744,23 @@ dims_cleanup(dims_request_rec *d, const char *err_msg, int status)
 
         if (dims_draw_error_image(d)) {
             dims_strip_error_image(d);
+            dims_metrics_error_image(0, 0);
             return dims_send_image(d);
         }
 
+        dims_metrics_error_image(0, 1);
         dims_free_request(d);
     } else if (d->no_image_url) {
         d->wand = NewMagickWand();
         if (!dims_fetch_remote_image(d, NULL)) {
             dims_strip_error_image(d);
+            dims_metrics_error_image(1, 0);
             return dims_send_image(d);
         }
+        dims_metrics_error_image(1, 1);
         dims_free_request(d);
+    } else {
+        dims_metrics_error_image(2, 0);
     }
 
     /* With no error image to send, the status is all the caller gets. This is
@@ -872,12 +901,21 @@ dims_run_commands(dims_request_rec *d, apr_hash_t *ops, int *exc_strip_cmd,
         func = apr_hash_get(ops, command, APR_HASH_KEY_STRING);
         if (func != NULL) {
             apr_status_t code;
+            apr_time_t began;
 
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                 "Executing command %s(%s), on request %s",
                 command, args, d->r->uri);
 
-            if ((code = func(d, args, err)) != DIMS_SUCCESS) {
+            began = apr_time_now();
+            code = func(d, args, err);
+
+            /* One call, not one request. A multi-frame source runs this loop
+             * once per frame. */
+            dims_metrics_operation(dims_metrics_operation_index(command), 0,
+                    began, code != DIMS_SUCCESS);
+
+            if (code != DIMS_SUCCESS) {
                 return code;
             }
         }
@@ -911,7 +949,6 @@ dims_process_image(dims_request_rec *d)
         if (rc != OK) {
             dims_set_cache_headers(d);
             dims_free_request(d);
-            apr_atomic_inc32(&stats->success_count);
             return rc;
         }
     }
@@ -969,6 +1006,8 @@ dims_process_image(dims_request_rec *d)
     /* Flatten images (i.e animated gif) if there's an overlay or file type is `psd`. Otherwise, pass through. */
     size_t images = MagickGetNumberImages(d->wand);
     bool should_flatten = false;
+
+    d->source_frames = (apr_uint64_t) images;
 
     if (images > 1) {
         int i;
@@ -1047,8 +1086,15 @@ dims_process_image(dims_request_rec *d)
             if (use_default) {
                 const char *err = NULL;
                 apr_status_t code;
+                apr_time_t began = apr_time_now();
 
-                if((code = dims_format_operation(d, d->config->default_output_format, &err)) != DIMS_SUCCESS) {
+                code = dims_format_operation(d,
+                        d->config->default_output_format, &err);
+
+                dims_metrics_operation(dims_metrics_operation_index("format"),
+                        1, began, code != DIMS_SUCCESS);
+
+                if (code != DIMS_SUCCESS) {
                     return dims_cleanup(d, err, code);
                 }
             }
@@ -1063,11 +1109,18 @@ dims_process_image(dims_request_rec *d)
         if(strip_func != NULL) {
             const char *err = NULL;
             apr_status_t code;
+            apr_time_t began;
 
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                 "Executing default strip command, on request %s", d->r->uri);
 
-            if((code = strip_func(d, NULL, &err)) != DIMS_SUCCESS) {
+            began = apr_time_now();
+            code = strip_func(d, NULL, &err);
+
+            dims_metrics_operation(dims_metrics_operation_index("strip"), 1,
+                    began, code != DIMS_SUCCESS);
+
+            if (code != DIMS_SUCCESS) {
                 return dims_cleanup(d, err, code);
             }
         }

@@ -54,6 +54,10 @@ dims_create_config(apr_pool_t *p, server_rec *s)
     config->origin_status_mode = DIMS_ORIGIN_STATUS_FORWARD;
     config->status_verbose = 1;
 
+    /* Off, so a server that upgrades publishes no metrics until an operator
+     * turns it on. */
+    config->metrics_enabled = 0;
+
     /* The cache holds fetched overlays, and an evicted one is fetched again,
      * so a bound costs a caller nothing. */
     config->overlay_cache_max_entries = 1024;
@@ -353,6 +357,15 @@ dims_config_set_allow_private_addresses(cmd_parms *cmd, void *dummy, int arg)
 }
 
 static const char *
+dims_config_set_metrics_enabled(cmd_parms *cmd, void *dummy, int arg)
+{
+    dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
+            cmd->server->module_config, &dims_module);
+    config->metrics_enabled = arg;
+    return NULL;
+}
+
+static const char *
 dims_config_set_allowlist_signed(cmd_parms *cmd, void *dummy, const char *arg)
 {
     dims_config_rec *config = (dims_config_rec *) ap_get_module_config(
@@ -625,6 +638,10 @@ const command_rec dims_directives[] =
                   "to report the status the origin returned, or map to report "
                   "404 for a missing source, 504 for a timeout, and 502 for "
                   "every other origin failure. The default is forward."),
+    AP_INIT_FLAG("DimsMetricsEnabled",
+                  dims_config_set_metrics_enabled, NULL, RSRC_CONF,
+                  "Whether the module serves metrics at a location that sets "
+                  "the dims-metrics handler. The default is Off."),
     AP_INIT_FLAG("DimsStatusVerbose",
                   dims_config_set_status_verbose, NULL, RSRC_CONF,
                   "Whether the status handler prints the mod_dims, ImageMagick, "

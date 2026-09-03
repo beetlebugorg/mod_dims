@@ -19,6 +19,11 @@ any image, so the host allowlist is what decides which images are reachable.
 It reads the same query parameters as [`/dims4/`](/endpoints/dims4), apart from
 the signature.
 
+The `client` segment is a legacy of `/dims3/` and `/dims4/`.
+[`/dims5/`](/endpoints/dims5) dropped it. A server that serves several clients
+gives each its own `<VirtualHost>`, which separates the clients, the allowlist,
+and the keys.
+
 ## The allowlist
 
 [`DimsAddWhitelist`](/configuration/image-sources) lists the hosts an image may

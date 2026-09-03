@@ -22,6 +22,7 @@ add_executable(dims_test
     http/test_signing.c
     http/test_sources.c
     http/test_legacy_endpoints.c
+    http/test_metrics.c
     http/test_no_error_image.c
     http/test_source_limit.c
     http/test_status.c
@@ -30,6 +31,7 @@ add_executable(dims_test
     http/test_watermark.c
     lib/common.c
     lib/golden.c
+    lib/prometheus.c
     lib/imagesize.c
     lib/request.c
     lib/signing.c
@@ -103,6 +105,7 @@ add_executable(dims_unit_test
     unit/test_resize.c
     unit/test_rotate.c
     unit/test_encryption.c
+    unit/test_metrics.c
     unit/test_netguard.c
     unit/test_overlay_cache.c
     unit/test_param.c
@@ -112,8 +115,10 @@ add_executable(dims_unit_test
     unit/test_thumbnail.c
     unit/test_watermark.c
     lib/golden.c
+    lib/prometheus.c
     lib/test.c
     ${CMAKE_SOURCE_DIR}/src/encryption.c
+    ${CMAKE_SOURCE_DIR}/src/metrics.c
     ${CMAKE_SOURCE_DIR}/src/netguard.c
     ${CMAKE_SOURCE_DIR}/src/overlay_cache.c
     ${CMAKE_SOURCE_DIR}/src/signature.c

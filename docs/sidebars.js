@@ -7,7 +7,7 @@ const sidebars = {
       type: 'category',
       label: 'Endpoints',
       link: {type: 'doc', id: 'endpoints/index'},
-      items: ['endpoints/dims5', 'endpoints/dims4', 'endpoints/dims3', 'endpoints/status', 'endpoints/local'],
+      items: ['endpoints/dims5', 'endpoints/dims4', 'endpoints/dims3', 'endpoints/status', 'endpoints/metrics', 'endpoints/local'],
     },
     {
       type: 'category',
@@ -60,6 +60,7 @@ const sidebars = {
         'configuration/cache-control',
         'configuration/output',
         'configuration/resources',
+        'configuration/metrics',
       ],
     },
   ],

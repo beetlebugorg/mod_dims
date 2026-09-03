@@ -144,3 +144,14 @@ dims_stub_fixture_dir(void)
                ? from_env
                : "/build/mod_dims/test/origin";
 }
+
+/*
+ * The MPM daemon limit, which sizes the process slots in the metrics block.
+ * The in-process cases run no MPM, so report one slot.
+ */
+int
+ap_mpm_query(int query_code, int *result)
+{
+    *result = 1;
+    return 0;
+}

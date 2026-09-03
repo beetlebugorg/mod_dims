@@ -7,12 +7,45 @@
  */
 
 #include "status.h"
+#include "metrics.h"
 #include "module.h"
 
 #include <scoreboard.h>
 
-dims_stats_rec *stats;
-apr_shm_t *shm;
+/*
+ * The four numbers this endpoint prints, summed from the metrics block. A
+ * request counts once, under the endpoint it arrived on.
+ */
+static apr_uint64_t
+count_outcome(int outcome)
+{
+    apr_uint64_t total = 0;
+    int e;
+
+    if (dims_metrics == NULL) {
+        return 0;
+    }
+
+    for (e = 0; e < DIMS_ENDPOINT_COUNT; e++) {
+        total += apr_atomic_read64(&dims_metrics->requests[e][outcome]);
+    }
+
+    return total;
+}
+
+/* Every outcome apart from success. */
+static apr_uint64_t
+count_failures(void)
+{
+    apr_uint64_t total = 0;
+    int i;
+
+    for (i = 1; i < DIMS_OUTCOME_COUNT; i++) {
+        total += count_outcome(i);
+    }
+
+    return total;
+}
 
 
 static void show_time(request_rec *r, apr_interval_time_t tsecs)
@@ -72,14 +105,14 @@ dims_status_handler(request_rec *r)
 
         ap_rprintf(r, "\nDetails\n-------\n");
         
-        ap_rprintf(r, "Successful requests: %d\n", 
-                apr_atomic_read32(&stats->success_count));
-        ap_rprintf(r, "Failed requests: %d\n\n", 
-                apr_atomic_read32(&stats->failure_count));
-        ap_rprintf(r, "Download timeouts: %d\n", 
-                apr_atomic_read32(&stats->download_timeout_count));
-        ap_rprintf(r, "Imagemagick Timeouts: %d\n", 
-                apr_atomic_read32(&stats->imagemagick_timeout_count));
+        ap_rprintf(r, "Successful requests: %" APR_UINT64_T_FMT "\n",
+                count_outcome(DIMS_SUCCESS));
+        ap_rprintf(r, "Failed requests: %" APR_UINT64_T_FMT "\n\n",
+                count_failures());
+        ap_rprintf(r, "Download timeouts: %" APR_UINT64_T_FMT "\n",
+                count_outcome(DIMS_DOWNLOAD_TIMEOUT));
+        ap_rprintf(r, "Imagemagick Timeouts: %" APR_UINT64_T_FMT "\n",
+                count_outcome(DIMS_IMAGEMAGICK_TIMEOUT));
 
         ap_rflush(r);
 

@@ -182,6 +182,9 @@ struct dims_config_rec {
      * DimsStatusVerbose. */
     int status_verbose;
 
+    /* Whether the module serves /metrics. Set from DimsMetricsEnabled. */
+    int metrics_enabled;
+
     /* Bounds on the overlay cache. Zero turns either off. Set from
      * DimsOverlayCacheMaxEntries and DimsOverlayCacheMaxAge. */
     int overlay_cache_max_entries;
@@ -233,6 +236,17 @@ struct dims_request_rec {
     /* The URL to the image being manipulated. */
     char *image_url;
     int use_no_image;
+
+    /* Which endpoint served this, as a dims_endpoint_t. */
+    int endpoint;
+
+    /* Slots in the metrics format table, or -1 before the format is known. */
+    int source_format_index;
+    int output_format_index;
+
+    /* Bytes written to the caller, and frames in the source. */
+    apr_uint64_t output_bytes;
+    apr_uint64_t source_frames;
 
     /* The URL to the NOIMAGE image in case of failures. */
     char *no_image_url;
