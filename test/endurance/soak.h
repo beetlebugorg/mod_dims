@@ -154,6 +154,19 @@ typedef struct {
     uint64_t seq;               /* the request number, for the failure log */
 } dims_plan;
 
+/*
+ * Which requests a run builds.
+ *
+ * mixed drives every source and every mutation, so it reports what the module
+ * does with a hostile caller. safe drives only requests a decodable source
+ * must answer with an image, so a refusal is a failure and the run measures
+ * throughput.
+ */
+typedef enum {
+    DIMS_PROFILE_MIXED = 0,
+    DIMS_PROFILE_SAFE
+} dims_profile;
+
 typedef struct {
     const char *origin;         /* where a source lives, http://origin:8080 */
     const char *client;
@@ -165,6 +178,7 @@ typedef struct {
     /* /dims4/ decrypts with the algorithm DimsEncryptionAlgorithm names.
      * /dims5/ has only the one, so this does not reach it. */
     int eurl_ecb;
+    dims_profile profile;
 } dims_world;
 
 void dims_plan_make(dims_plan *plan, const dims_world *world, dims_rng *rng,

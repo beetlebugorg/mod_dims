@@ -174,6 +174,26 @@ argument_geometry(dims_rng *rng)
     }
 }
 
+/*
+ * A geometry the safe profile uses. ^ and < enlarge, and a chain that
+ * enlarges then converts can pass the dimension limit of the output format:
+ * WebP stops at 16383 pixels a side. These forms shrink or fit.
+ */
+static char *
+argument_geometry_safe(dims_rng *rng)
+{
+    unsigned width = 8 + dims_rng_below(rng, 1200);
+    unsigned height = 8 + dims_rng_below(rng, 1200);
+
+    switch (dims_rng_below(rng, 5)) {
+        case 0: return formatted("%ux%u", width, height);
+        case 1: return formatted("%u", width);
+        case 2: return formatted("x%u", height);
+        case 3: return formatted("%ux%u!", width, height);
+        default: return formatted("%ux%u>", width, height);
+    }
+}
+
 static char *
 argument_crop(dims_rng *rng)
 {
@@ -317,6 +337,20 @@ typedef struct {
     const char *name;
     char *(*argument)(dims_rng *);
     int weight;
+
+    /*
+     * Whether the module may refuse a decodable source given the argument this
+     * generator produces. A crop can fall outside the image. The manifest
+     * records no source dimensions, so the generator cannot tell whether the
+     * crop it built lies inside one. The module is correct to refuse it.
+     */
+    int may_refuse;
+
+    /* Whether the safe profile uses it. */
+    int safe;
+
+    /* The generator the safe profile calls, when it differs. */
+    char *(*safe_argument)(dims_rng *);
 } operation;
 
 /*
@@ -325,42 +359,50 @@ typedef struct {
  * of the traffic. The rest run less often.
  */
 static const operation operations[] = {
-    { "resize",           argument_geometry,   22 },
-    { "thumbnail",        argument_thumbnail,  12 },
-    { "crop",             argument_crop,       12 },
-    { "format",           argument_format,     11 },
-    { "quality",          argument_quality,    11 },
-    { "strip",            argument_boolean,     7 },
-    { "sharpen",          argument_sharpen,     4 },
-    { "rotate",           argument_rotate,      4 },
-    { "brightness",       argument_brightness,  3 },
-    { "grayscale",        argument_boolean,     3 },
-    { "flipflop",         argument_flipflop,    3 },
-    { "sepia",            argument_sepia,       2 },
-    { "invert",           argument_boolean,     2 },
-    { "autolevel",        argument_boolean,     2 },
-    { "legacy_crop",      argument_crop,        2 },
-    { "legacy_thumbnail", argument_thumbnail,   2 },
-    { "watermark",        argument_watermark,   2 }
+    /*                                     weight  may_refuse  safe  safe_argument */
+    { "resize",           argument_geometry,   22,          0,    1, argument_geometry_safe },
+    { "thumbnail",        argument_thumbnail,  12,          1,    0, NULL },
+    { "crop",             argument_crop,       12,          1,    0, NULL },
+    { "format",           argument_format,     11,          0,    1, NULL },
+    { "quality",          argument_quality,    11,          0,    1, NULL },
+    { "strip",            argument_boolean,     7,          0,    1, NULL },
+    { "sharpen",          argument_sharpen,     4,          0,    1, NULL },
+    { "rotate",           argument_rotate,      4,          0,    1, NULL },
+    { "brightness",       argument_brightness,  3,          0,    1, NULL },
+    { "grayscale",        argument_boolean,     3,          0,    1, NULL },
+    { "flipflop",         argument_flipflop,    3,          0,    1, NULL },
+    { "sepia",            argument_sepia,       2,          0,    1, NULL },
+    { "invert",           argument_boolean,     2,          0,    1, NULL },
+    { "autolevel",        argument_boolean,     2,          0,    1, NULL },
+    { "legacy_crop",      argument_crop,        2,          1,    0, NULL },
+    { "legacy_thumbnail", argument_thumbnail,   2,          1,    0, NULL },
+    /* The overlay is a second fetch, and it may fail on its own. */
+    { "watermark",        argument_watermark,   2,          1,    0, NULL }
 };
 
 static const size_t operation_count =
         sizeof(operations) / sizeof(operations[0]);
 
 static const operation *
-pick_operation(dims_rng *rng)
+pick_operation(dims_rng *rng, dims_profile profile)
 {
     int total = 0;
     int roll;
     size_t i;
 
     for (i = 0; i < operation_count; i++) {
+        if (profile == DIMS_PROFILE_SAFE && !operations[i].safe) {
+            continue;
+        }
         total += operations[i].weight;
     }
 
     roll = (int) dims_rng_below(rng, (uint32_t) total);
 
     for (i = 0; i < operation_count; i++) {
+        if (profile == DIMS_PROFILE_SAFE && !operations[i].safe) {
+            continue;
+        }
         roll -= operations[i].weight;
         if (roll < 0) {
             return &operations[i];
@@ -732,6 +774,12 @@ pick_source(const dims_world *world, dims_rng *rng, dims_source_class *klass)
     const size_t *list;
     size_t count;
 
+    /* The safe profile drives only sources that decode, so every response
+     * must be an image. */
+    if (world->profile == DIMS_PROFILE_SAFE) {
+        roll = 0;
+    }
+
     if (roll < 78 && corpus->image_count > 0) {
         list = corpus->image;
         count = corpus->image_count;
@@ -788,6 +836,7 @@ dims_plan_make(dims_plan *plan, const dims_world *world, dims_rng *rng,
     int wants_overlay = 0;
     int hostile = 0;
     int svg_without_format = 0;
+    int may_refuse = 0;
     int roll;
     int length;
     int i;
@@ -805,15 +854,18 @@ dims_plan_make(dims_plan *plan, const dims_world *world, dims_rng *rng,
     source = pick_source(world, rng, &klass);
     signed_source = source;
 
-    tamper = pick_tamper(endpoint, rng);
+    tamper = (world->profile == DIMS_PROFILE_SAFE)
+            ? DIMS_TAMPER_NONE : pick_tamper(endpoint, rng);
 
     /* The command chain. */
     buffer_init(&commands);
     length = 1 + (int) dims_rng_below(rng, 6);
 
     for (i = 0; i < length; i++) {
-        const operation *op = pick_operation(rng);
+        const operation *op = pick_operation(rng, world->profile);
         char *argument;
+
+        may_refuse |= op->may_refuse;
 
         if (strcmp(op->name, "watermark") == 0) {
             if (wants_overlay) {
@@ -822,10 +874,14 @@ dims_plan_make(dims_plan *plan, const dims_world *world, dims_rng *rng,
             wants_overlay = 1;
         }
 
-        /* One argument in eight is outside what the operation reads. */
-        if (dims_rng_chance(rng, 12)) {
+        /* One argument in eight is outside what the operation reads. The safe
+         * profile sends none. */
+        if (world->profile != DIMS_PROFILE_SAFE && dims_rng_chance(rng, 12)) {
             argument = argument_hostile(rng);
             hostile = 1;
+        } else if (world->profile == DIMS_PROFILE_SAFE
+                && op->safe_argument != NULL) {
+            argument = op->safe_argument(rng);
         } else {
             argument = op->argument(rng);
         }
@@ -1118,9 +1174,12 @@ dims_plan_make(dims_plan *plan, const dims_world *world, dims_rng *rng,
     plan->tamper = tamper;
     plan->source = source->name;
     plan->hostile_argument = hostile;
-    plan->conditional = dims_rng_chance(rng, 3);
+    /* A conditional request can return 304. That is neither an image nor a
+     * refusal, so the safe profile sends none. */
+    plan->conditional = world->profile != DIMS_PROFILE_SAFE
+            && dims_rng_chance(rng, 3);
     plan->expect = expectation(endpoint, tamper, klass,
-                               hostile || svg_without_format);
+                               hostile || svg_without_format || may_refuse);
 
     /* A conditional request may answer 304, which is neither an image nor a
      * refusal. */
