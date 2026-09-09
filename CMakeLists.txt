@@ -67,6 +67,14 @@ pkg_check_modules(CRYPTO REQUIRED IMPORTED_TARGET libcrypto)
 # ImageMagick 7. Version 6 is refused: it does not provide the headers the
 # module includes.
 find_package(MagickWand7 REQUIRED)
+
+# -- The signing library
+#
+# The module links it, and so do the command and the tests. It builds first
+# because every other target here reaches for it.
+
+add_subdirectory(sign)
+
 # -- The module
 
 add_library(mod_dims MODULE
