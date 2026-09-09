@@ -49,3 +49,24 @@ target_link_libraries(dims-sign PRIVATE moddims_sign)
 dims_set_warnings(dims-sign)
 dims_set_hardening(dims-sign)
 dims_set_sanitizers(dims-sign)
+
+# -- Install
+#
+# A caller outside the module builds against this:
+#
+#   cc app.c $(pkg-config --cflags --libs dims-sign)
+#
+# dims_sign_internal.h is not installed. It offers the /dims4/ message, which
+# holds the client secret.
+
+configure_file(dims-sign.pc.in "${CMAKE_CURRENT_BINARY_DIR}/dims-sign.pc" @ONLY)
+
+install(FILES include/dims_sign.h
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/dims")
+install(TARGETS moddims_sign moddims_sign_shared
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(TARGETS dims-sign
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/dims-sign.pc"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")

@@ -1,15 +1,16 @@
 /*
  * Signing and encrypting a soak request.
  *
- * Every function here reproduces what the module checks. A change to the
- * module's rules that this file does not follow appears in a run as a signed
- * request the service refuses.
+ * The signature comes from libmoddims_sign. The module compiles the same source.
+ * The encryption is here, because the library does not cover it.
  *
  * Copyright 2026 Jeremy Collins
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "soak.h"
+
+#include <dims_sign.h>
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -24,16 +25,26 @@
 /* The salt src/encryption.c derives with. */
 static const unsigned char dims_kdf_salt[] = "go-dims";
 
-static int
-is_unreserved(unsigned char c)
+char *
+dims_escape(const char *value)
 {
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-           (c >= '0' && c <= '9') ||
-           c == '-' || c == '_' || c == '.' || c == '~';
+    char *out = NULL;
+
+    if (value == NULL || dims_sign_escape(value, &out) != DIMS_SIGN_OK) {
+        return NULL;
+    }
+
+    /* The soak links the static library, so free releases this. */
+    return out;
 }
 
-static char *
-escape(const char *value, int keep_slash)
+/*
+ * A path escape, which the library does not offer. A slash separates the
+ * commands, so it passes through, and a space travels as %20 rather than as a
+ * plus.
+ */
+char *
+dims_escape_path(const char *value)
 {
     static const char hex[] = "0123456789ABCDEF";
     const unsigned char *in;
@@ -51,10 +62,10 @@ escape(const char *value, int keep_slash)
     at = out;
 
     for (in = (const unsigned char *) value; *in != '\0'; in++) {
-        if (is_unreserved(*in) || (keep_slash && *in == '/')) {
+        if ((*in >= 'A' && *in <= 'Z') || (*in >= 'a' && *in <= 'z') ||
+                (*in >= '0' && *in <= '9') || *in == '-' || *in == '_' ||
+                *in == '.' || *in == '~' || *in == '/') {
             *at++ = (char) *in;
-        } else if (*in == ' ' && !keep_slash) {
-            *at++ = '+';
         } else {
             *at++ = '%';
             *at++ = hex[*in >> 4];
@@ -65,18 +76,6 @@ escape(const char *value, int keep_slash)
     *at = '\0';
 
     return out;
-}
-
-char *
-dims_escape(const char *value)
-{
-    return escape(value, 0);
-}
-
-char *
-dims_escape_path(const char *value)
-{
-    return escape(value, 1);
 }
 
 static char *
@@ -97,44 +96,6 @@ to_hex(const unsigned char *bytes, unsigned int length)
     out[length * 2] = '\0';
 
     return out;
-}
-
-char *
-dims_md5_hex(const char *message)
-{
-    unsigned char digest[EVP_MAX_MD_SIZE];
-    unsigned int length = 0;
-    EVP_MD_CTX *context = EVP_MD_CTX_new();
-
-    if (context == NULL) {
-        return NULL;
-    }
-
-    if (EVP_DigestInit_ex(context, EVP_md5(), NULL) != 1 ||
-            EVP_DigestUpdate(context, message, strlen(message)) != 1 ||
-            EVP_DigestFinal_ex(context, digest, &length) != 1) {
-        EVP_MD_CTX_free(context);
-        return NULL;
-    }
-
-    EVP_MD_CTX_free(context);
-
-    return to_hex(digest, length);
-}
-
-char *
-dims_hmac_sha256_hex(const char *key, const char *message)
-{
-    unsigned char digest[EVP_MAX_MD_SIZE];
-    unsigned int length = 0;
-
-    if (HMAC(EVP_sha256(), key, (int) strlen(key),
-             (const unsigned char *) message, strlen(message),
-             digest, &length) == NULL) {
-        return NULL;
-    }
-
-    return to_hex(digest, length);
 }
 
 int

@@ -15,6 +15,8 @@
 
 #include "soak.h"
 
+#include <dims_sign.h>
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1007,37 +1009,29 @@ dims_plan_make(dims_plan *plan, const dims_world *world, dims_rng *rng,
         char *as_signed = plus_for_space(with_slash);
         char *keyed = keyed_values(parameters, parameter_count,
                                    wants_overlay ? "overlay" : NULL);
-        buffer message;
+        dims_sign_param overlay = { "overlay", NULL };
+        char digest[DIMS_SIGN_DIMS4_DIGEST + 1];
 
-        buffer_init(&message);
-        buffer_add(&message, expires);
-        buffer_add(&message, world->secret);
-        buffer_add(&message, as_signed);
-        buffer_add(&message, signed_url);
-        buffer_add(&message, keyed);
+        overlay.value = keyed;
 
-        signature = dims_md5_hex(message.data != NULL ? message.data : "");
+        if (dims_sign_dims4_digest(world->secret, expires, as_signed,
+                signed_url, &overlay, 1, digest) == DIMS_SIGN_OK) {
+            signature = duplicate(digest);
+        }
 
-        free(buffer_take(&message));
         free(with_slash);
         free(as_signed);
         free(keyed);
     } else if (endpoint == DIMS_ENDPOINT_DIMS5) {
         char *with_slash = formatted("%s/", command_string);
         char *query = canonical_query(parameters, parameter_count);
-        buffer message;
+        char digest[DIMS_SIGN_DIMS5_LENGTH + 1];
 
-        buffer_init(&message);
-        buffer_add(&message, with_slash);
-        buffer_add(&message, "\n");
-        buffer_add(&message, signed_url);
-        buffer_add(&message, "\n");
-        buffer_add(&message, query != NULL ? query : "");
+        if (dims_sign_dims5_digest(world->signing_key, with_slash, signed_url,
+                (query != NULL) ? query : "", digest) == DIMS_SIGN_OK) {
+            signature = duplicate(digest);
+        }
 
-        signature = dims_hmac_sha256_hex(world->signing_key,
-                message.data != NULL ? message.data : "");
-
-        free(buffer_take(&message));
         free(with_slash);
         free(query);
     }

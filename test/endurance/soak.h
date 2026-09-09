@@ -65,23 +65,16 @@ int dims_rng_chance(dims_rng *rng, int percent);
 /* -- Signing ----------------------------------------------------------- */
 
 /*
- * Percent-encodes a value the way the module does when it rebuilds the query
- * it signed: unreserved characters pass, a space becomes a plus, everything
- * else becomes an uppercase hexadecimal pair. The caller frees.
+ * Percent-encodes a query value the way the module does when it rebuilds the
+ * query it signed. The caller frees.
  */
 char *dims_escape(const char *value);
 
 /*
- * The same, for a path segment. A slash separates the commands, so it passes
- * through. The caller frees.
+ * The same, for a path. A slash separates the commands, so it passes through,
+ * and a space travels as %20. The caller frees.
  */
 char *dims_escape_path(const char *value);
-
-/* Hexadecimal MD5 of message. The caller frees. */
-char *dims_md5_hex(const char *message);
-
-/* Hexadecimal HMAC-SHA256 of message under key. The caller frees. */
-char *dims_hmac_sha256_hex(const char *key, const char *message);
 
 /* HKDF-SHA256 with the salt the module uses. Returns 0 on failure. */
 int dims_key_hkdf(const char *secret, unsigned char key[16]);

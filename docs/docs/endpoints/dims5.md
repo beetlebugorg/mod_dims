@@ -41,6 +41,8 @@ Take the HMAC-SHA256 of that under the signing key, hex encoded and lowercase.
 The whole digest is compared, and the comparison reads every byte whatever the
 answer.
 
+A [client library](/clients/) signs a URL for you.
+
 ### The canonical query
 
 Every signed parameter written `name=value`, percent encoded, ordered by name.

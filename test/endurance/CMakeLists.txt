@@ -14,6 +14,7 @@ add_executable(dims_soak
     image.c)
 
 target_link_libraries(dims_soak PRIVATE
+    moddims_sign
     PkgConfig::CURL
     PkgConfig::CRYPTO)
 

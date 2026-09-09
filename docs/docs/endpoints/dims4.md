@@ -71,7 +71,10 @@ and the URL is:
 ```
 
 The commands have a trailing slash in the message. The image URL is percent
-encoded in the query string but not in the message.
+encoded in the query string but not in the message. Every plus in the image URL
+becomes a space in the message, so write `%2B` for a plus that has to survive.
+
+A [client library](/clients/) signs a URL for you.
 
 ### Code
 
@@ -139,8 +142,9 @@ well, list it in `_keys` and append its value to the message:
 message = expires + secret + "watermark/0.2,0.5,se/" + image + overlay
 ```
 
-Several parameters are appended in the order `_keys` gives, not in the order
-they appear in the query string.
+Each value goes into the message as it appears in the query string, before it
+is decoded. Several parameters are appended in the order `_keys` gives, not in
+the order they appear in the query string.
 
 ## Expiry
 
