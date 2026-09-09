@@ -1,0 +1,59 @@
+name: Clients
+
+# The Go and Java signing clients. They read test/fixtures/signing.tsv and
+# nothing else in the repository, so a change under clients/ or to that file
+# runs this and pr.yml runs the module build.
+#
+# A separate workflow rather than jobs in pr.yml, because a job cannot filter
+# on paths. docs-pr.yml has the same shape.
+
+on:
+  pull_request:
+    paths:
+      - 'clients/**'
+      - 'test/fixtures/**'
+      - '.github/workflows/clients.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'clients/**'
+      - 'test/fixtures/**'
+      - '.github/workflows/clients.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: clients/moddims
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: clients/moddims/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      # gofmt -l prints the files it would change, so a non-empty list fails.
+      - name: Format
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would change: $unformatted"
+            exit 1
+          fi
