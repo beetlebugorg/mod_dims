@@ -66,4 +66,57 @@
     </plugins>
   </build>
 
+  <!-- The checked in version is a snapshot, so a local mvn install produces
+       one and only the release job produces a version. release-java.yml sets
+       the version from the tag.
+
+       maven.pkg.github.com answers 401 to an unauthenticated read, including
+       from a public repository, so a consumer puts a GitHub token in
+       settings.xml under this id. -->
+  <distributionManagement>
+    <repository>
+      <id>github</id>
+      <name>GitHub Packages</name>
+      <url>https://maven.pkg.github.com/beetlebugorg/mod_dims</url>
+    </repository>
+    <snapshotRepository>
+      <id>github</id>
+      <name>GitHub Packages</name>
+      <url>https://maven.pkg.github.com/beetlebugorg/mod_dims</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <!-- The sources and the javadoc travel with the jar, so an IDE reads them.
+       GitHub Packages asks for no signature, so there is no GPG plugin. -->
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals><goal>jar-no-fork</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.11.2</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals><goal>jar</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
