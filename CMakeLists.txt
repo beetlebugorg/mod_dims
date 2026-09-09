@@ -129,6 +129,7 @@ target_include_directories(mod_dims PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(mod_dims PRIVATE
+    moddims_sign
     PkgConfig::APR
     PkgConfig::APRUTIL
     PkgConfig::CURL

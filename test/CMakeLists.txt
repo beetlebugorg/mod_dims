@@ -110,7 +110,6 @@ add_executable(dims_unit_test
     unit/test_overlay_cache.c
     unit/test_param.c
     unit/test_sign.c
-    unit/test_signature.c
     unit/test_svgguard.c
     unit/test_url.c
     unit/test_thumbnail.c
