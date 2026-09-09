@@ -1,5 +1,7 @@
 /*
- * The /dims5/ signature.
+ * The /dims5/ signature, over an APR pool.
+ *
+ * The rules are in sign/, so the module and the clients state them once.
  *
  * Copyright 2026 Jeremy Collins
  * SPDX-License-Identifier: Apache-2.0
@@ -10,38 +12,15 @@
 
 #include "mod_dims.h"
 
-/* An HMAC-SHA256 digest, hex encoded. */
-#define DIMS_SIGNATURE_LENGTH 64
-
 /*
- * Percent encodes one query component.
+ * The signature for one request, hex encoded, from the pool. NULL when the
+ * library refuses the input.
  *
- * Everything outside A-Za-z0-9-_.~ is escaped as %XX with uppercase hex, and
- * a space becomes a plus.
+ * commands and image_url are already decoded. query is the raw query string,
+ * and this builds the canonical form of it.
  */
-char *dims_query_escape(apr_pool_t *pool, const char *value);
-
-/*
- * The canonical form of every query parameter the signature covers.
- *
- * Each parameter is written name=value, percent encoded, and the whole is
- * ordered by name. A parameter with several values contributes each of them,
- * in the order the query gives.
- *
- * sig, url, eurl, _keys, and download take no part and are left out.
- */
-char *dims_signed_query(apr_pool_t *pool, const char *query);
-
-/*
- * The message a signature covers: the commands, the image URL, and the
- * canonical query, one per line.
- */
-char *dims_signature_message(apr_pool_t *pool, const char *commands,
-                             const char *image_url, const char *signed_query);
-
-/* HMAC-SHA256 of message under key, hex encoded and lowercase. */
-char *dims_signature_compute(apr_pool_t *pool, const char *key,
-                             const char *message);
+char *dims_signature(apr_pool_t *pool, const char *key, const char *commands,
+                     const char *image_url, const char *query);
 
 /*
  * Whether two signatures match, comparing every byte whatever the answer.

@@ -17,9 +17,9 @@
 #include "status.h"
 #include "pipeline.h"
 
+#include <dims_sign.h>
 #include <util_md5.h>
 #include <openssl/sha.h>
-#include <strings.h>
 
 
 apr_status_t
@@ -61,7 +61,7 @@ dims_handle_request(dims_request_rec *d)
         char *hash;
         char *expires_str;
         long expires;
-        char *gen_hash;
+        char gen_hash[DIMS_SIGN_DIMS4_DIGEST + 1];
         long now;
         hash = ap_getword(d->pool, (const char**)&d->unparsed_commands,'/');
         expires_str = ap_getword(d->pool, (const char**)&d->unparsed_commands,'/');
@@ -115,8 +115,8 @@ dims_handle_request(dims_request_rec *d)
             s++;
         }
 
-        /* Check the key before building the input. apr_pstrcat stops at its
-         * first NULL argument, which would hash the expiry alone. */
+        /* A client with no secret cannot be checked. It gets a status of its
+         * own, so the log names the configuration and not the signature. */
         if (d->client_config->secret_key == NULL) {
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, d->r,
                 "Developer key not set for client '%s'", d->client_config->id);
@@ -124,28 +124,33 @@ dims_handle_request(dims_request_rec *d)
             return dims_cleanup(d, "Missing Developer Key", DIMS_BAD_CLIENT);
         }
 
-        // Standard signature params.
-        char *signature_params = apr_pstrcat(d->pool, expires_str, d->client_config->secret_key, commands, d->image_url, NULL);
-
-        /* Concatenate the additional params _keys names. _keys is optional. */
+        /* The values _keys names, in _keys order, as they appear in the query.
+         * _keys is optional, and a name the query leaves out has no value. */
         char *keys = apr_hash_get(params, "_keys", APR_HASH_KEY_STRING);
+        apr_array_header_t *keyed = apr_array_make(d->pool, 4,
+                sizeof(dims_sign_param));
 
         if (keys != NULL) {
             char *strtokstate = NULL;
             char *token = apr_strtok(keys, ",", &strtokstate);
 
             while (token) {
-                const char *value = apr_hash_get(params, token, APR_HASH_KEY_STRING);
+                dims_sign_param *entry = apr_array_push(keyed);
 
-                signature_params = apr_pstrcat(d->pool, signature_params, value, NULL);
+                entry->name = token;
+                entry->value = apr_hash_get(params, token, APR_HASH_KEY_STRING);
                 token = apr_strtok(NULL, ",", &strtokstate);
             }
         }
 
-        // Hash.
-        gen_hash = ap_md5(d->pool, (unsigned char *) signature_params);
+        if (dims_sign_dims4_digest(d->client_config->secret_key, expires_str,
+                commands, d->image_url, (const dims_sign_param *) keyed->elts,
+                (size_t) keyed->nelts, gen_hash) != DIMS_SIGN_OK) {
+            dims_metrics_signature(d->endpoint, DIMS_SIG_MISMATCH);
+            return dims_cleanup(d, "Key mismatch", DIMS_BAD_URL);
+        }
 
-        if (strncasecmp(hash, gen_hash, 6) != 0) {
+        if (!dims_sign_dims4_equal(gen_hash, hash)) {
             gen_hash[7] = '\0';
             ap_log_rerror(APLOG_MARK, APLOG_DEBUG,0, d->r,
                 "Key Mismatch: wanted %6s got %6s [%s?url=%s]", gen_hash, hash, d->r->uri, d->image_url);

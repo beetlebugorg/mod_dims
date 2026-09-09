@@ -1,0 +1,377 @@
+# The /dims4/ and /dims5/ signing fixtures.
+#
+# One case per record. A blank line ends a record. A line starting with # is
+# a comment. \n, \t, and \\ are the only escapes. An empty value is a field
+# name, a tab, and nothing.
+#
+# Every suite builds the signer endpoint names, with key and prefix, and
+# signs input. A record with signed asserts that the result equals it. A
+# record with error asserts that the signer refuses the input. A record with
+# message asserts that the message the signer hashed equals it, so a failure
+# names the step that went wrong. query is the canonical query, and only the
+# C suite checks it.
+#
+# An empty prefix means the signer's default.
+#
+# dims-sign --fixture writes every computed field. The keys, the client id,
+# and the expiry are the ones in test/conf/dims-test.conf, so the HTTP suite
+# sends each signed URL as it is.
+
+case	dims5-plain
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=e9d70afb0b29520bae7fa47fb3de2d4c62c85f40d89636f6b190ac8055838bff
+query	
+message	resize/100x100/\nhttp://origin:8080/grid.png\n
+
+case	dims5-empty-query
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&download=1
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&download=1&sig=e9d70afb0b29520bae7fa47fb3de2d4c62c85f40d89636f6b190ac8055838bff
+query	
+message	resize/100x100/\nhttp://origin:8080/grid.png\n
+
+case	dims5-no-equals
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&flag
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&flag&sig=083549dc0ec8920601910665b2152742d070678c8933e82f39c56de45f33d6c3
+query	flag=
+message	resize/100x100/\nhttp://origin:8080/grid.png\nflag=
+
+case	dims5-multi-value
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&tag=b&tag=a
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&tag=b&tag=a&sig=146f18539b8f82768fe271f202b532961db33f8dcffbe3b8646a7ed0d85354e0
+query	tag=b&tag=a
+message	resize/100x100/\nhttp://origin:8080/grid.png\ntag=b&tag=a
+
+case	dims5-byte-order
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=ab&b=c
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=ab&b=c&sig=02b19c651246d07bab96d2f340718f327b846e80b00664723a8db8adb36652e8
+query	a=ab&b=c
+message	resize/100x100/\nhttp://origin:8080/grid.png\na=ab&b=c
+
+case	dims5-name-order
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&ab=2&a-b=1
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&ab=2&a-b=1&sig=149a9623660aea978c83b663ac744f079b77bf137832d872ff0805fcdf057907
+query	a-b=1&ab=2
+message	resize/100x100/\nhttp://origin:8080/grid.png\na-b=1&ab=2
+
+case	dims5-upper-lower
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=1&Z=2
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=1&Z=2&sig=f8b2ad439b1ee35f80d8c9da8278a2f2d51a1bbc90ff86fe20846d25b47883c2
+query	Z=2&a=1
+message	resize/100x100/\nhttp://origin:8080/grid.png\nZ=2&a=1
+
+case	dims5-space-plus-tilde
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=x+y&b=%2B&c=~
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=x+y&b=%2B&c=~&sig=882120b37f421a1b7c6a8490904fa62a32e6d54f5667cd99eba79d36b3e8b616
+query	a=x+y&b=%2B&c=~
+message	resize/100x100/\nhttp://origin:8080/grid.png\na=x+y&b=%2B&c=~
+
+case	dims5-percent
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&pct=50%25
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&pct=50%25&sig=5360d18b32e596475dea65a282d5204ea55b7f34ef156a9fe17ac84fb3721104
+query	pct=50%25
+message	resize/100x100/\nhttp://origin:8080/grid.png\npct=50%25
+
+case	dims5-unsigned
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=x&eurl=AAAA&_keys=a&download=1&a=1
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&eurl=AAAA&_keys=a&download=1&a=1&sig=233d0db06866a9740b9f4df6cdcabd8aef726959416c98e83ad044917b9be51f
+query	a=1
+message	resize/100x100/\nhttp://origin:8080/grid.png\na=1
+
+case	dims5-keys-absent
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&_keys=overlay&a=1
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&_keys=overlay&a=1&sig=233d0db06866a9740b9f4df6cdcabd8aef726959416c98e83ad044917b9be51f
+query	a=1
+message	resize/100x100/\nhttp://origin:8080/grid.png\na=1
+
+case	dims5-supplementary-name
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&%F0%90%80%80=1&%EF%BC%A1=2
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&%F0%90%80%80=1&%EF%BC%A1=2&sig=59806e7eac17b0fe1f4aa32829c862aa23eeb7b8e182d1319b005fad507f67bf
+query	%EF%BC%A1=2&%F0%90%80%80=1
+message	resize/100x100/\nhttp://origin:8080/grid.png\n%EF%BC%A1=2&%F0%90%80%80=1
+
+case	dims5-plus-in-url
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png%3Fa%3Db+c
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png%3Fa%3Db+c&sig=632ab73eb4d5344cb4238909cb22a67f462dd973a2e982f0db4cda763a893720
+query	
+message	resize/100x100/\nhttp://origin:8080/grid.png?a=b+c\n
+
+case	dims5-url-repeated
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fportrait.jpg&url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fportrait.jpg&url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=e9d70afb0b29520bae7fa47fb3de2d4c62c85f40d89636f6b190ac8055838bff
+query	
+message	resize/100x100/\nhttp://origin:8080/grid.png\n
+
+case	dims5-resign
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=deadbeef
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=e9d70afb0b29520bae7fa47fb3de2d4c62c85f40d89636f6b190ac8055838bff
+query	
+message	resize/100x100/\nhttp://origin:8080/grid.png\n
+
+case	dims5-no-trailing-slash
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims5/resize/100x100?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=cd15aa5b3cc66ecafd3163f5a3ff504889f52038303973c8efbded7a3a875cd5
+query	
+message	resize/100x100\nhttp://origin:8080/grid.png\n
+
+case	dims5-percent-commands
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/crop/50%25x50%25/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims5/crop/50%25x50%25/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=82936c7ccc1e69a66bfda0af251f46ade1e42b2c9858ab697c979cfb459e69c7
+query	
+message	crop/50%x50%/\nhttp://origin:8080/grid.png\n
+
+case	dims5-space-commands
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100%20x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims5/resize/100%20x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=2f5128205e2fa93f2b871429d43de15d1da848496fa075f597c5bd45fab955c1
+query	
+message	resize/100 x100/\nhttp://origin:8080/grid.png\n
+
+case	dims5-control-in-commands
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/%0A100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+error	bad-field
+
+case	dims5-malformed-percent
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/%zzx100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+error	bad-url
+
+case	dims5-no-url
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?a=1
+error	bad-url
+
+case	dims5-other-prefix
+endpoint	dims5
+prefix	/img/
+key	0123456789abcdef0123456789abcdef
+input	https://images.example.com/img/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	https://images.example.com/img/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=e9d70afb0b29520bae7fa47fb3de2d4c62c85f40d89636f6b190ac8055838bff
+query	
+message	resize/100x100/\nhttp://origin:8080/grid.png\n
+
+case	dims5-empty-prefix
+endpoint	dims5
+prefix	
+key	0123456789abcdef0123456789abcdef
+input	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims5/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&sig=e9d70afb0b29520bae7fa47fb3de2d4c62c85f40d89636f6b190ac8055838bff
+query	
+message	resize/100x100/\nhttp://origin:8080/grid.png\n
+
+case	dims5-wrong-prefix
+endpoint	dims5
+prefix	/dims5/
+key	0123456789abcdef0123456789abcdef
+input	/dims3/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+error	bad-url
+
+case	dims4-plain
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims4/TEST/82ea1c/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png
+
+case	dims4-keys-order
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=1&b=2&_keys=b,a
+signed	/dims4/TEST/8270ff/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=1&b=2&_keys=b,a
+message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png21
+
+case	dims4-keys-absent
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=1&_keys=a,absent
+signed	/dims4/TEST/6410a9/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=1&_keys=a,absent
+message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png1
+
+case	dims4-keys-encoded
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647/watermark/0.2,0.5,se/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&overlay=http%3A%2F%2Forigin%3A8080%2Foverlay.png&_keys=overlay
+signed	/dims4/TEST/c58151/2147483647/watermark/0.2,0.5,se/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&overlay=http%3A%2F%2Forigin%3A8080%2Foverlay.png&_keys=overlay
+message	2147483647t3stk3ywatermark/0.2,0.5,se/http://origin:8080/grid.pnghttp%3A%2F%2Forigin%3A8080%2Foverlay.png
+
+case	dims4-keys-repeated
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=1&a=2&_keys=a
+signed	/dims4/TEST/30d087/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png&a=1&a=2&_keys=a
+message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png2
+
+case	dims4-percent-commands
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647/crop/50%25x50%25/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims4/TEST/150ed9/2147483647/crop/50%25x50%25/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+message	2147483647t3stk3ycrop/50%x50%/http://origin:8080/grid.png
+
+case	dims4-space-commands
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647/resize/100%20x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims4/TEST/5e3eff/2147483647/resize/100%20x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+message	2147483647t3stk3yresize/100+x100/http://origin:8080/grid.png
+
+case	dims4-plus-in-url
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png%3Fa%3Db+c
+signed	/dims4/TEST/30eeed/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png%3Fa%3Db+c
+message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png?a=b c
+
+case	dims4-placeholder-clash
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/2147483647/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims4/TEST/82ea1ce80b/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png
+
+case	dims4-long-signature
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/dims4/TEST/82ea1ce80bea7fd48834e7b7dbab69e1/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png
+
+case	dims4-short-signature
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+error	bad-url
+
+case	dims4-bad-expiry
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/soon/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+error	bad-url
+
+case	dims4-missing-segment
+endpoint	dims4
+prefix	/dims4/
+key	t3stk3y
+input	/dims4/TEST/xxxxxx/2147483647?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+error	bad-url
+
+case	dims4-other-prefix
+endpoint	dims4
+prefix	/img/
+key	t3stk3y
+input	/img/TEST/xxxxxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+signed	/img/TEST/82ea1c/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
+message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png
+
+
+# eurl records go the other way: the signer decrypts input under the key and
+# asserts plain. A ciphertext holds a fresh nonce, so the file cannot pin one
+# the signer produces. Each suite round trips its own encrypt through its own
+# decrypt instead.
+#
+# cipher is gcm or ecb. The key names the derivation: a sha1: prefix is the
+# older path, and anything else is HKDF-SHA256. /dims4/ reads the older path
+# whatever the secret looks like.
+#
+# The eurl-dims5-gcm value came from an independent implementation of the
+# scheme. The eurl-dims4-ecb value came from openssl enc -aes-128-ecb. The
+# eurl-dims4-gcm value came from this library.
+
+case	eurl-dims5-gcm
+endpoint	eurl
+cipher	gcm
+key	0123456789abcdef0123456789abcdef
+input	AAECAwQFBgcICQoLGoQQhvOu+NISeOUF0pjRytnK48uKUhOlRjazksCwy7hyzMKL36y33578wA==
+plain	http://origin:8080/grid.png
+
+case	eurl-dims4-ecb
+endpoint	eurl
+cipher	ecb
+key	sha1:t3stk3y
+input	FIsag5hi4ulrQYVM9cXO/IxFSF+7K/OHpQ3ZFaUuMgQ=
+plain	http://origin:8080/grid.png
+
+case	eurl-dims4-gcm
+endpoint	eurl
+cipher	gcm
+key	sha1:t3stk3y
+input	tYqVj0xAcV2b2Mhlp3MvYhz8ViZGYFZkVSB4QsjarQ3Qzm4jBUz07tyd64OcjWFZOe+fxJUvEA==
+plain	http://origin:8080/grid.png
+
+case	eurl-edited-tag
+endpoint	eurl
+cipher	gcm
+key	0123456789abcdef0123456789abcdef
+input	AAECAwQFBgcICQoLGoQQXvOu+NISeOUF0pjRytnK48uKUhOlRjazksCwy7hyzMKL36y33578wA==
+error	bad-eurl

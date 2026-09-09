@@ -30,6 +30,7 @@ add_executable(dims_test
     http/test_thumbnail.c
     http/test_watermark.c
     lib/common.c
+    lib/fixtures.c
     lib/golden.c
     lib/prometheus.c
     lib/imagesize.c
@@ -37,11 +38,17 @@ add_executable(dims_test
     lib/signing.c
     lib/test.c)
 
+# dims_test links the signing library for the eurl cases only. The library
+# encrypts and the module decrypts, so the two sides meet across a request.
+# lib/signing.c still signs with code the module does not compile.
 target_link_libraries(dims_test PRIVATE
+    moddims_sign
     PkgConfig::CURL
     PkgConfig::CRYPTO)
 
-target_compile_definitions(dims_test PRIVATE _GNU_SOURCE)
+target_compile_definitions(dims_test PRIVATE
+    _GNU_SOURCE
+    DIMS_FIXTURE_FILE="${CMAKE_SOURCE_DIR}/test/fixtures/signing.tsv")
 
 dims_set_warnings(dims_test)
 dims_set_hardening(dims_test)
@@ -109,11 +116,13 @@ add_executable(dims_unit_test
     unit/test_netguard.c
     unit/test_overlay_cache.c
     unit/test_param.c
-    unit/test_signature.c
+    unit/test_fixtures.c
+    unit/test_sign.c
     unit/test_svgguard.c
     unit/test_url.c
     unit/test_thumbnail.c
     unit/test_watermark.c
+    lib/fixtures.c
     lib/golden.c
     lib/prometheus.c
     lib/test.c
@@ -144,9 +153,11 @@ add_executable(dims_unit_test
 
 target_include_directories(dims_unit_test PRIVATE
     ${APXS_INCLUDE_DIR}
-    ${CMAKE_SOURCE_DIR}/src)
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/sign/src)
 
 target_link_libraries(dims_unit_test PRIVATE
+    moddims_sign
     PkgConfig::APR
     PkgConfig::APRUTIL
     PkgConfig::CURL
@@ -154,7 +165,13 @@ target_link_libraries(dims_unit_test PRIVATE
     Dims::MagickWand
     Dims::MagickCore)
 
-target_compile_definitions(dims_unit_test PRIVATE _GNU_SOURCE)
+# The fixture case reads the shared file and runs the command that writes it.
+target_compile_definitions(dims_unit_test PRIVATE
+    _GNU_SOURCE
+    DIMS_FIXTURE_FILE="${CMAKE_SOURCE_DIR}/test/fixtures/signing.tsv"
+    DIMS_SIGN_COMMAND="$<TARGET_FILE:dims-sign>")
+
+add_dependencies(dims_unit_test dims-sign)
 
 dims_set_warnings(dims_unit_test)
 dims_set_hardening(dims_unit_test)

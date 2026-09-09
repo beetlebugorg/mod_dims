@@ -1,0 +1,12 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@/dims
+
+Name: dims-sign
+Description: The mod_dims signing rules for /dims4/ and /dims5/
+URL: https://github.com/beetlebugorg/mod_dims
+Version: @PROJECT_VERSION@
+Requires.private: libcrypto
+Libs: -L${libdir} -lmoddims_sign
+Cflags: -I${includedir}

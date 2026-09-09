@@ -121,9 +121,7 @@ dims5_verify(dims_request_rec *d)
         return DIMS_BAD_URL;
     }
 
-    expected = dims_signature_compute(d->pool, key,
-            dims_signature_message(d->pool, commands, image_url,
-                    dims_signed_query(d->pool, d->r->args)));
+    expected = dims_signature(d->pool, key, commands, image_url, d->r->args);
 
     if (expected == NULL || !dims_signature_equal(expected, signature)) {
         dims_metrics_signature(DIMS_ENDPOINT_DIMS5, DIMS_SIG_MISMATCH);

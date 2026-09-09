@@ -11,6 +11,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Clients',
+      link: {type: 'doc', id: 'clients/index'},
+      items: ['clients/c', 'clients/dims-sign'],
+    },
+    {
+      type: 'category',
       label: 'Operations',
       link: {type: 'doc', id: 'operations/index'},
       items: [
