@@ -30,6 +30,7 @@ add_executable(dims_test
     http/test_thumbnail.c
     http/test_watermark.c
     lib/common.c
+    lib/fixtures.c
     lib/golden.c
     lib/prometheus.c
     lib/imagesize.c
@@ -41,7 +42,9 @@ target_link_libraries(dims_test PRIVATE
     PkgConfig::CURL
     PkgConfig::CRYPTO)
 
-target_compile_definitions(dims_test PRIVATE _GNU_SOURCE)
+target_compile_definitions(dims_test PRIVATE
+    _GNU_SOURCE
+    DIMS_FIXTURE_FILE="${CMAKE_SOURCE_DIR}/test/fixtures/signing.tsv")
 
 dims_set_warnings(dims_test)
 dims_set_hardening(dims_test)

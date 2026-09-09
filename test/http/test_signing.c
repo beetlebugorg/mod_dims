@@ -14,6 +14,8 @@
  */
 
 #include "../lib/common.h"
+#include "../lib/fixtures.h"
+#include "../lib/prometheus.h"
 
 #define COMMANDS "resize/100x100"
 #define SIGNED_COMMANDS "resize/100x100/"
@@ -204,6 +206,127 @@ test_no_query_string_answers(void)
     free(url);
 }
 
+/* -- The shared fixtures ------------------------------------------------ */
+/*
+ * test/fixtures/signing.tsv holds the signatures the C library, the Go client,
+ * and the Java client all produce. This requests every one of them against the
+ * running module. A value all three reproduce and the module refuses fails
+ * here and nowhere else.
+ */
+
+static const char *
+dims5_server(void)
+{
+    const char *from_env = getenv("DIMS_TEST_DIMS5_URL");
+    return (from_env != NULL && from_env[0] != '\0') ? from_env
+                                                     : "http://dims:8007";
+}
+
+static dims_response *
+scrape_metrics(void)
+{
+    char url[512];
+
+    snprintf(url, sizeof(url), "%s/metrics", dims_base_url());
+
+    return dims_get_absolute(url);
+}
+
+typedef struct {
+    int sent;
+    int skipped;
+} fixture_run;
+
+static void
+request_fixture(const dims_fixture *f, void *data)
+{
+    fixture_run *run = data;
+    int is_dims5 = dims_fixture_is_dims5(f);
+    char url[DIMS_FIXTURE_FIELD_MAX + 256];
+    dims_response *response;
+
+    /* A record the signer refuses has no URL to send. */
+    if (f->has_error) {
+        run->skipped++;
+        return;
+    }
+
+    /* The module reads a fixed seven characters past the start of the path, so
+     * it serves no prefix but its own. */
+    if (strncmp(f->expected, "/dims4/", 7) != 0 &&
+            strncmp(f->expected, "/dims5/", 7) != 0) {
+        run->skipped++;
+        return;
+    }
+
+    /* The module decrypts eurl and uses it as the image URL. A ciphertext
+     * holds a fresh nonce, so the file has none to send. */
+    if (strstr(f->expected, "&eurl=") != NULL) {
+        run->skipped++;
+        return;
+    }
+
+    snprintf(url, sizeof(url), "%s%s",
+             is_dims5 ? dims5_server() : dims_base_url(), f->expected);
+
+    response = dims_get_absolute(url);
+
+    CHECK(response->transport_error == NULL, "%s: %s", f->name,
+          response->transport_error ? response->transport_error : "");
+
+    run->sent++;
+    dims_response_free(response);
+}
+
+static double
+signature_count(const dims_response *metrics, const char *endpoint,
+                const char *result)
+{
+    char prefix[128];
+
+    snprintf(prefix, sizeof(prefix),
+             "dims_signature_checks_total{endpoint=\"%s\",result=\"%s\"}",
+             endpoint, result);
+
+    return dims_prom_value(metrics, prefix);
+}
+
+static void
+test_every_fixture_url_verifies(void)
+{
+    dims_response *before = scrape_metrics();
+    double ok_dims4 = signature_count(before, "dims4", "ok");
+    double ok_dims5 = signature_count(before, "dims5", "ok");
+    double bad_dims4 = signature_count(before, "dims4", "mismatch");
+    double bad_dims5 = signature_count(before, "dims5", "mismatch");
+    fixture_run run = { 0, 0 };
+    dims_response *after;
+    int count;
+
+    CHECK_INT(before->status, 200, "the metrics endpoint");
+
+    count = dims_fixtures_read(request_fixture, &run);
+    CHECK(count > 0, "cannot read %s", dims_fixtures_path());
+    CHECK(run.sent > 0, "the file holds a URL the module serves");
+
+    after = scrape_metrics();
+
+    CHECK(signature_count(after, "dims4", "mismatch") == bad_dims4,
+          "no /dims4/ fixture URL is refused, %g became %g", bad_dims4,
+          signature_count(after, "dims4", "mismatch"));
+    CHECK(signature_count(after, "dims5", "mismatch") == bad_dims5,
+          "no /dims5/ fixture URL is refused, %g became %g", bad_dims5,
+          signature_count(after, "dims5", "mismatch"));
+
+    CHECK(signature_count(after, "dims4", "ok") +
+                  signature_count(after, "dims5", "ok") -
+                  ok_dims4 - ok_dims5 == run.sent,
+          "every one of the %d URLs verified", run.sent);
+
+    dims_response_free(before);
+    dims_response_free(after);
+}
+
 const dims_test dims_tests_signing[] = {
     { "TestSignedUrlValidates", test_signed_url_validates, NULL },
     { "TestLegacySignatureMatchesModDims", test_legacy_signature_matches_mod_dims, NULL },
@@ -216,5 +339,6 @@ const dims_test dims_tests_signing[] = {
     { "TestUnsignedParametersAreRefused", test_unsigned_parameters_are_refused,
       "optimizeResize is never signed" },
     { "TestNoQueryStringAnswers", test_no_query_string_answers, NULL },
+    { "TestEveryFixtureUrlVerifies", test_every_fixture_url_verifies, NULL },
     DIMS_TEST_END
 };
