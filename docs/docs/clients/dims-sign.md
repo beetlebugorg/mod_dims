@@ -4,8 +4,8 @@ A command that signs a URL, prints the message behind one, and compares the
 signature a URL holds against the one the key produces.
 
 ```
-dims-sign (--dims4 | --dims5) [--key-file FILE] [--prefix P]
-          [--message | --verify] URL
+dims-sign (--dims4 | --dims5) [--key-file FILE] [--prefix P] [--eurl]
+          [--cipher gcm|ecb] [--message | --verify] URL
 ```
 
 The endpoint is a flag. The path alone does not identify the endpoint.
@@ -35,6 +35,24 @@ $ DIMS_SIGNING_KEY=a-secret dims-sign --dims4 \
     '/dims4/CLIENT/xxxxxx/2147483647/resize/100x100/?url=https%3A%2F%2Fexample.com%2Fcat.jpg'
 /dims4/CLIENT/0c0bf3/2147483647/resize/100x100/?url=https%3A%2F%2Fexample.com%2Fcat.jpg
 ```
+
+## Encrypt the image URL
+
+`--eurl` signs the URL and then replaces `url` with the encrypted source. The
+signature covers the plain image URL, so the server verifies the request after
+it decrypts.
+
+```
+$ dims-sign --dims5 --key-file dims.key --eurl "$url"
+/dims5/resize/100x100/?eurl=SbEm%2BgYau0i4Bj%2BP%2FLOgRUf9UG3eeq3DRDh%2F...&sig=e9d70afb...
+```
+
+`/dims5/` reads AES-128-GCM. `/dims4/` reads what
+[`DimsEncryptionAlgorithm`](/configuration/clients) names, and its default is
+AES-128-ECB. `--cipher` names the one to use, and it defaults to the endpoint
+default.
+
+Every call writes a fresh IV, so two runs on one URL produce two values.
 
 ## Read the message
 

@@ -5,7 +5,7 @@ one C library, and the module compiles the same source.
 
 | Client | What it is |
 |---|---|
-| [C library](/clients/c) | `libmoddims_sign`, the signing rules |
+| [C library](/clients/c) | `libmoddims_sign`, the signing rules and the `eurl` ciphers |
 | [dims-sign](/clients/dims-sign) | a command that signs a URL and checks one |
 
 ## One contract
@@ -13,6 +13,11 @@ one C library, and the module compiles the same source.
 `test/fixtures/signing.tsv` holds a signed URL, a canonical query, and a
 message for each case. The unit suite reads that file and compares the library
 output against every field.
+
+An `eurl` record goes the other way: it holds a ciphertext and the plain image
+URL it decrypts to. A ciphertext holds a fresh nonce, so the file cannot pin
+one a client produces. Each suite round trips its own encrypt through its own
+decrypt instead.
 
 The request suite sends each signed URL in that file to a running module, then
 reads the signature counters to confirm the module verified all of them. The

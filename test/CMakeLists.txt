@@ -38,7 +38,11 @@ add_executable(dims_test
     lib/signing.c
     lib/test.c)
 
+# dims_test links the signing library for the eurl cases only. The library
+# encrypts and the module decrypts, so the two sides meet across a request.
+# lib/signing.c still signs with code the module does not compile.
 target_link_libraries(dims_test PRIVATE
+    moddims_sign
     PkgConfig::CURL
     PkgConfig::CRYPTO)
 

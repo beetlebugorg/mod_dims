@@ -334,3 +334,44 @@ input	/img/TEST/xxxxxx/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080
 signed	/img/TEST/82ea1c/2147483647/resize/100x100/?url=http%3A%2F%2Forigin%3A8080%2Fgrid.png
 message	2147483647t3stk3yresize/100x100/http://origin:8080/grid.png
 
+
+# eurl records go the other way: the signer decrypts input under the key and
+# asserts plain. A ciphertext holds a fresh nonce, so the file cannot pin one
+# the signer produces. Each suite round trips its own encrypt through its own
+# decrypt instead.
+#
+# cipher is gcm or ecb. The key names the derivation: a sha1: prefix is the
+# older path, and anything else is HKDF-SHA256. /dims4/ reads the older path
+# whatever the secret looks like.
+#
+# The eurl-dims5-gcm value came from an independent implementation of the
+# scheme. The eurl-dims4-ecb value came from openssl enc -aes-128-ecb. The
+# eurl-dims4-gcm value came from this library.
+
+case	eurl-dims5-gcm
+endpoint	eurl
+cipher	gcm
+key	0123456789abcdef0123456789abcdef
+input	AAECAwQFBgcICQoLGoQQhvOu+NISeOUF0pjRytnK48uKUhOlRjazksCwy7hyzMKL36y33578wA==
+plain	http://origin:8080/grid.png
+
+case	eurl-dims4-ecb
+endpoint	eurl
+cipher	ecb
+key	sha1:t3stk3y
+input	FIsag5hi4ulrQYVM9cXO/IxFSF+7K/OHpQ3ZFaUuMgQ=
+plain	http://origin:8080/grid.png
+
+case	eurl-dims4-gcm
+endpoint	eurl
+cipher	gcm
+key	sha1:t3stk3y
+input	tYqVj0xAcV2b2Mhlp3MvYhz8ViZGYFZkVSB4QsjarQ3Qzm4jBUz07tyd64OcjWFZOe+fxJUvEA==
+plain	http://origin:8080/grid.png
+
+case	eurl-edited-tag
+endpoint	eurl
+cipher	gcm
+key	0123456789abcdef0123456789abcdef
+input	AAECAwQFBgcICQoLGoQQXvOu+NISeOUF0pjRytnK48uKUhOlRjazksCwy7hyzMKL36y33578wA==
+error	bad-eurl

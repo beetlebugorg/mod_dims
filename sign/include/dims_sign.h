@@ -31,6 +31,16 @@ extern "C" {
 #define DIMS_SIGN_DIMS4_PREFIX "/dims4/"
 #define DIMS_SIGN_DIMS5_PREFIX "/dims5/"
 
+/* The AES key both eurl schemes use. */
+#define DIMS_SIGN_KEY_BYTES 16
+
+/* One AES block, which is the shortest thing ECB can decrypt. */
+#define DIMS_SIGN_AES_BLOCK_BYTES 16
+
+/* What a GCM value has before and after the ciphertext. */
+#define DIMS_SIGN_GCM_IV_BYTES 12
+#define DIMS_SIGN_GCM_TAG_BYTES 16
+
 typedef enum {
     DIMS_SIGN_OK = 0,
     DIMS_SIGN_MEMORY,       /* malloc refused */
@@ -43,8 +53,21 @@ typedef enum {
                                than DIMS_SIGN_DIMS4_LENGTH, or the query has
                                no url */
     DIMS_SIGN_BAD_FIELD,    /* a signed field holds a control character */
-    DIMS_SIGN_CRYPTO        /* libcrypto refused */
+    DIMS_SIGN_CRYPTO,       /* libcrypto refused */
+    DIMS_SIGN_BAD_EURL      /* an eurl value is not base64, is too short for
+                               its scheme, or fails its tag check */
 } dims_sign_status;
+
+/* Which cipher an eurl value uses. */
+typedef enum {
+    /* AES-128-GCM. What /dims5/ reads, and what /dims4/ reads under
+       DimsEncryptionAlgorithm AES/GCM/NoPadding. */
+    DIMS_SIGN_EURL_GCM = 0,
+
+    /* AES-128-ECB with PKCS5 padding. The /dims4/ default. It has no
+       integrity check and no IV. */
+    DIMS_SIGN_EURL_ECB
+} dims_sign_cipher;
 
 /* A short description of a status, for an error message. */
 const char *dims_sign_strerror(dims_sign_status status);
@@ -112,7 +135,78 @@ dims_sign_status dims_sign_dims4_url(const char *url, const char *key,
 dims_sign_status dims_sign_dims5_message(const char *url, const char *prefix,
                                          char **out);
 
+/*
+ * Signs one /dims5/ URL and encrypts its image URL.
+ *
+ * The signature covers the plaintext image URL, so the server verifies the
+ * request after it decrypts. The output holds eurl in place of url, percent
+ * encoded, because the module decodes that parameter.
+ *
+ * key is the DimsSigningKey. This derives the AES key from it.
+ *
+ * On DIMS_SIGN_OK, *out holds the signed URL. Release it with dims_sign_free.
+ */
+dims_sign_status dims_sign_dims5_eurl_url(const char *url, const char *key,
+                                          const char *prefix, char **out);
+
+/*
+ * Signs one /dims4/ URL and encrypts its image URL.
+ *
+ * The output holds eurl in place of url, undecoded, because the module reads
+ * that parameter as it appears in the query.
+ *
+ * cipher names the scheme the server is configured for. This endpoint reads
+ * one derivation whatever the secret looks like, so the AES key comes from
+ * SHA-1 of the client secret.
+ *
+ * On DIMS_SIGN_OK, *out holds the signed URL. Release it with dims_sign_free.
+ */
+dims_sign_status dims_sign_dims4_eurl_url(const char *url, const char *key,
+                                          const char *prefix,
+                                          dims_sign_cipher cipher, char **out);
+
 /* -- The rules, for the module and the command -- */
+
+/*
+ * Derives the AES key an eurl value uses.
+ *
+ * A secret with a sha1: prefix takes the older path: SHA-1 of the rest, hex
+ * encoded, the first 16 characters uppercased. That is 64 bits of material
+ * spread across 16 bytes. Anything else takes HKDF-SHA256, with a hkdf:
+ * prefix stripped first.
+ *
+ * /dims4/ reads the older path whatever the secret looks like, so a /dims4/
+ * caller writes sha1: in front of the client secret.
+ */
+dims_sign_status dims_sign_derive_key(const char *secret,
+                                      unsigned char key[DIMS_SIGN_KEY_BYTES]);
+
+/*
+ * Encrypts one image URL for the eurl parameter.
+ *
+ * A GCM value is the 12 byte IV, the ciphertext, and the 16 byte tag, base64
+ * encoded. The IV comes from the system random source, so two calls on one
+ * URL under one key produce two values.
+ *
+ * An ECB value is the ciphertext alone, base64 encoded.
+ *
+ * On DIMS_SIGN_OK, *out holds the value. Release it with dims_sign_free.
+ */
+dims_sign_status dims_sign_eurl_encrypt(const char *image_url,
+                                        const unsigned char key[DIMS_SIGN_KEY_BYTES],
+                                        dims_sign_cipher cipher, char **out);
+
+/*
+ * Decrypts one eurl value, so a caller reads back what it wrote.
+ *
+ * Returns DIMS_SIGN_BAD_EURL when the value is not base64, is too short for
+ * its scheme, or fails its tag check.
+ *
+ * On DIMS_SIGN_OK, *out holds the image URL. Release it with dims_sign_free.
+ */
+dims_sign_status dims_sign_eurl_decrypt(const char *eurl,
+                                        const unsigned char key[DIMS_SIGN_KEY_BYTES],
+                                        dims_sign_cipher cipher, char **out);
 
 /*
  * Percent encodes one query component.

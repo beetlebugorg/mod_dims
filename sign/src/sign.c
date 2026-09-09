@@ -1255,6 +1255,199 @@ dims_sign_dims4_message(const char *url, const char *secret, const char *prefix,
     return (*out != NULL) ? DIMS_SIGN_OK : DIMS_SIGN_MEMORY;
 }
 
+/* -- eurl in place of url ------------------------------------------------ */
+
+/*
+ * Copies a signed URL with every url parameter replaced by one eurl.
+ *
+ * The eurl goes where the last url was, so the output holds the parameters in
+ * the order the input gave. Neither name is in the canonical query, so the
+ * signature still matches.
+ *
+ * escaped writes the value percent encoded, which /dims5/ needs and /dims4/
+ * does not.
+ */
+static dims_sign_status
+swap_url_for_eurl(const char *signed_url, const char *eurl, int escaped,
+                  char **out)
+{
+    url_parts parts;
+    buffer rebuilt;
+    const char *at;
+    size_t last = 0;
+    size_t index = 0;
+    int written = 0;
+    char *value = NULL;
+
+    split_url(signed_url, &parts);
+    if (parts.query == NULL) {
+        return DIMS_SIGN_BAD_URL;
+    }
+
+    /* Which token holds the last url. */
+    for (at = parts.query; *at != '\0'; index++) {
+        const char *end = strchr(at, '&');
+        size_t length;
+
+        if (end == NULL) {
+            end = at + strlen(at);
+        }
+
+        length = (size_t) (end - at);
+        if (length > 4 && memcmp(at, "url=", 4) == 0) {
+            last = index;
+        }
+
+        at = (*end == '\0') ? end : end + 1;
+    }
+
+    if (escaped) {
+        dims_sign_status status = dims_sign_escape(eurl, &value);
+
+        if (status != DIMS_SIGN_OK) {
+            return status;
+        }
+    }
+
+    buffer_init(&rebuilt);
+    buffer_add_bytes(&rebuilt, signed_url,
+                     (size_t) (parts.path - signed_url) + parts.path_length);
+    buffer_add_char(&rebuilt, '?');
+
+    index = 0;
+    for (at = parts.query; *at != '\0'; index++) {
+        const char *end = strchr(at, '&');
+        size_t length;
+        int is_url;
+
+        if (end == NULL) {
+            end = at + strlen(at);
+        }
+
+        length = (size_t) (end - at);
+        is_url = (length > 4 && memcmp(at, "url=", 4) == 0);
+
+        if (length > 0 && (!is_url || index == last)) {
+            if (written) {
+                buffer_add_char(&rebuilt, '&');
+            }
+
+            if (is_url) {
+                buffer_add(&rebuilt, "eurl=");
+                buffer_add(&rebuilt, escaped ? value : eurl);
+            } else {
+                buffer_add_bytes(&rebuilt, at, length);
+            }
+
+            written = 1;
+        }
+
+        at = (*end == '\0') ? end : end + 1;
+    }
+
+    free(value);
+
+    *out = buffer_take(&rebuilt);
+
+    return (*out != NULL) ? DIMS_SIGN_OK : DIMS_SIGN_MEMORY;
+}
+
+dims_sign_status
+dims_sign_dims5_eurl_url(const char *url, const char *key, const char *prefix,
+                         char **out)
+{
+    unsigned char aes[DIMS_SIGN_KEY_BYTES];
+    url_parts parts;
+    char *signed_url = NULL;
+    char *image_url = NULL;
+    char *eurl = NULL;
+    dims_sign_status status;
+
+    if (out == NULL || url == NULL) {
+        return DIMS_SIGN_BAD_ARGUMENT;
+    }
+
+    status = dims_sign_dims5_url(url, key, prefix, &signed_url);
+    if (status != DIMS_SIGN_OK) {
+        return status;
+    }
+
+    split_url(url, &parts);
+
+    status = read_image_url(parts.query, &image_url);
+    if (status == DIMS_SIGN_OK) {
+        status = dims_sign_derive_key(key, aes);
+    }
+    if (status == DIMS_SIGN_OK) {
+        status = dims_sign_eurl_encrypt(image_url, aes, DIMS_SIGN_EURL_GCM,
+                                        &eurl);
+    }
+    if (status == DIMS_SIGN_OK) {
+        status = swap_url_for_eurl(signed_url, eurl, 1, out);
+    }
+
+    free(signed_url);
+    free(image_url);
+    free(eurl);
+
+    return status;
+}
+
+dims_sign_status
+dims_sign_dims4_eurl_url(const char *url, const char *key, const char *prefix,
+                         dims_sign_cipher cipher, char **out)
+{
+    unsigned char aes[DIMS_SIGN_KEY_BYTES];
+    dims4_fields fields;
+    char *signed_url = NULL;
+    char *secret = NULL;
+    char *eurl = NULL;
+    dims_sign_status status;
+
+    if (out == NULL || url == NULL) {
+        return DIMS_SIGN_BAD_ARGUMENT;
+    }
+
+    if (key == NULL || *key == '\0') {
+        return DIMS_SIGN_BAD_ARGUMENT;
+    }
+
+    status = dims_sign_dims4_url(url, key, prefix, &signed_url);
+    if (status != DIMS_SIGN_OK) {
+        return status;
+    }
+
+    status = read_dims4_fields(url, prefix, &fields);
+    if (status != DIMS_SIGN_OK) {
+        free(signed_url);
+        return status;
+    }
+
+    /* This endpoint reads one derivation whatever the secret looks like. */
+    secret = malloc(strlen(key) + 6);
+    if (secret == NULL) {
+        status = DIMS_SIGN_MEMORY;
+    } else {
+        memcpy(secret, "sha1:", 5);
+        memcpy(secret + 5, key, strlen(key) + 1);
+        status = dims_sign_derive_key(secret, aes);
+    }
+
+    if (status == DIMS_SIGN_OK) {
+        status = dims_sign_eurl_encrypt(fields.image_url, aes, cipher, &eurl);
+    }
+    if (status == DIMS_SIGN_OK) {
+        status = swap_url_for_eurl(signed_url, eurl, 0, out);
+    }
+
+    release_dims4_fields(&fields);
+    free(signed_url);
+    free(secret);
+    free(eurl);
+
+    return status;
+}
+
 /* -- The rest ----------------------------------------------------------- */
 
 const char *
@@ -1273,6 +1466,8 @@ dims_sign_strerror(dims_sign_status status)
             return "a control character is in a signed field";
         case DIMS_SIGN_CRYPTO:
             return "libcrypto refused";
+        case DIMS_SIGN_BAD_EURL:
+            return "cannot read the eurl value";
     }
 
     return "unknown";

@@ -87,6 +87,37 @@ A call that fails leaves the out parameter untouched and does not allocate.
 Every function is safe to call from any thread. No function reads or writes
 static state.
 
+## Encrypting the image URL
+
+`eurl` hides the source from a public caller. The signature covers the plain
+image URL, so the server verifies the request after it decrypts.
+
+```c
+char *signed_url;
+
+dims_sign_dims5_eurl_url(url, key, NULL, &signed_url);
+```
+
+That signs the URL and replaces `url` with `eurl` in one call. The `/dims4/`
+form takes the cipher the server is configured for:
+
+```c
+dims_sign_dims4_eurl_url(url, secret, NULL, DIMS_SIGN_EURL_ECB, &signed_url);
+```
+
+| Endpoint | Key | Cipher |
+|---|---|---|
+| `/dims5/` | HKDF-SHA256 of the signing key, salt `go-dims` | AES-128-GCM |
+| `/dims4/` | SHA-1 of the client secret, hex, first 16 characters uppercased | AES-128-ECB, or GCM under [`DimsEncryptionAlgorithm`](/configuration/clients) |
+
+`dims_sign_derive_key` and `dims_sign_eurl_encrypt` do the two steps on their
+own. `dims_sign_eurl_decrypt` reads a value back, so a caller can check what it
+wrote.
+
+A GCM value is the 12 byte IV, the ciphertext, and the 16 byte tag, base64
+encoded. The IV comes from the system random source, so two calls on one URL
+produce two values.
+
 ## Status codes
 
 | Status | Meaning |
@@ -97,6 +128,7 @@ static state.
 | `DIMS_SIGN_BAD_URL` | the signer cannot read the URL |
 | `DIMS_SIGN_BAD_FIELD` | a signed field holds a control character |
 | `DIMS_SIGN_CRYPTO` | libcrypto refused |
+| `DIMS_SIGN_BAD_EURL` | an eurl value is not base64, is too short, or fails its tag check |
 
 `dims_sign_strerror` returns a short description of each one.
 
@@ -104,10 +136,6 @@ static state.
 
 It does not repair the URL. The caller supplies a valid one. A percent escape
 that is not two hex digits gives `DIMS_SIGN_BAD_URL`.
-
-It does not encrypt. A caller who wants `eurl` signs with `url`, then replaces
-`url` with `eurl` in the signed URL. The signature stays valid, because the
-message holds the plaintext image URL.
 
 It does not read an image URL out of the path. `/dims4/` also accepts the
 image URL as the last path segment. The `url` query parameter is the

@@ -14,6 +14,8 @@
  */
 
 #include "../lib/common.h"
+
+#include <dims_sign.h>
 #include "../lib/fixtures.h"
 #include "../lib/prometheus.h"
 
@@ -245,8 +247,9 @@ request_fixture(const dims_fixture *f, void *data)
     char url[DIMS_FIXTURE_FIELD_MAX + 256];
     dims_response *response;
 
-    /* A record the signer refuses has no URL to send. */
-    if (f->has_error) {
+    /* A record the signer refuses has no URL to send, and an eurl record
+     * holds a ciphertext rather than a URL. */
+    if (f->has_error || dims_fixture_is_eurl(f)) {
         run->skipped++;
         return;
     }
@@ -327,6 +330,79 @@ test_every_fixture_url_verifies(void)
     dims_response_free(after);
 }
 
+/* -- eurl ---------------------------------------------------------------- */
+/*
+ * The library encrypts and the module decrypts. A change to the derivation,
+ * the salt, or the framing on either side shows up here as a refused request.
+ *
+ * The signature covers the plaintext image URL, so the server verifies the
+ * request after it decrypts.
+ */
+
+static void
+test_dims5_eurl_url_verifies(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char plain[2048];
+    char *encoded = dims_urlencode(url);
+    char *signed_url = NULL;
+    char full[4096];
+    dims_response *response;
+
+    snprintf(plain, sizeof(plain), "/dims5/resize/100x100/?url=%s", encoded);
+
+    CHECK_INT(dims_sign_dims5_eurl_url(plain, DIMS_TEST_SIGNING_KEY, NULL,
+                                       &signed_url),
+              DIMS_SIGN_OK, "the library must build the URL");
+
+    CHECK(signed_url != NULL && strstr(signed_url, "eurl=") != NULL,
+          "the output holds eurl");
+    CHECK(signed_url != NULL && strstr(signed_url, "&url=") == NULL,
+          "the output holds no url");
+
+    snprintf(full, sizeof(full), "%s%s", dims5_server(), signed_url);
+    response = dims_get_absolute(full);
+
+    CHECK_INT(response->status, 200, "an encrypted source on /dims5/");
+
+    dims_response_free(response);
+    dims_sign_free(signed_url);
+    free(encoded);
+    free(url);
+}
+
+/*
+ * The /dims4/ default is AES/ECB/PKCS5Padding, which is what
+ * test/conf/dims-test.conf leaves in place. The value travels undecoded,
+ * because the module reads that parameter as it appears in the query.
+ */
+static void
+test_dims4_eurl_url_verifies(void)
+{
+    char *url = dims_fixture_url("grid.png");
+    char plain[2048];
+    char *encoded = dims_urlencode(url);
+    char *signed_url = NULL;
+    dims_response *response;
+
+    snprintf(plain, sizeof(plain),
+             "/dims4/%s/xxxxxx/%s/resize/100x100/?url=%s",
+             DIMS_TEST_CLIENT, DIMS_TEST_EXPIRES, encoded);
+
+    CHECK_INT(dims_sign_dims4_eurl_url(plain, DIMS_TEST_SECRET, NULL,
+                                       DIMS_SIGN_EURL_ECB, &signed_url),
+              DIMS_SIGN_OK, "the library must build the URL");
+
+    response = dims_get(signed_url);
+
+    CHECK_INT(response->status, 200, "an encrypted source on /dims4/");
+
+    dims_response_free(response);
+    dims_sign_free(signed_url);
+    free(encoded);
+    free(url);
+}
+
 const dims_test dims_tests_signing[] = {
     { "TestSignedUrlValidates", test_signed_url_validates, NULL },
     { "TestLegacySignatureMatchesModDims", test_legacy_signature_matches_mod_dims, NULL },
@@ -340,5 +416,7 @@ const dims_test dims_tests_signing[] = {
       "optimizeResize is never signed" },
     { "TestNoQueryStringAnswers", test_no_query_string_answers, NULL },
     { "TestEveryFixtureUrlVerifies", test_every_fixture_url_verifies, NULL },
+    { "TestDims5EurlUrlVerifies", test_dims5_eurl_url_verifies, NULL },
+    { "TestDims4EurlUrlVerifies", test_dims4_eurl_url_verifies, NULL },
     DIMS_TEST_END
 };

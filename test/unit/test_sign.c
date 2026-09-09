@@ -459,6 +459,157 @@ test_strerror(void)
     }
 }
 
+/* -- eurl ---------------------------------------------------------------- */
+
+/*
+ * The two derivations. The HKDF vector is checked against the value in
+ * test/compose.yaml, which an independent implementation produced, in
+ * test_fixtures.c. This checks the shape and the prefixes.
+ */
+static void
+test_derive_key(void)
+{
+    unsigned char hkdf[DIMS_SIGN_KEY_BYTES];
+    unsigned char prefixed[DIMS_SIGN_KEY_BYTES];
+    unsigned char sha1[DIMS_SIGN_KEY_BYTES];
+
+    CHECK_INT(dims_sign_derive_key(TEST_KEY, hkdf), DIMS_SIGN_OK, "hkdf");
+    CHECK_INT(dims_sign_derive_key("hkdf:" TEST_KEY, prefixed), DIMS_SIGN_OK,
+              "an hkdf prefix");
+    CHECK(memcmp(hkdf, prefixed, sizeof(hkdf)) == 0,
+          "the hkdf prefix names the default");
+
+    /* SHA-1 of t3stk3y is f4fd45f7f87ca8d7..., and the key is the first
+     * sixteen characters of that, uppercased. */
+    CHECK_INT(dims_sign_derive_key("sha1:" TEST_SECRET, sha1), DIMS_SIGN_OK,
+              "sha1");
+    CHECK(memcmp(sha1, "F4FD45F7F87CA8D7", DIMS_SIGN_KEY_BYTES) == 0,
+          "the sha1 key");
+
+    CHECK(memcmp(hkdf, sha1, sizeof(hkdf)) != 0,
+          "the two derivations differ");
+
+    CHECK_INT(dims_sign_derive_key(NULL, hkdf), DIMS_SIGN_BAD_ARGUMENT, "no secret");
+    CHECK_INT(dims_sign_derive_key("", hkdf), DIMS_SIGN_BAD_ARGUMENT, "an empty secret");
+}
+
+/* A fresh IV every call, and the tag rejects an edited value. */
+static void
+test_eurl_gcm(void)
+{
+    unsigned char key[DIMS_SIGN_KEY_BYTES];
+    char *first = NULL;
+    char *second = NULL;
+    char *plain = NULL;
+
+    CHECK_INT(dims_sign_derive_key(TEST_KEY, key), DIMS_SIGN_OK, "derive");
+
+    CHECK_INT(dims_sign_eurl_encrypt("http://origin:8080/grid.png", key,
+                                     DIMS_SIGN_EURL_GCM, &first),
+              DIMS_SIGN_OK, "encrypt");
+    CHECK_INT(dims_sign_eurl_encrypt("http://origin:8080/grid.png", key,
+                                     DIMS_SIGN_EURL_GCM, &second),
+              DIMS_SIGN_OK, "encrypt again");
+
+    CHECK(strcmp(first, second) != 0, "two calls produce two values");
+
+    CHECK_INT(dims_sign_eurl_decrypt(first, key, DIMS_SIGN_EURL_GCM, &plain),
+              DIMS_SIGN_OK, "decrypt");
+    CHECK_STR(plain, "http://origin:8080/grid.png", "the round trip");
+
+    dims_sign_free(plain);
+    plain = NULL;
+
+    /* A byte of the ciphertext, past the IV. */
+    first[20] = (first[20] == 'A') ? 'B' : 'A';
+    CHECK_INT(dims_sign_eurl_decrypt(first, key, DIMS_SIGN_EURL_GCM, &plain),
+              DIMS_SIGN_BAD_EURL, "an edited value");
+
+    dims_sign_free(first);
+    dims_sign_free(second);
+}
+
+/* ECB has no IV, so one URL under one key produces one value. */
+static void
+test_eurl_ecb(void)
+{
+    unsigned char key[DIMS_SIGN_KEY_BYTES];
+    char *first = NULL;
+    char *second = NULL;
+    char *plain = NULL;
+
+    CHECK_INT(dims_sign_derive_key("sha1:" TEST_SECRET, key), DIMS_SIGN_OK,
+              "derive");
+
+    CHECK_INT(dims_sign_eurl_encrypt("http://origin:8080/grid.png", key,
+                                     DIMS_SIGN_EURL_ECB, &first),
+              DIMS_SIGN_OK, "encrypt");
+    CHECK_INT(dims_sign_eurl_encrypt("http://origin:8080/grid.png", key,
+                                     DIMS_SIGN_EURL_ECB, &second),
+              DIMS_SIGN_OK, "encrypt again");
+
+    CHECK_STR(first, second, "two calls produce one value");
+
+    CHECK_INT(dims_sign_eurl_decrypt(first, key, DIMS_SIGN_EURL_ECB, &plain),
+              DIMS_SIGN_OK, "decrypt");
+    CHECK_STR(plain, "http://origin:8080/grid.png", "the round trip");
+
+    dims_sign_free(first);
+    dims_sign_free(second);
+    dims_sign_free(plain);
+}
+
+/* A value the decoder cannot read. */
+static void
+test_eurl_refuses_a_bad_value(void)
+{
+    unsigned char key[DIMS_SIGN_KEY_BYTES];
+    char *out = untouched;
+
+    CHECK_INT(dims_sign_derive_key(TEST_KEY, key), DIMS_SIGN_OK, "derive");
+
+    CHECK_INT(dims_sign_eurl_decrypt("!!!!", key, DIMS_SIGN_EURL_GCM, &out),
+              DIMS_SIGN_BAD_EURL, "not base64");
+    CHECK_INT(dims_sign_eurl_decrypt("AAAA", key, DIMS_SIGN_EURL_GCM, &out),
+              DIMS_SIGN_BAD_EURL, "shorter than an IV and a tag");
+    CHECK_INT(dims_sign_eurl_decrypt("AAAA", key, DIMS_SIGN_EURL_ECB, &out),
+              DIMS_SIGN_BAD_EURL, "shorter than one AES block");
+    CHECK_INT(dims_sign_eurl_decrypt("", key, DIMS_SIGN_EURL_GCM, &out),
+              DIMS_SIGN_BAD_EURL, "an empty value");
+    CHECK_INT(dims_sign_eurl_encrypt(NULL, key, DIMS_SIGN_EURL_GCM, &out),
+              DIMS_SIGN_BAD_ARGUMENT, "no URL");
+
+    CHECK(out == untouched, "a failure leaves the out parameter untouched");
+}
+
+/* The signed URL holds eurl in place of url, and the signature is the one the
+ * plain URL produces. */
+static void
+test_eurl_url(void)
+{
+    char *plain_signed = NULL;
+    char *encrypted = NULL;
+    const char *input = "/dims5/resize/100x100/?url=" TEST_IMAGE;
+    const char *digest;
+
+    CHECK_INT(dims_sign_dims5_url(input, TEST_KEY, NULL, &plain_signed),
+              DIMS_SIGN_OK, "sign");
+    CHECK_INT(dims_sign_dims5_eurl_url(input, TEST_KEY, NULL, &encrypted),
+              DIMS_SIGN_OK, "sign and encrypt");
+
+    digest = strstr(plain_signed, "&sig=");
+    CHECK(digest != NULL, "the plain URL holds a signature");
+    CHECK(digest != NULL && strstr(encrypted, digest) != NULL,
+          "the signature covers the plain image URL");
+
+    CHECK(strstr(encrypted, "eurl=") != NULL, "the output holds eurl");
+    CHECK(strstr(encrypted, "&url=") == NULL && strncmp(encrypted, "/dims5/resize/100x100/?url=", 27) != 0,
+          "the output holds no url");
+
+    dims_sign_free(plain_signed);
+    dims_sign_free(encrypted);
+}
+
 const dims_test dims_tests_unit_sign[] = {
     { "TestSignEscape", test_escape, NULL },
     { "TestSignCanonicalQueryOrdersByName",
@@ -484,5 +635,10 @@ const dims_test dims_tests_unit_sign[] = {
     { "TestSignRefusesABadUrl", test_refuses_a_bad_url, NULL },
     { "TestSignAllocationContract", test_allocation_contract, NULL },
     { "TestSignStrerror", test_strerror, NULL },
+    { "TestSignDeriveKey", test_derive_key, NULL },
+    { "TestSignEurlGcm", test_eurl_gcm, NULL },
+    { "TestSignEurlEcb", test_eurl_ecb, NULL },
+    { "TestSignEurlRefusesABadValue", test_eurl_refuses_a_bad_value, NULL },
+    { "TestSignEurlUrl", test_eurl_url, NULL },
     DIMS_TEST_END
 };

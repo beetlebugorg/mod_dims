@@ -58,6 +58,8 @@ set_field(dims_fixture *f, const char *name, const char *value)
         unescape(value, f->prefix, sizeof(f->prefix));
     } else if (strcmp(name, "key") == 0) {
         unescape(value, f->key, sizeof(f->key));
+    } else if (strcmp(name, "cipher") == 0) {
+        unescape(value, f->cipher, sizeof(f->cipher));
     } else if (strcmp(name, "input") == 0) {
         unescape(value, f->input, sizeof(f->input));
     } else if (strcmp(name, "signed") == 0) {
@@ -69,6 +71,9 @@ set_field(dims_fixture *f, const char *name, const char *value)
     } else if (strcmp(name, "message") == 0) {
         unescape(value, f->message, sizeof(f->message));
         f->has_message = 1;
+    } else if (strcmp(name, "plain") == 0) {
+        unescape(value, f->plain, sizeof(f->plain));
+        f->has_plain = 1;
     } else if (strcmp(name, "error") == 0) {
         unescape(value, f->error, sizeof(f->error));
         f->has_error = 1;
@@ -147,6 +152,12 @@ int
 dims_fixture_is_dims5(const dims_fixture *f)
 {
     return strcmp(f->endpoint, "dims5") == 0;
+}
+
+int
+dims_fixture_is_eurl(const dims_fixture *f)
+{
+    return strcmp(f->endpoint, "eurl") == 0;
 }
 
 const char *

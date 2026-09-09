@@ -37,7 +37,7 @@ usage(FILE *to)
 {
     fputs(
         "usage: dims-sign (--dims4 | --dims5) [--key-file FILE] [--prefix P]\n"
-        "                 [--message | --verify] URL\n"
+        "                 [--eurl [--cipher gcm|ecb]] [--message | --verify] URL\n"
         "       dims-sign --fixture < FILE\n"
         "\n"
         "  --dims4, --dims5  which endpoint signs the URL. The path does not\n"
@@ -47,6 +47,11 @@ usage(FILE *to)
         "                    DIMS_SIGNING_KEY.\n"
         "  --prefix P        what comes before the commands in the path.\n"
         "                    The default is /dims4/ or /dims5/.\n"
+        "  --eurl            encrypt the image URL and send it as eurl. The\n"
+        "                    signature covers the plain image URL.\n"
+        "  --cipher C        gcm or ecb, for --eurl on /dims4/. The default\n"
+        "                    is the endpoint default: gcm on /dims5/, ecb on\n"
+        "                    /dims4/.\n"
         "  --message         print the message the signer hashes. /dims5/\n"
         "                    only: a /dims4/ message holds the secret.\n"
         "  --verify          compare the signature the URL holds against the\n"
@@ -242,12 +247,21 @@ report(dims_sign_status status)
 }
 
 static int
-run_sign(endpoint which, const char *url, const char *key, const char *prefix)
+run_sign(endpoint which, const char *url, const char *key, const char *prefix,
+         int eurl, dims_sign_cipher cipher)
 {
     char *out = NULL;
-    dims_sign_status status = (which == ENDPOINT_DIMS5)
-            ? dims_sign_dims5_url(url, key, prefix, &out)
-            : dims_sign_dims4_url(url, key, prefix, &out);
+    dims_sign_status status;
+
+    if (eurl) {
+        status = (which == ENDPOINT_DIMS5)
+                ? dims_sign_dims5_eurl_url(url, key, prefix, &out)
+                : dims_sign_dims4_eurl_url(url, key, prefix, cipher, &out);
+    } else {
+        status = (which == ENDPOINT_DIMS5)
+                ? dims_sign_dims5_url(url, key, prefix, &out)
+                : dims_sign_dims4_url(url, key, prefix, &out);
+    }
 
     if (status != DIMS_SIGN_OK) {
         return report(status);
@@ -349,7 +363,10 @@ typedef struct {
     char *endpoint;
     char *prefix;
     char *key;
+    char *cipher;
     char *input;
+    char *plain;
+    char *error;
 } record;
 
 static void
@@ -359,7 +376,10 @@ release_record(record *r)
     free(r->endpoint);
     free(r->prefix);
     free(r->key);
+    free(r->cipher);
     free(r->input);
+    free(r->plain);
+    free(r->error);
     memset(r, 0, sizeof(*r));
 }
 
@@ -439,6 +459,24 @@ write_record(const record *r)
         return EXIT_USAGE;
     }
 
+    /* An eurl record holds a ciphertext with a fresh nonce, so there is
+     * nothing here to recompute. Its fields pass through. */
+    if (strcmp(r->endpoint, "eurl") == 0) {
+        write_field("case", r->name);
+        write_field("endpoint", r->endpoint);
+        write_field("cipher", (r->cipher != NULL) ? r->cipher : "gcm");
+        write_field("key", r->key);
+        write_field("input", r->input);
+
+        if (r->plain != NULL) {
+            write_field("plain", r->plain);
+        } else if (r->error != NULL) {
+            write_field("error", r->error);
+        }
+
+        return EXIT_OK;
+    }
+
     is_dims5 = (strcmp(r->endpoint, "dims5") == 0);
     if (!is_dims5 && strcmp(r->endpoint, "dims4") != 0) {
         fprintf(stderr, "dims-sign: %s: unknown endpoint %s\n", r->name,
@@ -507,11 +545,22 @@ set_field(record *r, const char *name, char *value)
     } else if (strcmp(name, "key") == 0) {
         free(r->key);
         r->key = value;
+    } else if (strcmp(name, "cipher") == 0) {
+        free(r->cipher);
+        r->cipher = value;
     } else if (strcmp(name, "input") == 0) {
         free(r->input);
         r->input = value;
+    } else if (strcmp(name, "plain") == 0) {
+        free(r->plain);
+        r->plain = value;
+    } else if (strcmp(name, "error") == 0) {
+        /* An eurl record states its own error. A signing record gets one
+         * from the library below. */
+        free(r->error);
+        r->error = value;
     } else if (strcmp(name, "signed") == 0 || strcmp(name, "query") == 0 ||
-               strcmp(name, "message") == 0 || strcmp(name, "error") == 0) {
+               strcmp(name, "message") == 0) {
         /* The library writes these. */
         free(value);
     } else {
@@ -599,6 +648,9 @@ main(int argc, char **argv)
     const char *prefix = NULL;
     const char *url = NULL;
     char *key = NULL;
+    dims_sign_cipher cipher = DIMS_SIGN_EURL_GCM;
+    int chose_cipher = 0;
+    int eurl = 0;
     int result;
     int i;
 
@@ -615,6 +667,21 @@ main(int argc, char **argv)
             how = MODE_VERIFY;
         } else if (strcmp(arg, "--fixture") == 0) {
             how = MODE_FIXTURE;
+        } else if (strcmp(arg, "--eurl") == 0) {
+            eurl = 1;
+        } else if (strcmp(arg, "--cipher") == 0 && i + 1 < argc) {
+            const char *name = argv[++i];
+
+            if (strcmp(name, "gcm") == 0) {
+                cipher = DIMS_SIGN_EURL_GCM;
+            } else if (strcmp(name, "ecb") == 0) {
+                cipher = DIMS_SIGN_EURL_ECB;
+            } else {
+                fprintf(stderr, "dims-sign: --cipher takes gcm or ecb\n");
+                return EXIT_USAGE;
+            }
+
+            chose_cipher = 1;
         } else if (strcmp(arg, "--key-file") == 0 && i + 1 < argc) {
             key_file = argv[++i];
         } else if (strcmp(arg, "--prefix") == 0 && i + 1 < argc) {
@@ -675,8 +742,15 @@ main(int argc, char **argv)
         strcpy(key, from_environment);
     }
 
-    result = (how == MODE_VERIFY) ? run_verify(which, url, key, prefix)
-                                  : run_sign(which, url, key, prefix);
+    /* /dims5/ reads one scheme. /dims4/ reads what the server is configured
+     * for, and its default is ECB. */
+    if (!chose_cipher && which == ENDPOINT_DIMS4) {
+        cipher = DIMS_SIGN_EURL_ECB;
+    }
+
+    result = (how == MODE_VERIFY)
+            ? run_verify(which, url, key, prefix)
+            : run_sign(which, url, key, prefix, eurl, cipher);
 
     free(key);
 

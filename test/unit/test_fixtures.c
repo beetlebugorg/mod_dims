@@ -29,9 +29,62 @@ error_name(dims_sign_status status)
             return "bad-field";
         case DIMS_SIGN_BAD_ARGUMENT:
             return "bad-argument";
+        case DIMS_SIGN_BAD_EURL:
+            return "bad-eurl";
         default:
             return "bad-url";
     }
+}
+
+static dims_sign_cipher
+cipher_of(const dims_fixture *f)
+{
+    return (strcmp(f->cipher, "ecb") == 0) ? DIMS_SIGN_EURL_ECB
+                                           : DIMS_SIGN_EURL_GCM;
+}
+
+/*
+ * An eurl record goes the other way: decrypt input under the key and compare
+ * it with plain. The suite then round trips its own encrypt through its own
+ * decrypt, because a fresh nonce means the file cannot pin a ciphertext.
+ */
+static void
+check_eurl(const dims_fixture *f)
+{
+    unsigned char key[DIMS_SIGN_KEY_BYTES];
+    char *plain = NULL;
+    char *again = NULL;
+    char *back = NULL;
+    dims_sign_status status;
+
+    CHECK(f->cipher[0] != '\0', "%s: an eurl record needs a cipher", f->name);
+    CHECK_INT(dims_sign_derive_key(f->key, key), DIMS_SIGN_OK, f->name);
+
+    status = dims_sign_eurl_decrypt(f->input, key, cipher_of(f), &plain);
+
+    if (f->has_error) {
+        CHECK(status != DIMS_SIGN_OK, "%s: the value must be refused", f->name);
+        CHECK_STR(error_name(status), f->error, f->name);
+        dims_sign_free(plain);
+        return;
+    }
+
+    if (status != DIMS_SIGN_OK) {
+        FAIL("%s: %s", f->name, dims_sign_strerror(status));
+        return;
+    }
+
+    CHECK_STR(plain, f->plain, f->name);
+    dims_sign_free(plain);
+
+    CHECK_INT(dims_sign_eurl_encrypt(f->plain, key, cipher_of(f), &again),
+              DIMS_SIGN_OK, f->name);
+    CHECK_INT(dims_sign_eurl_decrypt(again, key, cipher_of(f), &back),
+              DIMS_SIGN_OK, f->name);
+    CHECK_STR(back, f->plain, f->name);
+
+    dims_sign_free(again);
+    dims_sign_free(back);
 }
 
 static void
@@ -114,6 +167,11 @@ check_record(const dims_fixture *f, void *data)
 
     CHECK(f->name[0] != '\0', "a record needs a case name");
     CHECK(f->input[0] != '\0', "%s: a record needs an input", f->name);
+
+    if (dims_fixture_is_eurl(f)) {
+        check_eurl(f);
+        return;
+    }
 
     check_signed(f);
     check_query(f);

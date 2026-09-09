@@ -7,7 +7,7 @@
 # object are built from those objects, so the two hold the same code. The
 # module links the archive, so libmod_dims.so gains no run time dependency.
 
-add_library(moddims_sign_objects OBJECT src/sign.c)
+add_library(moddims_sign_objects OBJECT src/sign.c src/eurl.c)
 
 set_target_properties(moddims_sign_objects PROPERTIES
     POSITION_INDEPENDENT_CODE ON)

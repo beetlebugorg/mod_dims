@@ -1,8 +1,11 @@
 /*
  * Signing and encrypting a soak request.
  *
- * The signature comes from libmoddims_sign. The module compiles the same source.
- * The encryption is here, because the library does not cover it.
+ * The signature, the key derivation, and the ECB encryption come from
+ * libmoddims_sign. The module compiles the same source.
+ *
+ * The GCM encryption stays here, because the IV comes from the run's seed and
+ * a seed reproduces a run.
  *
  * Copyright 2026 Jeremy Collins
  * SPDX-License-Identifier: Apache-2.0
@@ -13,17 +16,10 @@
 #include <dims_sign.h>
 
 #include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/kdf.h>
-#include <openssl/core_names.h>
-#include <openssl/sha.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* The salt src/encryption.c derives with. */
-static const unsigned char dims_kdf_salt[] = "go-dims";
 
 char *
 dims_escape(const char *value)
@@ -78,97 +74,25 @@ dims_escape_path(const char *value)
     return out;
 }
 
-static char *
-to_hex(const unsigned char *bytes, unsigned int length)
-{
-    static const char hex[] = "0123456789abcdef";
-    char *out = malloc((size_t) length * 2 + 1);
-    unsigned int i;
-
-    if (out == NULL) {
-        return NULL;
-    }
-
-    for (i = 0; i < length; i++) {
-        out[i * 2] = hex[bytes[i] >> 4];
-        out[i * 2 + 1] = hex[bytes[i] & 0x0F];
-    }
-    out[length * 2] = '\0';
-
-    return out;
-}
 
 int
 dims_key_hkdf(const char *secret, unsigned char key[16])
 {
-    EVP_KDF *kdf;
-    EVP_KDF_CTX *context;
-    OSSL_PARAM params[5];
-    OSSL_PARAM *at = params;
-    int ok;
-
-    if (secret == NULL) {
-        return 0;
-    }
-
-    if (strncmp(secret, "hkdf:", 5) == 0) {
-        secret += 5;
-    }
-
-    kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
-    if (kdf == NULL) {
-        return 0;
-    }
-
-    context = EVP_KDF_CTX_new(kdf);
-    EVP_KDF_free(kdf);
-    if (context == NULL) {
-        return 0;
-    }
-
-    *at++ = OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST,
-            (char *) "SHA256", 0);
-    *at++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
-            (void *) (uintptr_t) secret, strlen(secret));
-    *at++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT,
-            (void *) (uintptr_t) dims_kdf_salt, sizeof(dims_kdf_salt) - 1);
-    *at++ = OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO,
-            (void *) (uintptr_t) "", 0);
-    *at = OSSL_PARAM_construct_end();
-
-    ok = EVP_KDF_derive(context, key, 16, params) > 0;
-    EVP_KDF_CTX_free(context);
-
-    return ok;
+    return dims_sign_derive_key(secret, key) == DIMS_SIGN_OK;
 }
 
 int
 dims_key_sha1(const char *secret, unsigned char key[16])
 {
-    unsigned char digest[SHA_DIGEST_LENGTH];
-    char *hex;
-    int i;
+    char prefixed[256];
 
-    if (secret == NULL) {
+    if (secret == NULL || strlen(secret) + 6 > sizeof(prefixed)) {
         return 0;
     }
 
-    SHA1((const unsigned char *) secret, strlen(secret), digest);
+    snprintf(prefixed, sizeof(prefixed), "sha1:%s", secret);
 
-    hex = to_hex(digest, SHA_DIGEST_LENGTH);
-    if (hex == NULL) {
-        return 0;
-    }
-
-    for (i = 0; i < 16; i++) {
-        char c = hex[i];
-
-        key[i] = (unsigned char) ((c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c);
-    }
-
-    free(hex);
-
-    return 1;
+    return dims_sign_derive_key(prefixed, key) == DIMS_SIGN_OK;
 }
 
 /* Base64 without line breaks. The caller frees. */
@@ -249,38 +173,13 @@ dims_eurl_gcm(const unsigned char key[16], const char *url, dims_rng *rng)
 char *
 dims_eurl_ecb(const unsigned char key[16], const char *url)
 {
-    EVP_CIPHER_CTX *context;
-    unsigned char *buffer;
-    int url_length = (int) strlen(url);
-    int written = 0;
-    int final = 0;
-    char *encoded;
+    char *out = NULL;
 
-    /* PKCS5 padding adds up to one whole block. */
-    buffer = malloc((size_t) url_length + 16);
-    if (buffer == NULL) {
+    if (dims_sign_eurl_encrypt(url, key, DIMS_SIGN_EURL_ECB, &out) !=
+            DIMS_SIGN_OK) {
         return NULL;
     }
 
-    context = EVP_CIPHER_CTX_new();
-    if (context == NULL) {
-        free(buffer);
-        return NULL;
-    }
-
-    if (EVP_EncryptInit_ex(context, EVP_aes_128_ecb(), NULL, key, NULL) != 1 ||
-            EVP_EncryptUpdate(context, buffer, &written,
-                    (const unsigned char *) url, url_length) != 1 ||
-            EVP_EncryptFinal_ex(context, buffer + written, &final) != 1) {
-        EVP_CIPHER_CTX_free(context);
-        free(buffer);
-        return NULL;
-    }
-
-    EVP_CIPHER_CTX_free(context);
-
-    encoded = base64(buffer, written + final);
-    free(buffer);
-
-    return encoded;
+    return out;
 }
+
