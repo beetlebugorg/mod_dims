@@ -1,0 +1,49 @@
+name: Release the Java client
+
+# A clients/java/v tag publishes org.beetlebug:moddims to GitHub Packages.
+#
+# release.yml keeps its v* trigger. clients/java/v1.0.0 does not match v*, so
+# the module release and the client release never run each other.
+#
+# The deploy authenticates with the built-in GITHUB_TOKEN, so a release needs
+# no secret of its own.
+
+on:
+  push:
+    tags:
+      - 'clients/java/v*'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: clients/java
+    steps:
+      - uses: actions/checkout@v4
+
+      # server-id matches the distributionManagement id in the POM, and the
+      # two values below name environment variables rather than holding
+      # credentials.
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      # The tag is clients/java/vX.Y.Z, and the version is what follows the v.
+      - name: Set the version from the tag
+        run: mvn -B versions:set -DnewVersion="${GITHUB_REF_NAME##*/v}"
+
+      - name: Publish
+        run: mvn -B -P release deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

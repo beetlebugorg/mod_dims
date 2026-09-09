@@ -13,7 +13,7 @@ const sidebars = {
       type: 'category',
       label: 'Clients',
       link: {type: 'doc', id: 'clients/index'},
-      items: ['clients/c', 'clients/go', 'clients/dims-sign'],
+      items: ['clients/c', 'clients/go', 'clients/java', 'clients/dims-sign'],
     },
     {
       type: 'category',

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>org.beetlebug</groupId>
+  <artifactId>moddims</artifactId>
+  <version>0.0.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>moddims</name>
+  <description>Signs mod_dims URLs for the /dims4/ and /dims5/ endpoints</description>
+  <url>https://github.com/beetlebugorg/mod_dims</url>
+
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- The fixture file the C library and the Go client read too. A run from
+         an IDE picks it up through the same property. -->
+    <moddims.fixtures>${project.basedir}/../../test/fixtures/signing.tsv</moddims.fixtures>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.11.3</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <developers>
+    <developer>
+      <name>Jeremy Collins</name>
+      <organization>beetlebug</organization>
+      <organizationUrl>https://github.com/beetlebugorg</organizationUrl>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/beetlebugorg/mod_dims.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/beetlebugorg/mod_dims.git</developerConnection>
+    <url>https://github.com/beetlebugorg/mod_dims</url>
+  </scm>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+          <systemPropertyVariables>
+            <moddims.fixtures>${moddims.fixtures}</moddims.fixtures>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- The checked in version is a snapshot, so a local mvn install produces
+       one and only the release job produces a version. release-java.yml sets
+       the version from the tag.
+
+       maven.pkg.github.com answers 401 to an unauthenticated read, including
+       from a public repository, so a consumer puts a GitHub token in
+       settings.xml under this id. -->
+  <distributionManagement>
+    <repository>
+      <id>github</id>
+      <name>GitHub Packages</name>
+      <url>https://maven.pkg.github.com/beetlebugorg/mod_dims</url>
+    </repository>
+    <snapshotRepository>
+      <id>github</id>
+      <name>GitHub Packages</name>
+      <url>https://maven.pkg.github.com/beetlebugorg/mod_dims</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <!-- The sources and the javadoc travel with the jar, so an IDE reads them.
+       GitHub Packages asks for no signature, so there is no GPG plugin. -->
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals><goal>jar-no-fork</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.11.2</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals><goal>jar</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

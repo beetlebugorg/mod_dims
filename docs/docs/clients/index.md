@@ -7,13 +7,14 @@ one C library, and the module compiles the same source.
 |---|---|
 | [C library](/clients/c) | `libmoddims_sign`, the signing rules and the `eurl` ciphers |
 | [Go](/clients/go) | `github.com/beetlebugorg/mod_dims/clients/moddims` |
+| [Java](/clients/java) | `org.beetlebug:moddims` |
 | [dims-sign](/clients/dims-sign) | a command that signs a URL and checks one |
 
 ## One contract
 
 `test/fixtures/signing.tsv` holds a signed URL, a canonical query, and a
-message for each case. The C unit suite and the Go suite each read that file
-and compare their own output against every field.
+message for each case. The C suite, the Go suite, and the Java suite each read
+that file and compare their own output against every field.
 
 An `eurl` record goes the other way: it holds a ciphertext and the plain image
 URL it decrypts to. A ciphertext holds a fresh nonce, so the file cannot pin
