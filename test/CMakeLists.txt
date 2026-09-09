@@ -109,6 +109,7 @@ add_executable(dims_unit_test
     unit/test_netguard.c
     unit/test_overlay_cache.c
     unit/test_param.c
+    unit/test_sign.c
     unit/test_signature.c
     unit/test_svgguard.c
     unit/test_url.c
@@ -147,6 +148,7 @@ target_include_directories(dims_unit_test PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(dims_unit_test PRIVATE
+    moddims_sign
     PkgConfig::APR
     PkgConfig::APRUTIL
     PkgConfig::CURL

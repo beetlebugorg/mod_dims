@@ -25,6 +25,7 @@ extern const dims_test dims_tests_unit_metrics[];
 extern const dims_test dims_tests_unit_netguard[];
 extern const dims_test dims_tests_unit_overlay_cache[];
 extern const dims_test dims_tests_unit_param[];
+extern const dims_test dims_tests_unit_sign[];
 extern const dims_test dims_tests_unit_signature[];
 extern const dims_test dims_tests_unit_svgguard[];
 extern const dims_test dims_tests_unit_url[];
@@ -42,6 +43,7 @@ static const dims_test_group groups[] = {
     { "unit/test_netguard.c", dims_tests_unit_netguard },
     { "unit/test_overlay_cache.c", dims_tests_unit_overlay_cache },
     { "unit/test_param.c", dims_tests_unit_param },
+    { "unit/test_sign.c", dims_tests_unit_sign },
     { "unit/test_signature.c", dims_tests_unit_signature },
     { "unit/test_svgguard.c", dims_tests_unit_svgguard },
     { "unit/test_url.c", dims_tests_unit_url },
