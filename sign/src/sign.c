@@ -6,6 +6,7 @@
  */
 
 #include "dims_sign.h"
+#include "dims_sign_internal.h"
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -493,21 +494,14 @@ dims_sign_dims5_digest(const char *key, const char *commands,
     return DIMS_SIGN_OK;
 }
 
-dims_sign_status
-dims_sign_dims4_digest(const char *secret, const char *expires,
-                       const char *commands, const char *image_url,
-                       const dims_sign_param *keys, size_t key_count,
-                       char out[DIMS_SIGN_DIMS4_DIGEST + 1])
+/* The expiry, the secret, the commands, the image URL, and the keyed values. */
+static char *
+dims4_message(const char *secret, const char *expires, const char *commands,
+              const char *image_url, const dims_sign_param *keys,
+              size_t key_count)
 {
-    unsigned char digest[EVP_MAX_MD_SIZE];
-    unsigned int length = 0;
     buffer message;
-    char *text;
     size_t i;
-
-    if (out == NULL || secret == NULL || *secret == '\0' || expires == NULL) {
-        return DIMS_SIGN_BAD_ARGUMENT;
-    }
 
     buffer_init(&message);
     buffer_add(&message, expires);
@@ -520,7 +514,24 @@ dims_sign_dims4_digest(const char *secret, const char *expires,
         buffer_add(&message, keys[i].value);
     }
 
-    text = buffer_take(&message);
+    return buffer_take(&message);
+}
+
+dims_sign_status
+dims_sign_dims4_digest(const char *secret, const char *expires,
+                       const char *commands, const char *image_url,
+                       const dims_sign_param *keys, size_t key_count,
+                       char out[DIMS_SIGN_DIMS4_DIGEST + 1])
+{
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int length = 0;
+    char *text;
+
+    if (out == NULL || secret == NULL || *secret == '\0' || expires == NULL) {
+        return DIMS_SIGN_BAD_ARGUMENT;
+    }
+
+    text = dims4_message(secret, expires, commands, image_url, keys, key_count);
     if (text == NULL) {
         return DIMS_SIGN_MEMORY;
     }
@@ -1065,29 +1076,37 @@ read_keys(const char *query, dims_sign_param **out, size_t *count)
     return DIMS_SIGN_OK;
 }
 
-dims_sign_status
-dims_sign_dims4_url(const char *url, const char *key, const char *prefix,
-                    char **out)
-{
-    dims_sign_status status;
-    char digest[DIMS_SIGN_DIMS4_DIGEST + 1];
-    char *commands = NULL;
-    char *image_url = NULL;
-    char *expires = NULL;
-    dims_sign_param *keys = NULL;
-    size_t key_count = 0;
-    const char *rest;
-    size_t rest_length;
+/* Everything a /dims4/ signature covers, read out of one URL. */
+typedef struct {
     url_parts parts;
     dims4_path path;
-    buffer signed_url;
+    char *commands;
+    char *image_url;
+    char *expires;
+    dims_sign_param *keys;
+    size_t key_count;
+} dims4_fields;
+
+static void
+release_dims4_fields(dims4_fields *fields)
+{
+    free(fields->commands);
+    free(fields->image_url);
+    free(fields->expires);
+    release_keys(fields->keys, fields->key_count);
+}
+
+static dims_sign_status
+read_dims4_fields(const char *url, const char *prefix, dims4_fields *fields)
+{
+    dims_sign_status status;
+    const char *rest;
+    size_t rest_length;
     char *at;
 
-    if (out == NULL || url == NULL) {
-        return DIMS_SIGN_BAD_ARGUMENT;
-    }
+    memset(fields, 0, sizeof(*fields));
 
-    if (key == NULL || *key == '\0') {
+    if (url == NULL) {
         return DIMS_SIGN_BAD_ARGUMENT;
     }
 
@@ -1095,87 +1114,143 @@ dims_sign_dims4_url(const char *url, const char *key, const char *prefix,
         prefix = DIMS_SIGN_DIMS4_PREFIX;
     }
 
-    split_url(url, &parts);
+    split_url(url, &fields->parts);
 
-    status = after_prefix(&parts, prefix, &rest, &rest_length);
+    status = after_prefix(&fields->parts, prefix, &rest, &rest_length);
     if (status != DIMS_SIGN_OK) {
         return status;
     }
 
-    status = split_dims4_path(rest, rest_length, &path);
+    status = split_dims4_path(rest, rest_length, &fields->path);
     if (status != DIMS_SIGN_OK) {
         return status;
     }
 
-    status = decode_strict(path.commands, path.commands_length, &commands);
+    status = decode_strict(fields->path.commands, fields->path.commands_length,
+                           &fields->commands);
     if (status != DIMS_SIGN_OK) {
         return status;
     }
 
     /* A space travels as %20 and signs as a plus. */
-    for (at = commands; *at != '\0'; at++) {
+    for (at = fields->commands; *at != '\0'; at++) {
         if (*at == ' ') {
             *at = '+';
         }
     }
 
-    status = read_image_url(parts.query, &image_url);
+    status = read_image_url(fields->parts.query, &fields->image_url);
     if (status != DIMS_SIGN_OK) {
-        free(commands);
+        release_dims4_fields(fields);
         return status;
     }
 
     /* The module writes every plus in a /dims4/ image URL as a space after it
      * decodes the value. /dims5/ keeps the plus. */
-    for (at = image_url; *at != '\0'; at++) {
+    for (at = fields->image_url; *at != '\0'; at++) {
         if (*at == '+') {
             *at = ' ';
         }
     }
 
-    status = read_keys(parts.query, &keys, &key_count);
-    if (status == DIMS_SIGN_OK) {
-        expires = malloc(path.expires_length + 1);
-        if (expires == NULL) {
-            status = DIMS_SIGN_MEMORY;
-        } else {
-            memcpy(expires, path.expires, path.expires_length);
-            expires[path.expires_length] = '\0';
-        }
+    status = read_keys(fields->parts.query, &fields->keys, &fields->key_count);
+    if (status != DIMS_SIGN_OK) {
+        release_dims4_fields(fields);
+        return status;
     }
 
-    if (status == DIMS_SIGN_OK) {
-        status = dims_sign_dims4_digest(key, expires, commands, image_url,
-                                        keys, key_count, digest);
+    fields->expires = copy_range(fields->path.expires,
+                                 fields->path.expires_length);
+    if (fields->expires == NULL) {
+        release_dims4_fields(fields);
+        return DIMS_SIGN_MEMORY;
     }
 
-    free(commands);
-    free(image_url);
-    free(expires);
-    release_keys(keys, key_count);
+    return DIMS_SIGN_OK;
+}
+
+dims_sign_status
+dims_sign_dims4_url(const char *url, const char *key, const char *prefix,
+                    char **out)
+{
+    dims_sign_status status;
+    char digest[DIMS_SIGN_DIMS4_DIGEST + 1];
+    dims4_fields fields;
+    buffer signed_url;
+
+    if (out == NULL) {
+        return DIMS_SIGN_BAD_ARGUMENT;
+    }
+
+    if (key == NULL || *key == '\0') {
+        return DIMS_SIGN_BAD_ARGUMENT;
+    }
+
+    status = read_dims4_fields(url, prefix, &fields);
+    if (status != DIMS_SIGN_OK) {
+        return status;
+    }
+
+    status = dims_sign_dims4_digest(key, fields.expires, fields.commands,
+                                    fields.image_url, fields.keys,
+                                    fields.key_count, digest);
 
     if (status != DIMS_SIGN_OK) {
+        release_dims4_fields(&fields);
         return status;
     }
 
     /* The path is rebuilt from its four segments, so a placeholder equal to
      * the client id or to the expiry still works. */
     buffer_init(&signed_url);
-    buffer_add_bytes(&signed_url, url, (size_t) (path.client - url));
-    buffer_add_bytes(&signed_url, path.client, path.client_length);
+    buffer_add_bytes(&signed_url, url, (size_t) (fields.path.client - url));
+    buffer_add_bytes(&signed_url, fields.path.client,
+                     fields.path.client_length);
     buffer_add_char(&signed_url, '/');
-    buffer_add_bytes(&signed_url, digest, path.signature_length);
+    buffer_add_bytes(&signed_url, digest, fields.path.signature_length);
     buffer_add_char(&signed_url, '/');
-    buffer_add_bytes(&signed_url, path.expires, path.expires_length);
+    buffer_add_bytes(&signed_url, fields.path.expires,
+                     fields.path.expires_length);
     buffer_add_char(&signed_url, '/');
-    buffer_add_bytes(&signed_url, path.commands, path.commands_length);
+    buffer_add_bytes(&signed_url, fields.path.commands,
+                     fields.path.commands_length);
 
-    if (parts.query != NULL) {
+    if (fields.parts.query != NULL) {
         buffer_add_char(&signed_url, '?');
-        buffer_add(&signed_url, parts.query);
+        buffer_add(&signed_url, fields.parts.query);
     }
 
+    release_dims4_fields(&fields);
+
     *out = buffer_take(&signed_url);
+
+    return (*out != NULL) ? DIMS_SIGN_OK : DIMS_SIGN_MEMORY;
+}
+
+dims_sign_status
+dims_sign_dims4_message(const char *url, const char *secret, const char *prefix,
+                        char **out)
+{
+    dims_sign_status status;
+    dims4_fields fields;
+
+    if (out == NULL) {
+        return DIMS_SIGN_BAD_ARGUMENT;
+    }
+
+    if (secret == NULL || *secret == '\0') {
+        return DIMS_SIGN_BAD_ARGUMENT;
+    }
+
+    status = read_dims4_fields(url, prefix, &fields);
+    if (status != DIMS_SIGN_OK) {
+        return status;
+    }
+
+    *out = dims4_message(secret, fields.expires, fields.commands,
+                         fields.image_url, fields.keys, fields.key_count);
+
+    release_dims4_fields(&fields);
 
     return (*out != NULL) ? DIMS_SIGN_OK : DIMS_SIGN_MEMORY;
 }

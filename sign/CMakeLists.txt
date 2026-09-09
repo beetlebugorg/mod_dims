@@ -36,3 +36,16 @@ foreach(target moddims_sign moddims_sign_shared)
     dims_set_hardening(${target})
     dims_set_sanitizers(${target})
 endforeach()
+
+# The command. It signs a URL, prints the message behind one, and compares the
+# signature a URL holds against the one the key produces. The module logs
+# "Key mismatch" without the digests. This prints both.
+
+add_executable(dims-sign src/dims_sign_cli.c)
+
+target_include_directories(dims-sign PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(dims-sign PRIVATE moddims_sign)
+
+dims_set_warnings(dims-sign)
+dims_set_hardening(dims-sign)
+dims_set_sanitizers(dims-sign)
